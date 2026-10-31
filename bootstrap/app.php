@@ -21,9 +21,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
-        // A local tunnel (ngrok) or reverse proxy forwards https traffic from
-        // loopback; trust its X-Forwarded-* headers so URLs stay https.
-        $middleware->trustProxies(at: ['127.0.0.1', '::1']);
+        // Laravel automatically trusts its Cloud ingress. An explicit loopback
+        // list overrides that detection, so only use it outside Laravel Cloud.
+        if (! laravel_cloud()) {
+            $middleware->trustProxies(at: ['127.0.0.1', '::1']);
+        }
 
         $middleware->web(append: [
             SetLocale::class,
