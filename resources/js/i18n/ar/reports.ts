@@ -1,0 +1,41 @@
+// Translations for the "reports" module.
+export const reports = {
+    title: 'التقارير',
+    description: 'تقارير جاهزة قابلة للتصدير بصيغتي Excel وPDF.',
+    period: 'الفترة',
+    presets: {
+        '30': 'آخر 30 يومًا',
+        '90': 'آخر 90 يومًا',
+        '180': 'آخر 6 أشهر',
+        '365': 'آخر 12 شهرًا',
+        custom: 'فترة مخصصة',
+    },
+    apply: 'تطبيق',
+    excel: 'Excel',
+    pdf: 'PDF',
+    types: {
+        performance: 'أداء المتجر',
+        market: 'المنافسون والتوجهات',
+        evaluations: 'التقييمات والقرارات',
+        balance: 'توازن الكتالوج',
+    },
+    descriptions: {
+        performance: 'تصنيف المنتجات، والمبيعات الشهرية، والأداء حسب الفئة.',
+        market: 'التوجهات، ونشاط المنافسين، ومنتجاتهم الجديدة، وآراء العملاء.',
+        evaluations: 'سجل كامل لكل تقييم وقرار، مع التجاوزات وأسبابها.',
+        balance: 'مؤشر التنوع، ونسبة المبتكر، ووتيرة الطرح لكل فئة.',
+    },
+    recent: 'آخر التصديرات',
+    noRecent: 'لم يُصدَّر أي تقرير بعد',
+    by: 'بواسطة {name}',
+    print: {
+        generated: 'أُنشئ في {date} بواسطة {name}',
+        period: 'الفترة: {from} — {to}',
+        summary: 'الملخص',
+        printNow: 'طباعة / حفظ PDF',
+        back: 'رجوع',
+        rows: '{count} صف',
+        empty: 'لا توجد بيانات في هذه الفترة',
+        confidential: 'سري — بيانات المتجر ملك حصري للعميل',
+    },
+};

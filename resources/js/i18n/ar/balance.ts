@@ -1,0 +1,66 @@
+// Translations for the "balance" module (catalog balance, module 5).
+export const balance = {
+    title: 'توازن الكتالوج',
+    description: 'حافظ على كتالوج متجدد: تنوع في كل فئة، ونسبة متوازنة بين المجرَّب والمبتكر، ووتيرة طرح مدروسة.',
+    changeTarget: 'تعديل النسبة المستهدفة',
+
+    diversity: 'مؤشر التنوع',
+    diversityHint: 'مدى اختلاف منتجات الفئة عن بعضها في الألوان والنقوش والخامات والأسلوب والموسم والسعر.',
+    ratio: 'المجرَّب مقابل المبتكر',
+    ratioHint: 'من المنتجات المطروحة أو المعتمدة خلال آخر 6 أشهر.',
+    proven: 'مجرَّب',
+    novel: 'مبتكر',
+    target: 'المستهدف {proven}/{novel}',
+    onTarget: 'ضمن المستهدف',
+    belowTarget: 'أقل من المستهدف',
+    aboveTarget: 'أعلى من المستهدف',
+    recentLaunches: 'طرحًا خلال 6 أشهر',
+    products: 'منتجًا في الكتالوج',
+    noLaunches: 'لا توجد طروحات حديثة لحساب النسبة',
+
+    levels: {
+        high: 'تنوع ممتاز',
+        medium: 'تنوع مقبول',
+        low: 'تكرار مرتفع',
+    },
+
+    alerts: 'التنبيهات النشطة',
+    noAlerts: 'الكتالوج متوازن — لا توجد تنبيهات',
+    alertText: {
+        repetitive: 'فئة «{category}» أصبحت متكررة: مؤشر التنوع {diversity}/100، وأكثر شكل يتكرر في {share}% من منتجاتها.',
+        overloaded: 'فئة «{category}» مثقلة بالمنتجات الراكدة ({stagnant} من {products}). خفّف الطرح فيها حتى يتحسن الدوران.',
+        low_innovation: 'نسبة المنتجات المبتكرة {novel}% فقط مقابل المستهدف {target}%. أضف أفكارًا جديدة مواكبة للتوجهات.',
+        too_experimental: 'نسبة المنتجات المبتكرة {novel}% أعلى من المستهدف {target}%. المخاطرة مرتفعة، وازنها بمنتجات مجرّبة.',
+    },
+    alertAction: {
+        repetitive: 'اقترح تصاميم مختلفة',
+        overloaded: 'راجع أداء الفئة',
+        low_innovation: 'استكشف التوجهات',
+        too_experimental: 'قيّم منتجًا مجرّبًا',
+    },
+
+    categories: 'التوازن حسب الفئة',
+    categoriesHint: 'التوصية بعدد المنتجات الجديدة شهريًا لكل فئة لتجنّب الإغراق أو الركود.',
+    category: 'الفئة',
+    topLook: 'أكثر شكل يتكرر',
+    novelRatio: 'نسبة المبتكر',
+    winners: 'رابحة',
+    stagnant: 'راكدة',
+    launches: 'طروحات حديثة',
+    recommended: 'المقترح شهريًا',
+    perMonth: '{count} شهريًا',
+    statusLabel: 'الحالة',
+    status: {
+        healthy: 'متوازنة',
+        repetitive: 'متكررة',
+        stale: 'بلا طروحات حديثة',
+        overloaded: 'مثقلة بالراكد',
+    },
+
+    pace: 'وتيرة الطرح المقترحة',
+    paceHint: 'الطرح الشهري المقترح مقارنة بمتوسط الطرح الفعلي آخر 6 أشهر.',
+    actualPace: 'الفعلي شهريًا',
+    suggestedPace: 'المقترح شهريًا',
+    empty: 'لا توجد منتجات مصنّفة بعد',
+    emptyHint: 'اربط متجرك أو استورد المنتجات لحساب توازن الكتالوج.',
+};

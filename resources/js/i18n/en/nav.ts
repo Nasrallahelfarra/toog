@@ -1,0 +1,37 @@
+import type { nav as ar } from '../ar/nav';
+
+export const nav: typeof ar = {
+    platform: 'Platform admin',
+    adminDashboard: 'Platform overview',
+    stores: 'Stores',
+    users: 'Users',
+    aiCosts: 'AI costs',
+    activityLog: 'Activity log',
+    platformSettings: 'Platform settings',
+
+    store: 'Store',
+    dashboard: 'Dashboard',
+    connection: 'Zid connection',
+    performance: 'Store performance',
+    intelligence: 'Market intelligence',
+    market: 'Market trends',
+    competitors: 'Competitors',
+    calendar: 'Seasonal calendar',
+    decisions: 'Decide & design',
+    evaluations: 'Product evaluation',
+    newEvaluation: 'Evaluate a product',
+    studio: 'Design studio',
+    library: 'Design library',
+    balance: 'Catalog balance',
+    management: 'Management',
+    reports: 'Reports',
+    notifications: 'Notifications',
+    activity: 'Activity log',
+    storeSettings: 'Store settings',
+
+    adminMode: 'Admin mode',
+    viewingStoreAs: 'You are viewing “{store}” with full owner permissions',
+    backToAdmin: 'Back to platform',
+    switchStore: 'Switch store',
+    account: 'Account',
+};
