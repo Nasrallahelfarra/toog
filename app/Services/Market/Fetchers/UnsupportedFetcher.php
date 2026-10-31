@@ -5,10 +5,8 @@ namespace App\Services\Market\Fetchers;
 use App\Models\Competitor;
 
 /**
- * Sources without a public, terms-compliant feed. Salla and Zid storefronts
- * and TikTok / Instagram / Snapchat need a licensed data provider or
- * official API access before they can be monitored automatically; until
- * then their data is entered or imported manually.
+ * Social networks require a separate connector. Public storefronts are
+ * handled by the catalog / structured-data crawler.
  */
 class UnsupportedFetcher implements CompetitorFetcher
 {

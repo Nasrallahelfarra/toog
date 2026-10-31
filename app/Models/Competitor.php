@@ -20,17 +20,19 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $last_checked_at
  * @property string|null $last_error
  * @property string|null $notes
+ * @property array<string, mixed>|null $analysis
  */
-#[Fillable(['store_id', 'name', 'platform', 'url', 'handle', 'category', 'is_active', 'last_checked_at', 'last_error', 'notes'])]
+#[Fillable(['store_id', 'name', 'platform', 'url', 'handle', 'category', 'is_active', 'last_checked_at', 'last_error', 'notes', 'analysis'])]
 class Competitor extends Model
 {
-    public const STORE_PLATFORMS = ['salla', 'zid', 'shopify'];
+    public const STORE_PLATFORMS = ['website', 'salla', 'zid', 'shopify'];
 
     public const SOCIAL_PLATFORMS = ['instagram', 'tiktok', 'snapchat'];
 
     protected function casts(): array
     {
         return [
+            'analysis' => 'array',
             'is_active' => 'boolean',
             'last_checked_at' => 'datetime',
         ];

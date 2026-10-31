@@ -78,7 +78,7 @@ class CompetitorController extends Controller
         Activity::log('competitor.created', $competitor, ['name' => $competitor->name, 'platform' => $competitor->platform]);
         Inertia::flash('toast', ['type' => 'success', 'message' => __('market.competitor_saved')]);
 
-        return back();
+        return to_route('store.competitors.index', ['competitor' => $competitor->id]);
     }
 
     public function update(Request $request, Competitor $competitor): RedirectResponse
@@ -125,7 +125,7 @@ class CompetitorController extends Controller
 
         Inertia::flash('toast', $toast);
 
-        return back();
+        return to_route('store.competitors.index', ['competitor' => $competitor->id]);
     }
 
     public function scanAll(): RedirectResponse
@@ -147,8 +147,10 @@ class CompetitorController extends Controller
     {
         return [
             'id' => $c->id,
+            'analysis' => $c->analysis,
             'products' => CompetitorProduct::query()->where('competitor_id', $c->id)
-                ->orderByDesc('is_best_seller')->latest('first_seen_at')->limit(24)->get()
+                ->when($c->analysis['crawl']['observed_at'] ?? null, fn ($q, $time) => $q->where('evidence->observed_at', $time))
+                ->orderByDesc('is_best_seller')->latest('first_seen_at')->limit(160)->get()
                 ->map(fn (CompetitorProduct $p) => [
                     'id' => $p->id,
                     'name' => $p->name,
@@ -158,6 +160,7 @@ class CompetitorController extends Controller
                     'image_url' => $p->image_url,
                     'url' => $p->url,
                     'is_best_seller' => $p->is_best_seller,
+                    'evidence' => $p->evidence,
                     'colors' => $p->features['colors'] ?? [],
                     'pattern' => $p->features['pattern'] ?? null,
                     'first_seen_at' => $p->first_seen_at?->toIso8601String(),
@@ -183,9 +186,9 @@ class CompetitorController extends Controller
         $social = in_array($request->input('platform'), Competitor::SOCIAL_PLATFORMS, true);
 
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:120'],
+            'name' => [$social ? 'required' : 'nullable', 'string', 'max:120'],
             'platform' => ['required', Rule::in([...Competitor::STORE_PLATFORMS, ...Competitor::SOCIAL_PLATFORMS])],
-            'url' => [$social ? 'nullable' : 'required', 'nullable', 'url', 'max:255'],
+            'url' => [$social ? 'nullable' : 'required', 'nullable', 'url:http,https', 'max:255'],
             'handle' => [$social ? 'required' : 'nullable', 'nullable', 'string', 'max:80'],
             'category' => ['nullable', 'string', 'max:120'],
             'notes' => ['nullable', 'string', 'max:1000'],
@@ -193,6 +196,7 @@ class CompetitorController extends Controller
         ]);
 
         $data['handle'] = isset($data['handle']) ? ltrim($data['handle'], '@') : null;
+        $data['name'] = ($data['name'] ?? null) ?: (string) parse_url($data['url'], PHP_URL_HOST);
         $data['is_active'] = $request->boolean('is_active', true);
 
         return $data;

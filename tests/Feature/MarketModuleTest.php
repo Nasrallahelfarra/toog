@@ -14,6 +14,7 @@ use App\Models\Store;
 use App\Models\User;
 use App\Notifications\PlatformNotification;
 use App\Services\Catalog\BalanceService;
+use App\Services\Market\PublicWebClient;
 use App\Services\Market\SentimentAnalyzer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -91,6 +92,8 @@ class MarketModuleTest extends TestCase
 
     public function test_shopify_scan_tracks_new_products_and_price_changes(): void
     {
+        $this->partialMock(PublicWebClient::class, fn ($mock) => $mock->shouldReceive('addresses')->andReturn(['93.184.216.34']));
+        config(['mojo.ai.provider' => 'fake']);
         [$owner, $store] = $this->ownerWithStore();
         $competitor = Competitor::query()->create(['store_id' => $store->id, 'name' => 'Shop', 'platform' => 'shopify', 'url' => 'https://shop.example.com']);
 
@@ -100,8 +103,11 @@ class MarketModuleTest extends TestCase
         ]]];
 
         Http::fake([
+            'shop.example.com/robots.txt' => Http::response('User-agent: *'),
+            'https://shop.example.com' => Http::response('<main><a href="/collections/best">Best sellers</a></main>'),
             'shop.example.com/products.json*' => Http::sequence()->push($product('400.00'))->push($product('350.00')),
-            'shop.example.com/collections/*' => Http::response(['products' => [['id' => 7]]]),
+            'shop.example.com/collections/best/products.json*' => Http::response(['products' => []]),
+            'shop.example.com/collections/best' => Http::response('<main><a href="/products/black">Black abaya</a></main>'),
         ]);
 
         $this->actingAs($owner)->post("/store/competitors/{$competitor->id}/scan")->assertRedirect();
