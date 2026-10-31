@@ -9,7 +9,7 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        User::query()->updateOrCreate(['email' => 'admin@mojo.ai'], [
+        User::query()->firstOrCreate(['email' => 'admin@mojo.ai'], [
             'name' => 'مدير المنصة',
             'password' => 'password',
             'role' => User::ROLE_ADMIN,

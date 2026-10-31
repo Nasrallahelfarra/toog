@@ -27,7 +27,7 @@ class SeasonalEventSeeder extends Seeder
         ];
 
         foreach ($events as [$key, $ar, $en, $start, $end, $prep, $palette]) {
-            SeasonalEvent::query()->updateOrCreate(
+            SeasonalEvent::query()->firstOrCreate(
                 ['store_id' => null, 'season_key' => $key],
                 ['name_ar' => $ar, 'name_en' => $en, 'starts_on' => $start, 'ends_on' => $end,
                     'prep_weeks' => $prep, 'palette' => $palette, 'is_active' => true],
