@@ -5,7 +5,6 @@ import {
     CheckCircle2,
     Clock,
     Eye,
-    Heart,
     Pencil,
     Plus,
     Radar,
@@ -13,28 +12,21 @@ import {
     ScanLine,
     Swords,
     Trash2,
-    Trophy,
     Unplug,
 } from 'lucide-react';
-import { motion } from 'motion/react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import InputError from '@/components/input-error';
-import {
-    CompetitorAnalysis,
-    EvidenceLinks,
-} from '@/components/market/competitor-analysis';
+import { CompetitorWorkspace } from '@/components/market/competitor-workspace';
 import type {
-    CompetitorAnalysisData,
-    ProductEvidence,
-} from '@/components/market/competitor-analysis';
+    Competitor,
+    CompetitorDetails,
+} from '@/components/market/competitor-types';
 import { PlatformBadge } from '@/components/market/platform-badge';
 import {
     CompetitorScanProgress,
     isScanning,
 } from '@/components/market/competitor-scan-progress';
-import type { CompetitorScanData } from '@/components/market/competitor-scan-progress';
-import { ColorChips } from '@/components/mojo/color-chips';
 import { ConfirmDialog } from '@/components/mojo/confirm-dialog';
 import { EmptyState } from '@/components/mojo/empty-state';
 import { HoverLift, Stagger, StaggerItem } from '@/components/mojo/motion';
@@ -57,71 +49,17 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetHeader,
-    SheetTitle,
-} from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useI18n } from '@/hooks/use-i18n';
 import { cn } from '@/lib/utils';
-
-type Competitor = {
-    id: number;
-    name: string;
-    platform: string;
-    url: string | null;
-    handle: string | null;
-    category: string | null;
-    notes: string | null;
-    is_active: boolean;
-    is_social: boolean;
-    auto_scan: boolean;
-    products_count: number;
-    posts_count: number;
-    last_checked_at: string | null;
-    last_error: string | null;
-    scan: CompetitorScanData | null;
-};
-
-type Details = {
-    id: number;
-    analysis: CompetitorAnalysisData | null;
-    products: {
-        id: number;
-        name: string;
-        category: string | null;
-        price: number | null;
-        previous_price: number | null;
-        image_url: string | null;
-        url: string | null;
-        is_best_seller: boolean;
-        evidence: ProductEvidence | null;
-        colors: string[];
-        pattern: string | null;
-        first_seen_at: string | null;
-    }[];
-    posts: {
-        id: number;
-        caption: string | null;
-        url: string | null;
-        views: number;
-        likes: number;
-        engagement_rate: number;
-        posted_at: string | null;
-    }[];
-};
 
 type Props = {
     competitors: Competitor[];
     stats: { total: number; active: number; products: number; posts: number };
     platforms: string[];
     categories: string[];
-    selected: Details | null;
+    selected: CompetitorDetails | null;
     lastScan: {
         status: string;
         stats: {
@@ -159,7 +97,7 @@ export default function Competitors({
     selected,
     lastScan,
 }: Props) {
-    const { t, tr, relative, number, isRtl } = useI18n();
+    const { t, tr, relative, number } = useI18n();
     const [editing, setEditing] = useState<Competitor | 'new' | null>(null);
     const [scanning, setScanning] = useState<number | 'all' | null>(null);
     const [requestFailed, setRequestFailed] = useState(false);
@@ -169,9 +107,9 @@ export default function Competitors({
     const openDetails = (id: number | null) =>
         router.get('/store/competitors', id ? { competitor: id } : {}, {
             preserveState: true,
-            preserveScroll: true,
+            preserveScroll: false,
             only: ['selected'],
-            replace: true,
+            replace: false,
         });
 
     const scan = (id: number | 'all') =>
@@ -202,6 +140,35 @@ export default function Competitors({
     const selectedCompetitor = selected
         ? competitors.find((x) => x.id === selected.id)
         : null;
+
+    if (selected && selectedCompetitor) {
+        return (
+            <PageBody>
+                {scanning === null &&
+                    competitors.some((x) => isScanning(x.scan)) && (
+                        <ScanPoll onFailure={setPollFailed} />
+                    )}
+                <CompetitorWorkspace
+                    key={selected.id}
+                    competitor={selectedCompetitor}
+                    details={selected}
+                    scanning={
+                        scanning === selected.id ||
+                        isScanning(selectedCompetitor.scan)
+                    }
+                    onScan={() => scan(selected.id)}
+                    onBack={() => openDetails(null)}
+                    errorMessage={
+                        requestFailed
+                            ? c.scanProgress.requestFailed
+                            : pollFailed
+                              ? c.scanProgress.updateFailed
+                              : null
+                    }
+                />
+            </PageBody>
+        );
+    }
 
     return (
         <PageBody>
@@ -350,36 +317,6 @@ export default function Competitors({
                 categories={categories}
                 onClose={() => setEditing(null)}
             />
-
-            <Sheet
-                open={!!selected}
-                onOpenChange={(open) => !open && openDetails(null)}
-            >
-                <SheetContent
-                    side={isRtl ? 'left' : 'right'}
-                    className="w-full overflow-y-auto sm:max-w-xl"
-                >
-                    {selected && selectedCompetitor && (
-                        <DetailsPanel
-                            key={selected.id}
-                            competitor={selectedCompetitor}
-                            details={selected}
-                            errorMessage={
-                                requestFailed
-                                    ? c.scanProgress.requestFailed
-                                    : pollFailed
-                                      ? c.scanProgress.updateFailed
-                                      : null
-                            }
-                            scanning={
-                                scanning === selected.id ||
-                                isScanning(selectedCompetitor.scan)
-                            }
-                            onScan={() => scan(selected.id)}
-                        />
-                    )}
-                </SheetContent>
-            </Sheet>
         </PageBody>
     );
 }
@@ -493,7 +430,7 @@ function CompetitorCard({
                     )}
                 </div>
 
-                {competitor.scan && (
+                {competitor.scan && competitor.scan.status !== 'completed' && (
                     <CompetitorScanProgress scan={competitor.scan} compact />
                 )}
                 <Button variant="outline" size="sm" onClick={onOpen}>
@@ -758,238 +695,5 @@ function CompetitorDialog({
                 </form>
             </DialogContent>
         </Dialog>
-    );
-}
-
-function DetailsPanel({
-    competitor,
-    details,
-    scanning,
-    onScan,
-    errorMessage,
-}: {
-    competitor: Competitor;
-    details: Details;
-    scanning: boolean;
-    onScan: () => void;
-    errorMessage: string | null;
-}) {
-    const { t, money, relative, compact } = useI18n();
-    const c = t.market.competitors;
-
-    return (
-        <div className="space-y-5 p-1">
-            <SheetHeader className="space-y-2">
-                <SheetTitle className="flex items-center gap-2">
-                    {competitor.name}
-                    <PlatformBadge
-                        platform={competitor.platform}
-                        withLabel={false}
-                    />
-                </SheetTitle>
-                <SheetDescription>{c.details}</SheetDescription>
-            </SheetHeader>
-
-            <div className="space-y-3 px-4">
-                {errorMessage && (
-                    <p role="alert" className="text-sm text-danger">
-                        {errorMessage}
-                    </p>
-                )}
-                {competitor.scan && (
-                    <CompetitorScanProgress
-                        scan={competitor.scan}
-                        compact={competitor.scan.status === 'completed'}
-                    />
-                )}
-                {competitor.last_error && !competitor.scan && (
-                    <p role="alert" className="text-sm text-danger">
-                        {competitor.last_error}
-                    </p>
-                )}
-                <Button
-                    className="w-full"
-                    variant="outline"
-                    onClick={onScan}
-                    disabled={
-                        scanning ||
-                        !competitor.is_active ||
-                        !competitor.auto_scan
-                    }
-                >
-                    <RefreshCw
-                        className={cn('size-4', scanning && 'animate-spin')}
-                    />
-                    {scanning
-                        ? c.scanProgress.running
-                        : competitor.scan?.status === 'failed'
-                          ? c.scanProgress.retry
-                          : c.scanNow}
-                </Button>
-                {details.analysis &&
-                    competitor.scan &&
-                    (competitor.scan.status === 'failed' ||
-                        isScanning(competitor.scan)) &&
-                    Date.parse(details.analysis.crawl.observed_at) <
-                        Date.parse(competitor.scan.created_at) && (
-                        <p className="text-xs text-warning">
-                            {c.scanProgress.previousReport}
-                        </p>
-                    )}
-            </div>
-
-            <Tabs
-                key={competitor.scan?.id ?? 'unscanned'}
-                defaultValue={competitor.is_social ? 'posts' : 'analysis'}
-                className="px-4"
-            >
-                <TabsList className="w-full">
-                    {!competitor.is_social && (
-                        <TabsTrigger value="analysis">{c.analysis}</TabsTrigger>
-                    )}
-                    <TabsTrigger value="products">
-                        {c.trackedProducts} ({details.products.length})
-                    </TabsTrigger>
-                    <TabsTrigger value="posts">
-                        {c.trackedPosts} ({details.posts.length})
-                    </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="analysis">
-                    {!details.analysis &&
-                    (scanning || competitor.scan?.status === 'failed') ? (
-                        <p className="rounded-xl border p-4 text-sm text-muted-foreground">
-                            {scanning
-                                ? c.scanProgress.reportPending
-                                : c.scanProgress.noReport}
-                        </p>
-                    ) : (
-                        <CompetitorAnalysis
-                            analysis={details.analysis}
-                            products={details.products}
-                        />
-                    )}
-                </TabsContent>
-
-                <TabsContent value="products" className="space-y-2">
-                    {details.products.length === 0 ? (
-                        <EmptyState
-                            icon={Swords}
-                            title={t.common.noData}
-                            className="py-8"
-                        />
-                    ) : (
-                        details.products.map((p, i) => (
-                            <motion.div
-                                key={p.id}
-                                initial={{ opacity: 0, y: 6 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: Math.min(i * 0.03, 0.3) }}
-                                className="flex items-center gap-3 rounded-xl border p-3"
-                            >
-                                {p.image_url ? (
-                                    <img
-                                        src={p.image_url}
-                                        alt=""
-                                        className="size-12 shrink-0 rounded-lg object-cover"
-                                        loading="lazy"
-                                    />
-                                ) : (
-                                    <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-muted">
-                                        <ColorChips
-                                            colors={p.colors.slice(0, 1)}
-                                            showLabels={false}
-                                            size="md"
-                                        />
-                                    </div>
-                                )}
-                                <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="truncate text-sm font-medium">
-                                            {p.name}
-                                        </span>
-                                        {p.is_best_seller && (
-                                            <Trophy
-                                                className="size-3.5 shrink-0 text-gold"
-                                                aria-label={c.bestSeller}
-                                            />
-                                        )}
-                                    </div>
-                                    <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                                        <ColorChips
-                                            colors={p.colors}
-                                            showLabels={false}
-                                        />
-                                        <span>
-                                            {c.firstSeen}{' '}
-                                            {relative(p.first_seen_at)}
-                                        </span>
-                                    </div>
-                                    <EvidenceLinks evidence={p.evidence} />
-                                </div>
-                                <div className="shrink-0 text-end">
-                                    <div className="num text-sm font-semibold">
-                                        {money(p.price)}
-                                    </div>
-                                    {p.previous_price !== null &&
-                                        p.previous_price !== p.price && (
-                                            <div className="num text-xs text-muted-foreground line-through">
-                                                {money(p.previous_price)}
-                                            </div>
-                                        )}
-                                </div>
-                                {p.url && (
-                                    <a
-                                        href={p.url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-muted-foreground hover:text-foreground"
-                                    >
-                                        <ArrowUpRight className="size-4 rtl:-scale-x-100" />
-                                    </a>
-                                )}
-                            </motion.div>
-                        ))
-                    )}
-                </TabsContent>
-
-                <TabsContent value="posts" className="space-y-2">
-                    {details.posts.length === 0 ? (
-                        <EmptyState
-                            icon={Swords}
-                            title={t.common.noData}
-                            className="py-8"
-                        />
-                    ) : (
-                        details.posts.map((post) => (
-                            <div
-                                key={post.id}
-                                className="space-y-1.5 rounded-xl border p-3"
-                            >
-                                <p className="text-sm leading-relaxed">
-                                    {post.caption}
-                                </p>
-                                <div className="num flex items-center gap-3 text-xs text-muted-foreground">
-                                    <span className="flex items-center gap-1">
-                                        <Eye className="size-3.5" />
-                                        {compact(post.views)}
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                        <Heart className="size-3.5" />
-                                        {compact(post.likes)}
-                                    </span>
-                                    <span className="font-medium text-primary">
-                                        {post.engagement_rate.toFixed(1)}%
-                                    </span>
-                                    <span className="ms-auto">
-                                        {relative(post.posted_at)}
-                                    </span>
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </TabsContent>
-            </Tabs>
-        </div>
     );
 }

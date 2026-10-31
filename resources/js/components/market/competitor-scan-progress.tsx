@@ -91,9 +91,6 @@ export function CompetitorScanProgress({
                 <span className="num shrink-0">{number(scan.progress)}%</span>
             </div>
             <Progress value={scan.progress} aria-label={c.title} />
-            {!compact && (
-                <p className="text-xs text-muted-foreground">{c.phaseNote}</p>
-            )}
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span>
                     {tr(c.pages, { count: number(scan.metrics?.pages ?? 0) })}
@@ -108,28 +105,34 @@ export function CompetitorScanProgress({
                 )}
             </div>
             {!compact && (
-                <ol className="space-y-2 text-xs">
-                    {stages.map((stage, i) => {
-                        const done = scan.progress >= (i + 1) * 20;
-                        const current = scan.stage === stage && active;
-                        const StepIcon = done
-                            ? CheckCircle2
-                            : current
-                              ? LoaderCircle
-                              : Circle;
-                        return (
-                            <li
-                                key={stage}
-                                className={`flex items-center gap-2 ${done ? 'text-success' : current ? 'font-semibold' : 'text-muted-foreground'}`}
-                            >
-                                <StepIcon
-                                    className={`size-3.5 ${current ? 'animate-spin' : ''}`}
-                                />
-                                {c.stages[stage]}
-                            </li>
-                        );
-                    })}
-                </ol>
+                <details className="border-t border-border/60 pt-3 text-xs">
+                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                        {t.market.competitors.workspace.scanDetails}
+                    </summary>
+                    <ol className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                        {stages.map((stage, i) => {
+                            const done = scan.progress >= (i + 1) * 20;
+                            const current = scan.stage === stage && active;
+                            const StepIcon = done
+                                ? CheckCircle2
+                                : current
+                                  ? LoaderCircle
+                                  : Circle;
+                            return (
+                                <li
+                                    key={stage}
+                                    className={`flex items-center gap-2 ${done ? 'text-success' : current ? 'font-semibold' : 'text-muted-foreground'}`}
+                                >
+                                    <StepIcon
+                                        className={`size-3.5 ${current ? 'animate-spin' : ''}`}
+                                    />
+                                    {c.stages[stage]}
+                                </li>
+                            );
+                        })}
+                    </ol>
+                    <p className="mt-4 text-muted-foreground">{c.phaseNote}</p>
+                </details>
             )}
             {scan.status === 'queued' && elapsed >= 45 && (
                 <p className="text-xs leading-relaxed text-warning">
