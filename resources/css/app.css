@@ -62,7 +62,7 @@
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-ring: var(--sidebar-ring);
 
-    /* Mojo brand + semantic tones */
+    /* Brand + semantic tones */
     --color-gold: var(--gold);
     --color-gold-foreground: var(--gold-foreground);
     --color-gold-soft: var(--gold-soft);
@@ -100,7 +100,7 @@
 }
 
 /*
- * Palette: deep navy ink + warm sand + Najdi gold, from the Mojo AI
+ * Palette: deep navy ink + warm sand + Najdi gold, from the طوق
  * scope document. Semantic tones: emerald = accept, amber = modify,
  * rose = reject.
  */

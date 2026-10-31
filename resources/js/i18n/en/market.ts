@@ -120,7 +120,7 @@ export const market: typeof ar = {
 
     competitors: {
         title: 'Competitors',
-        description: 'The stores and social accounts Mojo AI follows to learn which design elements work.',
+        description: 'The stores and social accounts طوق follows to learn which design elements work.',
         add: 'Add competitor',
         edit: 'Edit competitor',
         scanAll: 'Scan all',
@@ -146,7 +146,7 @@ export const market: typeof ar = {
         deleteTitle: 'Delete competitor?',
         deleteBody: 'All tracked products and posts of this competitor will be deleted.',
         empty: 'No competitors yet',
-        emptyHint: 'Add competitor stores and social accounts so Mojo AI can start tracking trends.',
+        emptyHint: 'Add competitor stores and social accounts so طوق can start tracking trends.',
         details: 'Competitor details',
         trackedProducts: 'Tracked products',
         trackedPosts: 'Tracked posts',

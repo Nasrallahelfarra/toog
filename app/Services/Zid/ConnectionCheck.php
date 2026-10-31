@@ -123,7 +123,7 @@ class ConnectionCheck
             $add('order_lines', self::SKIP);
         }
 
-        // 4. Data actually arrived in Mojo AI.
+        // 4. Data actually arrived in طوق.
         $products = Product::query()->where('store_id', $store->id)->count();
         $salesRows = ProductSale::query()->where('store_id', $store->id)->count();
         $lastSync = SyncRun::query()->where('store_id', $store->id)->where('type', 'zid_sync')->latest('id')->first();

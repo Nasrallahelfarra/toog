@@ -48,7 +48,7 @@ class PlatformNotification extends Notification
             ->subject($ar ? $this->titleAr : $this->titleEn)
             ->line($ar ? $this->bodyAr : $this->bodyEn);
 
-        return $this->url ? $mail->action($ar ? 'فتح في Mojo AI' : 'Open in Mojo AI', url($this->url)) : $mail;
+        return $this->url ? $mail->action($ar ? 'فتح في طوق' : 'Open in طوق', url($this->url)) : $mail;
     }
 
     /**

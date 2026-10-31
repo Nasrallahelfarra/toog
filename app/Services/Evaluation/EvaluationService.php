@@ -130,7 +130,7 @@ class EvaluationService
     private function systemPrompt(): string
     {
         return <<<'TXT'
-        You are Mojo AI, a product strategy advisor for e-commerce stores in Saudi Arabia.
+        You are طوق, a product strategy advisor for e-commerce stores in Saudi Arabia.
         You receive a candidate product, the score the platform already computed from the
         store's own sales data, and the evidence behind it. The numbers are final: do not
         change or recompute them, and never invent sales figures.

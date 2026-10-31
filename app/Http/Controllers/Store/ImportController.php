@@ -51,7 +51,7 @@ class ImportController extends Controller
     {
         return response($importer->template($type), 200, [
             'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => "attachment; filename=\"mojo-{$type}-template.csv\"",
+            'Content-Disposition' => "attachment; filename=\"toog-{$type}-template.csv\"",
         ]);
     }
 }

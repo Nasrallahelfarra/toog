@@ -116,7 +116,7 @@ class AiCostController extends Controller
                 });
 
             fclose($out);
-        }, "mojo-ai-costs-{$period}-".now()->format('Ymd').'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
+        }, "toog-ai-costs-{$period}-".now()->format('Ymd').'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
     /**

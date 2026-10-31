@@ -1,4 +1,4 @@
-# Mojo AI — المستشار الذكي لمنتجات التجارة الإلكترونية
+# طوق — المستشار الذكي لمنتجات التجارة الإلكترونية
 
 منصة تقيّم كل منتج أو تصميم جديد قبل طرحه مقابل مبيعات المتجر وتوجهات السوق السعودي، وتوصي بالقبول أو الرفض أو التعديل، وتولّد تصاميم بهوية المتجر.
 
@@ -40,6 +40,9 @@ composer dev                # الخادم + الطوابير + Vite معًا
 ## الإعدادات (`.env`)
 
 ```env
+APP_NAME="طوق"
+VITE_APP_NAME="${APP_NAME}"
+
 # Gemini — بدون مفتاح تعمل المنصة في «وضع العرض التجريبي» (نتائج قوالب وصور توضيحية بلا تكلفة)
 GEMINI_API_KEY=
 GEMINI_TEXT_MODEL=gemini-3.8-flash
@@ -56,6 +59,16 @@ ZID_REDIRECT_URI="${APP_URL}/store/integrations/zid/callback"
 للتحويل إلى MySQL/PostgreSQL: غيّر `DB_CONNECTION` وبيانات الاتصال ثم `php artisan migrate`.
 
 في الإنتاج شغّل عامل الطوابير (`php artisan queue:work`) والمجدول (`php artisan schedule:run` كل دقيقة عبر cron).
+
+لتطبيق الاسم الجديد على سيرفر موجود، عدّل `APP_NAME` و`VITE_APP_NAME` في ملف `.env` على السيرفر كما في المثال أعلاه، ثم أعد بناء الواجهة وتحديث الإعدادات وعامل الطوابير:
+
+```bash
+npm ci
+npm run build
+php artisan config:cache
+php artisan view:clear
+php artisan queue:restart
+```
 
 ## الأدوار
 

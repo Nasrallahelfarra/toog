@@ -1,7 +1,7 @@
 import type { SVGAttributes } from 'react';
 
 /**
- * Mojo AI mark: an "M" drawn as one stroke with a gold spark (the AI).
+ * طوق mark: an "M" drawn as one stroke with a gold spark (the AI).
  */
 export default function AppLogoIcon(props: SVGAttributes<SVGElement>) {
     return (

@@ -138,7 +138,7 @@ export const settings: typeof ar = {
         steps: [
             { title: 'Click “Connect Zid store”', body: 'You go to Zid’s official sign-in page — we never ask for your password.' },
             { title: 'Approve the permissions', body: 'Sign in with the store owner account and approve reading products and reading orders.' },
-            { title: 'First sync', body: 'You return to Mojo AI automatically and we import products and the last 12 months of orders. It takes minutes depending on store size.' },
+            { title: 'First sync', body: 'You return to طوق automatically and we import products and the last 12 months of orders. It takes minutes depending on store size.' },
             { title: 'Automatic check', body: 'We verify permissions, data arrival and analysis; the result appears under “Connection check”.' },
             { title: 'Always up to date', body: 'Data refreshes daily or weekly as you choose, and you can sync manually at any time.' },
         ],
@@ -214,7 +214,7 @@ export const settings: typeof ar = {
                 fix: 'Contact the platform support team.',
             },
             imported: {
-                title: 'Data in Mojo AI',
+                title: 'Data in طوق',
                 pass: '{products} products and {sales} monthly sales records.',
                 warnRunning: 'A sync is running now…',
                 warnNoSales: '{products} products with no sales yet.',

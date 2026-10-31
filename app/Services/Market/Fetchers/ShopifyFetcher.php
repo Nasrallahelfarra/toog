@@ -30,7 +30,7 @@ class ShopifyFetcher implements CompetitorFetcher
 
         try {
             $response = Http::timeout(15)
-                ->withHeaders(['User-Agent' => 'MojoAI-MarketMonitor/1.0 (+public catalog)'])
+                ->withHeaders(['User-Agent' => 'Toog-MarketMonitor/1.0 (+public catalog)'])
                 ->acceptJson()
                 ->get("{$base}/products.json", ['limit' => 250]);
         } catch (ConnectionException $e) {

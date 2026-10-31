@@ -24,7 +24,7 @@ export const auth: typeof ar = {
     demoAdmin: 'Platform admin',
     demoOwner: 'Store owner',
     brandHeadline: 'Decide with confidence before you produce',
-    brandBody: 'Mojo AI scores every new product against your store’s sales and Saudi market trends, recommends accept, reject or modify — and generates the improved design on the spot.',
+    brandBody: 'طوق scores every new product against your store’s sales and Saudi market trends, recommends accept, reject or modify — and generates the improved design on the spot.',
     brandPoint1: 'A score out of 100 with a clear reason for every decision',
     brandPoint2: 'Competitor, TikTok, Instagram and Snapchat monitoring',
     brandPoint3: 'AI designs in your store’s visual identity',

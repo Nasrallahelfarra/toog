@@ -6,7 +6,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 
 /**
- * Turns Zid payloads into Mojo rows. Tolerant of the field variations seen
+ * Turns Zid payloads into application rows. Tolerant of the field variations seen
  * across Zid API versions (localised names, nested images and categories).
  */
 class ZidMapper

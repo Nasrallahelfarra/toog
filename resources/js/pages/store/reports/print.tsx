@@ -69,7 +69,7 @@ export default function ReportPrint({ report, store, period, generatedAt, genera
                         <span className="flex size-11 items-center justify-center rounded-xl bg-[#14213A]">
                             <AppLogoIcon className="size-7 text-[#EADBB4]" />
                         </span>
-                        <span className="text-lg font-semibold text-[#1B3A5C]">Mojo AI</span>
+                        <span className="text-lg font-semibold text-[#1B3A5C]">طوق</span>
                     </div>
                 </header>
 
@@ -124,7 +124,7 @@ export default function ReportPrint({ report, store, period, generatedAt, genera
                 ))}
 
                 <footer className="mt-8 border-t pt-3 text-center text-[10px] text-[#9ca3af]">
-                    {t.reports.print.confidential} · Mojo AI · {store.domain ?? ''}
+                    {t.reports.print.confidential} · طوق · {store.domain ?? ''}
                 </footer>
             </article>
         </div>

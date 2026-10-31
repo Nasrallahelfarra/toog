@@ -1,5 +1,5 @@
 export const common = {
-    appName: 'Mojo AI',
+    appName: 'طوق',
     tagline: 'المستشار الذكي لمنتجات التجارة الإلكترونية',
     save: 'حفظ',
     saveChanges: 'حفظ التغييرات',

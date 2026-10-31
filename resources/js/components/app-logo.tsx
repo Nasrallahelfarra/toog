@@ -10,7 +10,7 @@ export default function AppLogo() {
                 <AppLogoIcon className="size-6 text-[#EADBB4]" />
             </div>
             <div className="ms-1 grid flex-1 text-start text-sm leading-tight">
-                <span className="truncate text-[15px] font-semibold tracking-tight">Mojo AI</span>
+                <span className="truncate text-[15px] font-semibold tracking-tight">طوق</span>
                 <span className="text-sidebar-foreground/55 truncate text-[11px]">{t.common.tagline}</span>
             </div>
         </>

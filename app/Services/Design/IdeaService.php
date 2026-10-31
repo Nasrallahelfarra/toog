@@ -36,7 +36,7 @@ class IdeaService
         $result = $this->ai->json(
             operation: 'idea',
             store: $store,
-            system: 'You are Mojo AI, a product strategist for Saudi e-commerce stores. Propose new, production-ready product ideas '
+            system: 'You are طوق, a product strategist for Saudi e-commerce stores. Propose new, production-ready product ideas '
                 .'that combine the store\'s proven best-seller attributes with rising market trends and the next Saudi season. '
                 .'Use only the attribute keys provided in the vocabulary. Titles and descriptions in Arabic (Modern Standard) and English. '
                 .'The "prompt" field is an English image-generation brief for the product.',

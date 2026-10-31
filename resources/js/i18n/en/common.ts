@@ -1,7 +1,7 @@
 import type { common as ar } from '../ar/common';
 
 export const common: typeof ar = {
-    appName: 'Mojo AI',
+    appName: 'طوق',
     tagline: 'The smart product advisor for e-commerce',
     save: 'Save',
     saveChanges: 'Save changes',

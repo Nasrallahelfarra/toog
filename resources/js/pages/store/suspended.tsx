@@ -24,8 +24,8 @@ export default function Suspended({ reason }: { reason?: string | null }) {
                     <h1 className="text-xl font-semibold">{ar ? 'تم إيقاف هذا المتجر مؤقتًا' : 'This store is suspended'}</h1>
                     <p className="text-muted-foreground text-sm leading-relaxed">
                         {ar
-                            ? 'لا يمكن الوصول إلى لوحة المتجر حاليًا. تواصل مع إدارة منصة Mojo AI لإعادة التفعيل.'
-                            : 'The store dashboard is unavailable. Contact the Mojo AI platform team to reactivate it.'}
+                            ? 'لا يمكن الوصول إلى لوحة المتجر حاليًا. تواصل مع إدارة منصة طوق لإعادة التفعيل.'
+                            : 'The store dashboard is unavailable. Contact the طوق platform team to reactivate it.'}
                     </p>
                     {reason && <p className="bg-muted rounded-xl px-4 py-2.5 text-sm">{reason}</p>}
                 </div>
@@ -37,7 +37,7 @@ export default function Suspended({ reason }: { reason?: string | null }) {
                     <Button variant="ghost" asChild>
                         <Link href="/">
                             <AppLogoIcon className="size-5" />
-                            Mojo AI
+                            طوق
                         </Link>
                     </Button>
                 </div>

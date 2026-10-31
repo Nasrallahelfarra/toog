@@ -23,7 +23,7 @@ const copy = {
         badge: 'مصمم للتجارة الإلكترونية في السعودية',
         title: 'لا تطرح منتجًا قبل أن تعرف فرصته',
         subtitle:
-            'Mojo AI يقيّم كل منتج أو تصميم جديد مقابل مبيعات متجرك وتوجهات المنافسين وذوق العميل السعودي، ثم يوصي بالقبول أو الرفض أو التعديل — ويولّد النسخة المحسّنة بهوية متجرك.',
+            'طوق يقيّم كل منتج أو تصميم جديد مقابل مبيعات متجرك وتوجهات المنافسين وذوق العميل السعودي، ثم يوصي بالقبول أو الرفض أو التعديل — ويولّد النسخة المحسّنة بهوية متجرك.',
         start: 'ابدأ مجانًا',
         login: 'تسجيل الدخول',
         dashboard: 'لوحة التحكم',
@@ -50,7 +50,7 @@ const copy = {
         badge: 'Built for Saudi e-commerce',
         title: 'Never launch a product before you know its odds',
         subtitle:
-            'Mojo AI scores every new product or design against your store’s sales, competitor trends and Saudi shopper taste, recommends accept, reject or modify — and generates the improved version in your brand.',
+            'طوق scores every new product or design against your store’s sales, competitor trends and Saudi shopper taste, recommends accept, reject or modify — and generates the improved version in your brand.',
         start: 'Get started',
         login: 'Sign in',
         dashboard: 'Dashboard',
@@ -102,7 +102,7 @@ export default function Welcome() {
                         <span className="flex size-10 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
                             <AppLogoIcon className="size-6 text-[#EADBB4]" />
                         </span>
-                        <span className="text-lg font-semibold">Mojo AI</span>
+                        <span className="text-lg font-semibold">طوق</span>
                     </Link>
                     <nav className="flex items-center gap-2">
                         <LanguageToggle className="gap-1.5 px-2.5 text-white hover:bg-white/10 hover:text-white" />
@@ -226,7 +226,7 @@ export default function Welcome() {
                 </FadeIn>
             </section>
 
-            <footer className="text-muted-foreground border-t py-8 text-center text-xs">© {new Date().getFullYear()} Mojo AI</footer>
+            <footer className="text-muted-foreground border-t py-8 text-center text-xs">© {new Date().getFullYear()} طوق</footer>
         </div>
     );
 }

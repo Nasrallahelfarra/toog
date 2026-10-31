@@ -6,7 +6,7 @@ import AppLayout from '@/layouts/app-layout';
 import AuthLayout from '@/layouts/auth-layout';
 import SettingsLayout from '@/layouts/settings/layout';
 
-const appName = import.meta.env.VITE_APP_NAME || 'Mojo AI';
+const appName = import.meta.env.VITE_APP_NAME || 'طوق';
 
 // Full-screen pages that render without the sidebar shell.
 const bare = ['welcome', 'store/no-store', 'store/suspended'];

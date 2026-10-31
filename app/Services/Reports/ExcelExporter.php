@@ -16,7 +16,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /**
  * Writes a ReportBuilder report to .xlsx: a summary sheet plus one sheet
  * per table, right-to-left when the user works in Arabic, with bilingual
- * headers in the Mojo navy.
+ * headers in the brand's navy color.
  */
 class ExcelExporter
 {
@@ -32,7 +32,7 @@ class ExcelExporter
         $rtl = $locale === 'ar';
         $book = new Spreadsheet;
         $book->getProperties()
-            ->setCreator('Mojo AI')
+            ->setCreator('طوق')
             ->setTitle($report['title_en'].' — '.$store->name);
         $book->getDefaultStyle()->getFont()->setName('Arial')->setSize(11);
 
@@ -114,7 +114,7 @@ class ExcelExporter
     public function download(array $report, Store $store, CarbonImmutable $from, CarbonImmutable $to, string $locale): StreamedResponse
     {
         $book = $this->spreadsheet($report, $store, $from, $to, $locale);
-        $filename = "mojo-{$report['type']}-{$store->slug}-{$to->format('Y-m-d')}.xlsx";
+        $filename = "toog-{$report['type']}-{$store->slug}-{$to->format('Y-m-d')}.xlsx";
 
         return response()->streamDownload(function () use ($book) {
             (new Xlsx($book))->save('php://output');
@@ -136,7 +136,7 @@ class ExcelExporter
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(15)->getColor()->setRGB(self::NAVY);
 
         $period = $from->toDateString().' → '.$to->toDateString();
-        $sheet->setCellValue('A2', $rtl ? "{$store->name} · الفترة: {$period} · Mojo AI" : "{$store->name} · Period: {$period} · Mojo AI");
+        $sheet->setCellValue('A2', $rtl ? "{$store->name} · الفترة: {$period} · طوق" : "{$store->name} · Period: {$period} · طوق");
         $sheet->mergeCells("A2:{$last}2");
         $sheet->getStyle('A2')->getFont()->setSize(10)->getColor()->setRGB('6B7280');
     }

@@ -49,7 +49,7 @@ export default function AuthLayout({
                         <AppLogoIcon className="size-7 text-[#EADBB4]" />
                     </span>
                     <span>
-                        <span className="block text-lg font-semibold">Mojo AI</span>
+                        <span className="block text-lg font-semibold">طوق</span>
                         <span className="block text-xs text-white/55">{t.common.tagline}</span>
                     </span>
                 </Link>
@@ -99,7 +99,7 @@ export default function AuthLayout({
                         <span className="bg-primary flex size-9 items-center justify-center rounded-xl">
                             <AppLogoIcon className="size-6 text-[#EADBB4]" />
                         </span>
-                        <span className="font-semibold">Mojo AI</span>
+                        <span className="font-semibold">طوق</span>
                     </Link>
                     <LanguageToggle />
                 </div>
