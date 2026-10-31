@@ -1,4 +1,4 @@
-import { Link, router, useForm } from '@inertiajs/react';
+import { Link, router, useForm, usePoll } from '@inertiajs/react';
 import {
     AlertTriangle,
     ArrowUpRight,
@@ -29,6 +29,11 @@ import type {
     ProductEvidence,
 } from '@/components/market/competitor-analysis';
 import { PlatformBadge } from '@/components/market/platform-badge';
+import {
+    CompetitorScanProgress,
+    isScanning,
+} from '@/components/market/competitor-scan-progress';
+import type { CompetitorScanData } from '@/components/market/competitor-scan-progress';
 import { ColorChips } from '@/components/mojo/color-chips';
 import { ConfirmDialog } from '@/components/mojo/confirm-dialog';
 import { EmptyState } from '@/components/mojo/empty-state';
@@ -80,6 +85,7 @@ type Competitor = {
     posts_count: number;
     last_checked_at: string | null;
     last_error: string | null;
+    scan: CompetitorScanData | null;
 };
 
 type Details = {
@@ -129,6 +135,22 @@ type Props = {
 
 const SOCIAL = ['instagram', 'tiktok', 'snapchat'];
 
+function ScanPoll({ onFailure }: { onFailure: (failed: boolean) => void }) {
+    usePoll(2000, {
+        only: ['competitors', 'selected', 'stats', 'lastScan'],
+        onSuccess: () => onFailure(false),
+        onNetworkError: () => {
+            onFailure(true);
+            return false;
+        },
+        onHttpException: () => {
+            onFailure(true);
+            return false;
+        },
+    });
+    return null;
+}
+
 export default function Competitors({
     competitors,
     stats,
@@ -140,6 +162,8 @@ export default function Competitors({
     const { t, tr, relative, number, isRtl } = useI18n();
     const [editing, setEditing] = useState<Competitor | 'new' | null>(null);
     const [scanning, setScanning] = useState<number | 'all' | null>(null);
+    const [requestFailed, setRequestFailed] = useState(false);
+    const [pollFailed, setPollFailed] = useState(false);
     const c = t.market.competitors;
 
     const openDetails = (id: number | null) =>
@@ -158,7 +182,19 @@ export default function Competitors({
             {},
             {
                 preserveScroll: true,
-                onStart: () => setScanning(id),
+                onStart: () => {
+                    setScanning(id);
+                    setRequestFailed(false);
+                },
+                onError: () => setRequestFailed(true),
+                onNetworkError: () => {
+                    setRequestFailed(true);
+                    return false;
+                },
+                onHttpException: () => {
+                    setRequestFailed(true);
+                    return false;
+                },
                 onFinish: () => setScanning(null),
             },
         );
@@ -185,7 +221,9 @@ export default function Competitors({
                             variant="outline"
                             onClick={() => scan('all')}
                             disabled={
-                                scanning !== null || competitors.length === 0
+                                scanning !== null ||
+                                competitors.length === 0 ||
+                                competitors.some((x) => isScanning(x.scan))
                             }
                         >
                             <RefreshCw
@@ -203,6 +241,35 @@ export default function Competitors({
                     </>
                 }
             />
+
+            {scanning === null &&
+                competitors.some((x) => isScanning(x.scan)) && (
+                    <ScanPoll onFailure={setPollFailed} />
+                )}
+            {pollFailed && (
+                <p
+                    role="alert"
+                    className="rounded-xl border p-4 text-sm text-warning"
+                >
+                    {c.scanProgress.updateFailed}
+                </p>
+            )}
+            {scanning !== null && (
+                <div
+                    role="status"
+                    className="rounded-xl border bg-muted/40 p-4 text-sm"
+                >
+                    {c.scanProgress.starting}
+                </div>
+            )}
+            {requestFailed && (
+                <div
+                    role="alert"
+                    className="rounded-xl border border-danger/30 p-4 text-sm text-danger"
+                >
+                    {c.scanProgress.requestFailed}
+                </div>
+            )}
 
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl border border-border/70 bg-card px-5 py-3.5 text-sm shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
                 {(['total', 'active', 'products', 'posts'] as const).map(
@@ -263,7 +330,10 @@ export default function Competitors({
                         <StaggerItem key={competitor.id}>
                             <CompetitorCard
                                 competitor={competitor}
-                                scanning={scanning === competitor.id}
+                                scanning={
+                                    scanning === competitor.id ||
+                                    isScanning(competitor.scan)
+                                }
                                 onOpen={() => openDetails(competitor.id)}
                                 onEdit={() => setEditing(competitor)}
                                 onScan={() => scan(competitor.id)}
@@ -291,8 +361,21 @@ export default function Competitors({
                 >
                     {selected && selectedCompetitor && (
                         <DetailsPanel
+                            key={selected.id}
                             competitor={selectedCompetitor}
                             details={selected}
+                            errorMessage={
+                                requestFailed
+                                    ? c.scanProgress.requestFailed
+                                    : pollFailed
+                                      ? c.scanProgress.updateFailed
+                                      : null
+                            }
+                            scanning={
+                                scanning === selected.id ||
+                                isScanning(selectedCompetitor.scan)
+                            }
+                            onScan={() => scan(selected.id)}
                         />
                     )}
                 </SheetContent>
@@ -392,7 +475,7 @@ function CompetitorCard({
                             ? relative(competitor.last_checked_at)
                             : c.neverChecked}
                     </div>
-                    {competitor.last_error && (
+                    {competitor.last_error && !competitor.scan && (
                         <div
                             className="flex items-start gap-1.5 text-danger"
                             title={competitor.last_error}
@@ -410,12 +493,24 @@ function CompetitorCard({
                     )}
                 </div>
 
+                {competitor.scan && (
+                    <CompetitorScanProgress scan={competitor.scan} compact />
+                )}
+                <Button variant="outline" size="sm" onClick={onOpen}>
+                    <Eye className="size-4" />
+                    {scanning ? c.scanProgress.follow : c.analysis}
+                </Button>
+
                 <div className="mt-auto flex items-center gap-2 border-t border-border/60 pt-3">
                     <Button
                         size="sm"
                         variant="soft"
                         onClick={onScan}
-                        disabled={scanning}
+                        disabled={
+                            scanning ||
+                            !competitor.is_active ||
+                            !competitor.auto_scan
+                        }
                         className="flex-1"
                     >
                         <RefreshCw
@@ -424,13 +519,14 @@ function CompetitorCard({
                                 scanning && 'animate-spin',
                             )}
                         />
-                        {c.scanNow}
+                        {scanning ? c.scanProgress.running : c.scanNow}
                     </Button>
                     <Button
                         size="icon"
                         variant="ghost"
                         className="size-8"
                         onClick={onEdit}
+                        disabled={scanning}
                         aria-label={c.edit}
                     >
                         <Pencil className="size-4" />
@@ -457,6 +553,7 @@ function CompetitorCard({
                                 variant="ghost"
                                 className="size-8 text-danger hover:text-danger"
                                 aria-label={t.common.delete}
+                                disabled={scanning}
                             >
                                 <Trash2 className="size-4" />
                             </Button>
@@ -667,9 +764,15 @@ function CompetitorDialog({
 function DetailsPanel({
     competitor,
     details,
+    scanning,
+    onScan,
+    errorMessage,
 }: {
     competitor: Competitor;
     details: Details;
+    scanning: boolean;
+    onScan: () => void;
+    errorMessage: string | null;
 }) {
     const { t, money, relative, compact } = useI18n();
     const c = t.market.competitors;
@@ -687,7 +790,56 @@ function DetailsPanel({
                 <SheetDescription>{c.details}</SheetDescription>
             </SheetHeader>
 
+            <div className="space-y-3 px-4">
+                {errorMessage && (
+                    <p role="alert" className="text-sm text-danger">
+                        {errorMessage}
+                    </p>
+                )}
+                {competitor.scan && (
+                    <CompetitorScanProgress
+                        scan={competitor.scan}
+                        compact={competitor.scan.status === 'completed'}
+                    />
+                )}
+                {competitor.last_error && !competitor.scan && (
+                    <p role="alert" className="text-sm text-danger">
+                        {competitor.last_error}
+                    </p>
+                )}
+                <Button
+                    className="w-full"
+                    variant="outline"
+                    onClick={onScan}
+                    disabled={
+                        scanning ||
+                        !competitor.is_active ||
+                        !competitor.auto_scan
+                    }
+                >
+                    <RefreshCw
+                        className={cn('size-4', scanning && 'animate-spin')}
+                    />
+                    {scanning
+                        ? c.scanProgress.running
+                        : competitor.scan?.status === 'failed'
+                          ? c.scanProgress.retry
+                          : c.scanNow}
+                </Button>
+                {details.analysis &&
+                    competitor.scan &&
+                    (competitor.scan.status === 'failed' ||
+                        isScanning(competitor.scan)) &&
+                    Date.parse(details.analysis.crawl.observed_at) <
+                        Date.parse(competitor.scan.created_at) && (
+                        <p className="text-xs text-warning">
+                            {c.scanProgress.previousReport}
+                        </p>
+                    )}
+            </div>
+
             <Tabs
+                key={competitor.scan?.id ?? 'unscanned'}
                 defaultValue={competitor.is_social ? 'posts' : 'analysis'}
                 className="px-4"
             >
@@ -704,10 +856,19 @@ function DetailsPanel({
                 </TabsList>
 
                 <TabsContent value="analysis">
-                    <CompetitorAnalysis
-                        analysis={details.analysis}
-                        products={details.products}
-                    />
+                    {!details.analysis &&
+                    (scanning || competitor.scan?.status === 'failed') ? (
+                        <p className="rounded-xl border p-4 text-sm text-muted-foreground">
+                            {scanning
+                                ? c.scanProgress.reportPending
+                                : c.scanProgress.noReport}
+                        </p>
+                    ) : (
+                        <CompetitorAnalysis
+                            analysis={details.analysis}
+                            products={details.products}
+                        />
+                    )}
                 </TabsContent>
 
                 <TabsContent value="products" className="space-y-2">

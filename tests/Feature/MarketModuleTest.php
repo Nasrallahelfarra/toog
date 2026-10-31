@@ -14,6 +14,7 @@ use App\Models\Store;
 use App\Models\User;
 use App\Notifications\PlatformNotification;
 use App\Services\Catalog\BalanceService;
+use App\Services\Market\CompetitorMonitor;
 use App\Services\Market\PublicWebClient;
 use App\Services\Market\SentimentAnalyzer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -110,8 +111,8 @@ class MarketModuleTest extends TestCase
             'shop.example.com/collections/best' => Http::response('<main><a href="/products/black">Black abaya</a></main>'),
         ]);
 
-        $this->actingAs($owner)->post("/store/competitors/{$competitor->id}/scan")->assertRedirect();
-        $this->actingAs($owner)->post("/store/competitors/{$competitor->id}/scan")->assertRedirect();
+        app(CompetitorMonitor::class)->scan($competitor);
+        app(CompetitorMonitor::class)->scan($competitor);
 
         $tracked = CompetitorProduct::query()->where('competitor_id', $competitor->id)->sole();
         $this->assertSame('350.00', $tracked->price);
@@ -128,7 +129,7 @@ class MarketModuleTest extends TestCase
         [$owner, $store] = $this->ownerWithStore();
         $competitor = Competitor::query()->create(['store_id' => $store->id, 'name' => 'Insta', 'platform' => 'instagram', 'handle' => 'x']);
 
-        $this->actingAs($owner)->post("/store/competitors/{$competitor->id}/scan")->assertRedirect();
+        app(CompetitorMonitor::class)->scan($competitor);
 
         $this->assertNull($competitor->fresh()->last_error);
         $this->assertNull($competitor->fresh()->last_checked_at);

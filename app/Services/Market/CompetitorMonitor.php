@@ -3,6 +3,7 @@
 namespace App\Services\Market;
 
 use App\Models\Competitor;
+use App\Models\CompetitorScan;
 use App\Models\Store;
 use App\Models\SyncRun;
 use App\Services\Market\Fetchers\CompetitorFetcher;
@@ -19,7 +20,7 @@ class CompetitorMonitor
     /** @var list<CompetitorFetcher> */
     private array $fetchers;
 
-    public function __construct(ShopifyFetcher $shopify, UnsupportedFetcher $fallback)
+    public function __construct(ShopifyFetcher $shopify, UnsupportedFetcher $fallback, private readonly CompetitorScanState $scans)
     {
         // Order matters: the first fetcher that supports a competitor wins.
         $this->fetchers = [$shopify, $fallback];
@@ -30,10 +31,15 @@ class CompetitorMonitor
         return ! $this->fetcherFor($competitor) instanceof UnsupportedFetcher;
     }
 
-    public function scan(Competitor $competitor): FetchResult
+    public function scan(Competitor $competitor, ?CompetitorScan $scan = null): FetchResult
     {
+        $scan ??= $this->scans->reserve($competitor);
+        if (! $this->scans->claim($scan)) {
+            return FetchResult::unsupported('scan_in_progress');
+        }
         try {
-            $result = $this->fetcherFor($competitor)->fetch($competitor);
+            $result = $this->fetcherFor($competitor)->fetch($competitor,
+                fn (string $stage, array $metrics = []) => $this->scans->advance($scan, $stage, $metrics));
         } catch (Throwable $e) {
             report($e);
             $result = FetchResult::failed($e->getMessage(), 'exception');
@@ -45,6 +51,8 @@ class CompetitorMonitor
                 'last_error' => $result->status === FetchResult::FAILED ? mb_substr((string) $result->message, 0, 250) : null,
             ]);
         }
+
+        $this->scans->finish($scan, $result);
 
         return $result;
     }

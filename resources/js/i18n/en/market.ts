@@ -127,6 +127,57 @@ export const market: typeof ar = {
         'Monitoring uses publicly available data only, within each platform’s terms and Saudi regulations.',
 
     competitors: {
+        scanProgress: {
+            title: 'Competitor scan progress',
+            starting: 'Submitting scan request…',
+            queued: 'Waiting to start',
+            running: 'Scanning',
+            completed: 'Scan completed',
+            failed: 'Scan could not finish',
+            follow: 'Follow progress',
+            retry: 'Try again',
+            phaseNote:
+                'Percentage reflects completed stages, not remaining time.',
+            pages: '{count} pages read',
+            products: '{count} products found',
+            elapsed: '{seconds} seconds since request',
+            waitingLong:
+                'Processing has not started yet. Server workers may be busy or stopped. You can leave and return to check progress.',
+            reportPending:
+                'The report will appear here automatically when data is available.',
+            noReport:
+                'This scan did not produce a new report. Review the reason above and try again.',
+            previousReport:
+                'The report below is from an earlier scan; the new scan has not completed.',
+            requestFailed:
+                'Could not confirm the scan request. Refresh the page to check its status before trying again.',
+            updateFailed:
+                'Could not refresh progress. We will try again; the scan may still be running on the server.',
+            aiProcessing:
+                'Storefront data is ready; waiting for Gemini analysis.',
+            stages: {
+                rules: 'Checking website access',
+                storefront: 'Reading the storefront',
+                products: 'Collecting products and sources',
+                saving: 'Saving products and prices',
+                analysis: 'Preparing the report and analysis',
+            },
+            errors: {
+                fetch_failed:
+                    'Could not read the store data. Check its URL and review the details below.',
+                unsupported:
+                    'This source needs a separate connection before it can be scanned automatically.',
+                inactive: 'The store or this competitor monitor is inactive.',
+                queue_failed:
+                    'Background processing could not start. The server administrator needs to check job configuration.',
+                queue_timeout:
+                    'Processing did not start in time. Check the server worker, then try again.',
+                timed_out:
+                    'The scan exceeded its time limit. Saved data remains available; you can try again.',
+                job_failed:
+                    'Processing stopped before the scan finished. You can try again.',
+            },
+        },
         title: 'Competitors',
         description:
             'The stores and social accounts طوق follows to learn which design elements work.',

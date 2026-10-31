@@ -237,9 +237,11 @@ export function CompetitorAnalysis({
                     </>
                 ) : (
                     <p className="text-sm leading-relaxed text-muted-foreground">
-                        {ai.status === 'not_configured'
-                            ? c.aiNotConfigured
-                            : c.aiUnavailable}
+                        {ai.status === 'processing'
+                            ? c.scanProgress.aiProcessing
+                            : ai.status === 'not_configured'
+                              ? c.aiNotConfigured
+                              : c.aiUnavailable}
                     </p>
                 )}
             </section>

@@ -3,6 +3,7 @@
 namespace App\Services\Market\Fetchers;
 
 use App\Models\Competitor;
+use Closure;
 
 /**
  * Collects public data for one competitor. One implementation per source;
@@ -13,5 +14,6 @@ interface CompetitorFetcher
 {
     public function supports(Competitor $competitor): bool;
 
-    public function fetch(Competitor $competitor): FetchResult;
+    /** @param Closure(string, array<string, int>): void|null $progress */
+    public function fetch(Competitor $competitor, ?Closure $progress = null): FetchResult;
 }

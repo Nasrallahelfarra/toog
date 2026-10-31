@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -41,6 +42,12 @@ class Competitor extends Model
     public function isSocial(): bool
     {
         return in_array($this->platform, self::SOCIAL_PLATFORMS, true);
+    }
+
+    /** @return HasOne<CompetitorScan, $this> */
+    public function latestScan(): HasOne
+    {
+        return $this->hasOne(CompetitorScan::class)->latestOfMany();
     }
 
     /**

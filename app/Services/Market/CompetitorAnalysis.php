@@ -36,7 +36,9 @@ class CompetitorAnalysis
             'price_max' => $currency && $priced->isNotEmpty() ? (float) $priced->max('price') : null,
             'categories' => $products->groupBy(fn ($p) => $p->category ?: 'Unknown')->map->count()->sortDesc()->all(),
         ];
-        $ai = ['status' => 'not_configured', 'summary' => null, 'insights' => []];
+        $ai = ['status' => $this->ai->isLive() ? 'processing' : 'not_configured', 'summary' => null, 'insights' => []];
+        // Make collected facts available even while Gemini is still responding.
+        $competitor->update(['analysis' => ['crawl' => $crawl, 'facts' => $facts, 'ai' => $ai]]);
         if ($this->ai->isLive()) {
             $sample = $products->sortByDesc(fn ($p) => (int) $p->is_best_seller * 2 + (int) ! empty($p->evidence['promotion']))->take(24)
                 ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name, 'price' => $p->price, 'features' => $p->features,
