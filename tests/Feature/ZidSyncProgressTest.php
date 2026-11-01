@@ -354,4 +354,26 @@ class ZidSyncProgressTest extends TestCase
         $this->state->expire($this->store);
         $this->assertSame('worker_stopped', $run->fresh()->error);
     }
+
+    public function test_zero_affected_rows_does_not_fail_an_identical_heartbeat(): void
+    {
+        $this->freezeTime();
+        $run = $this->state->enqueue($this->store);
+        $run = $this->state->claim($run->id, $this->store);
+        $this->state->progress($run, 'products');
+
+        // SQLite's result-count mode emulates MySQL/PDO returning zero for
+        // an update that matched an active row but did not change its values.
+        DB::statement('PRAGMA count_changes = ON');
+        try {
+            $this->assertSame(0, SyncRun::query()->whereKey($run->id)->update(['updated_at' => now()]));
+            $this->state->progress($run, 'products');
+            $this->assertSame('running', $run->fresh()->status);
+        } finally {
+            DB::statement('PRAGMA count_changes = OFF');
+        }
+        $this->state->fail($run->id, 'job_failed');
+        $this->expectException(RuntimeException::class);
+        $this->state->progress($run, 'products');
+    }
 }
