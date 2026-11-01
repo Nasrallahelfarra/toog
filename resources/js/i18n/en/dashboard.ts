@@ -1,6 +1,25 @@
 import type { dashboard as ar } from '../ar/dashboard';
 
 export const dashboard: typeof ar = {
+    demoCleanup: {
+        title: 'Clean up the demo catalog',
+        description: 'Your catalog includes {count} demo products. Remove them to update catalog metrics using your store products.',
+        button: 'Delete demo products',
+        confirmTitle: 'Delete demo products and their sales?',
+        confirmBody: 'The original demo catalog and its sales will be removed from Toog. Imported Zid products, the connection, evaluations, designs and competitors will be kept.',
+        products: 'Demo products',
+        sales: 'Demo sales records',
+        remaining: '{count} products will remain in your catalog. Performance metrics will update after deletion.',
+        noImports: 'There are no other products in your catalog yet. After cleanup, sync your store products from the integration page.',
+        showProducts: 'Show products to be deleted',
+        confirm: 'Confirm deletion of demo product data',
+        deleting: 'Deleting demo data and updating product metrics…',
+        deletingButton: 'Deleting…',
+        refresh: 'Refresh preview',
+        waitForSync: 'Wait for the sync to finish. This status refreshes automatically.',
+        empty: 'No products match the original demo catalog. Metrics use the remaining products in your store.',
+        done: 'No demo products to delete',
+    },
     title: 'Dashboard',
     greeting: 'Hello, {name}',
     subtitle: 'Product decisions and catalog health for “{store}” today',

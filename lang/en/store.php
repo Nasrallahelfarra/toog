@@ -2,6 +2,15 @@
 
 // Messages for the store dashboard, performance and settings screens.
 return [
+    'demo_cleanup_success' => 'Removed :products demo products and :sales demo sales records, and updated the remaining product metrics.',
+    'demo_cleanup_empty' => 'No matching demo products remain to remove.',
+    'demo_cleanup_errors' => [
+        'busy' => 'A sync or cleanup is queued or running. Wait for completion, then refresh the preview.',
+        'changed' => 'Store data changed since the preview. Refresh and review the counts before confirming again.',
+        'ineligible' => 'Cleanup is available for a demo store after connecting it to Zid. Check the connection and refresh.',
+        'inconsistent' => 'Sales data needs an administrator review before cleanup. Nothing was deleted.',
+        'failed' => 'Cleanup could not be completed and was rolled back. Please try again.',
+    ],
     'zid_not_configured' => 'The Zid app credentials (ZID_CLIENT_ID and ZID_CLIENT_SECRET) are not set on the server.',
     'zid_connected' => 'Your store is connected to Zid. The first sync has started.',
     'zid_failed' => 'Could not complete the Zid connection: :error',

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Store\DashboardController;
+use App\Http\Controllers\Store\DemoCatalogController;
 use App\Http\Controllers\Store\ImportController;
 use App\Http\Controllers\Store\IntegrationController;
 use App\Http\Controllers\Store\PerformanceController;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/', DashboardController::class)->name('dashboard');
+Route::post('catalog/clear-demo', [DemoCatalogController::class, 'destroy'])->name('catalog.clear-demo');
 
 // Module 1 — store data & sales analysis
 Route::get('performance', [PerformanceController::class, 'index'])->name('performance');

@@ -2,6 +2,9 @@
 
 return [
 
+    // Temporary dashboard action; disable both the button and its web endpoint.
+    'demo_catalog_cleanup_enabled' => env('DEMO_CATALOG_CLEANUP_ENABLED', true),
+
     /*
     |--------------------------------------------------------------------------
     | AI provider

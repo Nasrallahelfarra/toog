@@ -12,6 +12,7 @@ use App\Models\Trend;
 use App\Models\User;
 use App\Services\Analytics\StorePerformance;
 use App\Services\Catalog\BalanceService;
+use App\Services\Catalog\DemoCatalogCleanup;
 use App\Services\Zid\ConnectionCheck;
 use App\Services\Zid\ZidClient;
 use App\Support\CurrentStore;
@@ -27,7 +28,7 @@ use Inertia\Response;
  */
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request, CurrentStore $current, StorePerformance $performance, BalanceService $balance): Response
+    public function __invoke(Request $request, CurrentStore $current, StorePerformance $performance, BalanceService $balance, DemoCatalogCleanup $cleanup): Response
     {
         $store = $current->require();
 
@@ -66,6 +67,7 @@ class DashboardController extends Controller
         $revenuePrev = $trend[4]['revenue'] ?? 0;
 
         return Inertia::render('store/dashboard', [
+            'demoCatalog' => fn () => $cleanup->availableInDashboard($store, $request->user()) ? $cleanup->preview($store) : null,
             'kpis' => [
                 'evaluated_this_month' => $thisMonth,
                 'evaluated_delta' => $lastMonth > 0 ? round(($thisMonth - $lastMonth) / $lastMonth * 100, 1) : null,
