@@ -7,7 +7,12 @@ import {
     Sparkles,
     Wand2,
 } from 'lucide-react';
-import { useState } from 'react';
+import { RegenerateDesignDialog } from './regenerate-design-dialog';
+import {
+    focusImprovementResults,
+    ImageGenerationLoading,
+    ReviewImage,
+} from './review-image';
 import type { EvaluationDetail, Improvement, SpecialistReview } from './types';
 import InputError from '@/components/input-error';
 import { SectionCard } from '@/components/mojo/section-card';
@@ -204,10 +209,19 @@ export function ProductReviewPanel({
                 )}
             </SectionCard>
             {!!improvements.length && (
-                <section className="space-y-4" aria-label={c.results}>
+                <section
+                    id="improvement-results"
+                    tabIndex={-1}
+                    className="scroll-mt-24 space-y-4 outline-none"
+                    aria-label={c.results}
+                >
                     <h2 className="text-lg font-semibold">{c.results}</h2>
                     {improvements.map((run) => (
-                        <ImprovementResult key={run.id} run={run} />
+                        <ImprovementResult
+                            key={run.id}
+                            run={run}
+                            canRegenerate={canImprove && !active}
+                        />
                     ))}
                 </section>
             )}
@@ -244,7 +258,10 @@ function Recommendations({
         form.transform((data) => ({ ...data, request_key: key }));
         form.post(`/store/evaluations/${evaluationId}/improvements`, {
             preserveScroll: true,
-            onSuccess: () => form.reset(),
+            onSuccess: () => {
+                form.reset();
+                focusImprovementResults();
+            },
         });
     };
 
@@ -347,6 +364,11 @@ function Recommendations({
                     </span>
                 </div>
             )}
+            {form.processing && (
+                <div className="mt-4">
+                    <ImageGenerationLoading stage="submitting" />
+                </div>
+            )}
             {Object.entries(form.errors).map(([key, message]) => (
                 <InputError key={key} message={message} className="mt-2" />
             ))}
@@ -354,7 +376,13 @@ function Recommendations({
     );
 }
 
-function ImprovementResult({ run }: { run: Improvement }) {
+function ImprovementResult({
+    run,
+    canRegenerate,
+}: {
+    run: Improvement;
+    canRegenerate: boolean;
+}) {
     const { t, locale, date } = useI18n();
     const c = t.productReview;
     const active = !['completed', 'failed'].includes(run.status);
@@ -412,9 +440,32 @@ function ImprovementResult({ run }: { run: Improvement }) {
                 </div>
             )}
             <div className="grid gap-4 sm:grid-cols-2">
-                <ReviewImage src={run.before_url} label={c.before} />
-                <ReviewImage src={run.after_url} label={c.after} />
+                <ReviewImage
+                    src={run.before_url}
+                    label={run.custom_instruction ? c.previous : c.before}
+                />
+                <ReviewImage
+                    src={run.after_url}
+                    label={c.after}
+                    stage={
+                        run.status === 'queued' || run.status === 'generating'
+                            ? run.status
+                            : undefined
+                    }
+                    reviewing={
+                        run.status === 'review_queued' ||
+                        run.status === 'reviewing'
+                    }
+                />
             </div>
+            {run.custom_instruction && (
+                <div className="mt-4 rounded-xl bg-muted/50 p-4 text-sm leading-7">
+                    <h3 className="font-medium">{c.custom.requested}</h3>
+                    <p className="break-words whitespace-pre-wrap text-muted-foreground">
+                        {run.custom_instruction}
+                    </p>
+                </div>
+            )}
             <div className="mt-4 flex flex-wrap gap-2">
                 {run.recommendations.map((r) => (
                     <span
@@ -544,13 +595,14 @@ function ImprovementResult({ run }: { run: Improvement }) {
                                         {c.fullReview}
                                     </Link>
                                 </Button>
-                                <Button variant="ghost" asChild>
-                                    <Link
-                                        href={`/store/evaluations/${run.result_id}#specialist-review`}
-                                    >
-                                        {c.more}
-                                    </Link>
-                                </Button>
+                                {run.after_url && (
+                                    <RegenerateDesignDialog
+                                        run={run}
+                                        disabled={
+                                            !canRegenerate || form.processing
+                                        }
+                                    />
+                                )}
                             </>
                         )}
                         {run.design_id && (
@@ -569,42 +621,6 @@ function ImprovementResult({ run }: { run: Improvement }) {
                 <InputError key={key} message={message} className="mt-2" />
             ))}
         </SectionCard>
-    );
-}
-
-function ReviewImage({ src, label }: { src: string | null; label: string }) {
-    const { t } = useI18n();
-    const [failed, setFailed] = useState(false);
-    return (
-        <figure className="min-w-0 overflow-hidden rounded-xl border">
-            <figcaption className="border-b bg-muted/50 px-4 py-2 text-sm font-medium">
-                {label}
-            </figcaption>
-            <div className="flex aspect-square items-center justify-center bg-muted/20 p-3">
-                {src && !failed ? (
-                    <a
-                        href={src}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex h-full w-full items-center justify-center"
-                        aria-label={label}
-                    >
-                        <img
-                            src={src}
-                            alt={label}
-                            onError={() => setFailed(true)}
-                            className="h-full w-full object-contain"
-                        />
-                    </a>
-                ) : (
-                    <span className="text-sm text-muted-foreground">
-                        {failed
-                            ? t.productReview.failedImage
-                            : t.productReview.noImage}
-                    </span>
-                )}
-            </div>
-        </figure>
     );
 }
 

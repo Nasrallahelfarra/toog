@@ -178,6 +178,8 @@ export type SpecialistReview = {
 };
 export type Improvement = {
     id: number;
+    parent_improvement_id: number | null;
+    custom_instruction: string | null;
     status:
         | 'queued'
         | 'generating'

@@ -57,6 +57,57 @@ class DesignImprovementController extends Controller
         return to_route('store.evaluations.show', $evaluation);
     }
 
+    public function regenerate(Request $request, DesignImprovement $improvement, Ai $ai): RedirectResponse
+    {
+        abort_unless($improvement->store_id === $this->current->id(), 404);
+        $data = $request->validate([
+            'request_key' => 'required|uuid',
+            'custom_instruction' => 'required|string|min:3|max:2000',
+        ]);
+        $this->available($ai);
+        $run = DB::transaction(function () use ($request, $improvement, $data) {
+            Evaluation::query()->whereKey($improvement->evaluation_id)->lockForUpdate()->firstOrFail();
+            $improvement->refresh()->load(['design', 'result']);
+            if ($improvement->status !== 'completed' || $improvement->result?->status !== 'completed' || ! $improvement->design?->image_path) {
+                $this->invalid('انتظر اكتمال توليد النسخة ومراجعتها قبل تعديلها.', 'Wait for this version to finish generating and being reviewed before editing it.');
+            }
+            if (! Storage::disk('public')->exists($improvement->design->image_path)) {
+                $this->invalid('الصورة المولّدة غير متاحة. لا يمكن تعديلها الآن.', 'The generated image is unavailable and cannot be edited right now.');
+            }
+            $existing = DesignImprovement::query()->where('evaluation_id', $improvement->evaluation_id)
+                ->where('request_key', $data['request_key'])->first();
+            if ($existing) {
+                return $existing;
+            }
+            if (DesignImprovement::query()->where('evaluation_id', $improvement->evaluation_id)->whereIn('status', DesignImprovement::ACTIVE)->exists()) {
+                $this->invalid('انتظر اكتمال التعديل الجاري، ثم أرسل تعديلك المخصص.', 'Wait for the active edit to finish, then submit your custom edit.');
+            }
+
+            return DesignImprovement::query()->create([
+                'store_id' => $improvement->store_id, 'evaluation_id' => $improvement->evaluation_id, 'user_id' => $request->user()->id,
+                'request_key' => $data['request_key'], 'status' => 'queued',
+                'parent_improvement_id' => $improvement->id, 'custom_instruction' => $data['custom_instruction'],
+                // The source is chosen server-side: edit this generated version, never the original upload.
+                'source_image_path' => $improvement->design->image_path,
+                'source_snapshot' => $improvement->result->only(['name', 'category', 'price', 'material', 'season', 'description', 'target_audience']),
+                'recommendations' => [[
+                    'id' => 'r1', 'kind' => 'visual', 'priority' => 'high',
+                    'title' => ['ar' => 'تعديل مخصص', 'en' => 'Custom edit'],
+                    'instruction' => ['ar' => $data['custom_instruction'], 'en' => $data['custom_instruction']],
+                    'reason' => ['ar' => 'تعديل طلبه صاحب المتجر على النسخة المولّدة.', 'en' => 'An edit requested by the store owner on the generated version.'],
+                    'effect' => ['ar' => 'تُراجع النتيجة بعد التوليد.', 'en' => 'The result will be reviewed after generation.'],
+                    'source_ids' => [],
+                ]],
+            ]);
+        });
+        if ($run->wasRecentlyCreated) {
+            $this->dispatch($run);
+            Activity::log('design.improvement_requested', $run, ['evaluation_id' => $improvement->evaluation_id, 'parent_improvement_id' => $improvement->id]);
+        }
+
+        return to_route('store.evaluations.show', $improvement->evaluation_id);
+    }
+
     public function retry(DesignImprovement $improvement, Ai $ai): RedirectResponse
     {
         abort_unless($improvement->store_id === $this->current->id(), 404);

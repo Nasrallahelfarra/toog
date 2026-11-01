@@ -27,7 +27,8 @@ class ImprovementService
         $aspect = collect(['1:1' => 1, '4:5' => 0.8, '3:4' => 0.75, '9:16' => 0.5625, '16:9' => 16 / 9])
             ->sortBy(fn ($value) => abs($value - $ratio))->keys()->first();
         $prompt = <<<'TXT'
-        Edit the supplied ORIGINAL product image. Execute ONLY the selected visual
+        Edit the supplied SOURCE product image, which may already be an edited version.
+        Use this image as the starting point; do not undo previous edits. Execute ONLY the selected visual
         changes in the JSON data below. Preserve all unselected details, silhouette,
         construction, seams, proportions, brand marks and text. Do not invent logos,
         remove branding, or change background/framing unless explicitly selected.
@@ -109,7 +110,7 @@ class ImprovementService
             if ($locked->result_evaluation_id) {
                 return $locked->result;
             }
-            $parent = $request->evaluation;
+            $parent = $request->parentImprovement?->result ?? $request->evaluation;
             $rootId = $parent->root_id ?? $parent->id;
             Evaluation::query()->whereKey($rootId)->lockForUpdate()->firstOrFail();
             $version = (int) Evaluation::query()->where(fn ($q) => $q->where('root_id', $rootId)->orWhere('id', $rootId))->max('version') + 1;

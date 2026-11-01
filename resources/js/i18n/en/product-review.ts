@@ -67,9 +67,32 @@ export const productReview: typeof ar = {
     waiting:
         'You can leave and return; progress is saved and updates automatically. If waiting persists, check that background workers are running.',
     before: 'Original design',
+    previous: 'Previous version',
     after: 'Improved version',
     noImage: 'Image not available yet',
     failedImage: 'Unable to load image',
+    imageLoading: {
+        submitting: 'Sending your edit request…',
+        queued: 'Your request is ready, waiting to generate',
+        generating: 'Generating your new image…',
+        hint: 'Your image will appear here automatically when ready. The previous version stays saved.',
+        fetching: 'Loading image…',
+        reviewing: 'Image ready. Checking the edits and reviewing the result.',
+    },
+    custom: {
+        button: 'Regenerate with a custom edit',
+        title: 'Make this version your own',
+        description:
+            'Describe what you want changed in the generated image below. This version will be the starting point.',
+        source: 'Image to edit',
+        label: 'What would you like to change?',
+        placeholder:
+            'For example: change the sleeves to beige and keep the rest of the design unchanged.',
+        hint: 'The result is saved and reviewed as a new version. Previous versions remain available.',
+        submit: 'Generate edited version',
+        cancel: 'Cancel',
+        requested: 'Your requested edit',
+    },
     passed: 'Selected improvements verified',
     attention: 'Please review the findings',
     unverified:

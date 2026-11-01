@@ -8,6 +8,7 @@ use App\Jobs\ReviewImprovedDesign;
 use App\Models\DesignImprovement;
 use App\Models\Evaluation;
 use App\Models\User;
+use App\Services\Ai\Ai;
 use App\Services\Evaluation\EvaluationService;
 use App\Services\Evaluation\ProductReview;
 use App\Support\CurrentStore;
@@ -165,6 +166,96 @@ class ProductReviewWorkflowTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_custom_regeneration_edits_the_generated_image_and_preserves_the_approved_version(): void
+    {
+        $this->fakeAi();
+        // Distinct reference bytes prove that regeneration does not revert to the upload.
+        $original = imagecreatetruecolor(30, 40);
+        imagefill($original, 0, 0, imagecolorallocate($original, 255, 255, 255));
+        ob_start();
+        imagepng($original);
+        $originalBytes = ob_get_clean();
+        imagedestroy($original);
+        Storage::disk('public')->put('original.png', $originalBytes);
+        $evaluation = $this->evaluation();
+        $first = $this->enqueue($evaluation);
+        app()->call([new GenerateImprovedDesign($first->id), 'handle']);
+        app()->call([new ReviewImprovedDesign($first->id), 'handle']);
+        $first->refresh();
+        $this->post('/store/improvements/'.$first->id.'/approve')->assertSessionHasNoErrors();
+        $approvedAt = $first->fresh()->approved_at;
+        $sourcePath = $first->design->image_path;
+        $instruction = 'Change only the sleeves to beige';
+        $payload = ['request_key' => (string) Str::uuid(), 'custom_instruction' => $instruction,
+            'source_image_path' => 'original.png', 'evaluation_id' => 99999]; // Untrusted overrides must be ignored.
+        foreach (range(1, 2) as $i) {
+            $this->post('/store/improvements/'.$first->id.'/regenerate', $payload)->assertSessionHasNoErrors()->assertRedirect('/store/evaluations/'.$evaluation->id);
+        }
+        // A second browser tab with another request key must not launch a concurrent edit.
+        $this->post('/store/improvements/'.$first->id.'/regenerate', [...$payload, 'request_key' => (string) Str::uuid()])->assertSessionHasErrors('improvement');
+        Queue::assertPushed(GenerateImprovedDesign::class, 2);
+        $this->assertDatabaseCount('design_improvements', 2);
+        $second = DesignImprovement::query()->where('parent_improvement_id', $first->id)->firstOrFail();
+        $this->assertSame($sourcePath, $second->source_image_path);
+        $this->assertSame($evaluation->id, $second->evaluation_id);
+        $this->assertSame($instruction, $second->custom_instruction);
+        $this->assertCount(1, $second->recommendations);
+        $this->fakeAi(); // Reset recorded requests to inspect this regeneration only.
+        app()->call([new GenerateImprovedDesign($second->id), 'handle']);
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'test-image:')
+            && $request['contents'][0]['parts'][0]['inlineData']['data'] === base64_encode($this->png)
+            && str_contains($request['contents'][0]['parts'][1]['text'], $instruction)
+            && ! str_contains($request['contents'][0]['parts'][1]['text'], 'Reduce the pattern density'));
+        app()->call([new ReviewImprovedDesign($second->id), 'handle']);
+        $second->refresh();
+        $this->assertSame('completed', $second->status);
+        $this->assertSame(3, $second->result->version);
+        $this->assertSame($first->result_evaluation_id, $second->result->parent_id);
+        $this->assertSame($evaluation->id, $second->result->root_id);
+        $this->assertNotSame($sourcePath, $second->design->image_path);
+        $this->assertSame($this->png, Storage::disk('public')->get($sourcePath));
+        $this->assertSame($originalBytes, Storage::disk('public')->get('original.png'));
+        $this->assertTrue($approvedAt->equalTo($first->fresh()->approved_at));
+        $this->assertSame('approved', $first->fresh()->design->status);
+        $this->assertNull($second->approved_at);
+        $this->assertDatabaseCount('designs', 2);
+        $this->get('/store/evaluations/'.$evaluation->id)->assertInertia(fn (Assert $page) => $page
+            ->has('improvements', 2)
+            ->where('improvements.0.custom_instruction', $instruction)
+            ->where('improvements.0.parent_improvement_id', $first->id)
+            ->where('improvements.0.before_url', Storage::disk('public')->url($sourcePath)));
+        // Replaying a successful request does not regenerate again after completion.
+        $this->post('/store/improvements/'.$first->id.'/regenerate', $payload)->assertSessionHasNoErrors();
+        Queue::assertPushed(GenerateImprovedDesign::class, 2);
+    }
+
+    public function test_custom_edits_require_valid_instructions_and_a_finished_available_image(): void
+    {
+        $this->fakeAi();
+        $run = $this->enqueue($this->evaluation());
+        $url = '/store/improvements/'.$run->id.'/regenerate';
+        $payload = ['request_key' => (string) Str::uuid(), 'custom_instruction' => 'Make the sleeves beige'];
+        foreach (['', '   ', 'ab', str_repeat('x', 2001)] as $invalid) {
+            $this->post($url, [...$payload, 'custom_instruction' => $invalid])->assertSessionHasErrors('custom_instruction');
+        }
+        $this->post($url, $payload)->assertSessionHasErrors('improvement');
+        app()->call([new GenerateImprovedDesign($run->id), 'handle']);
+        $this->post($url, $payload)->assertSessionHasErrors('improvement');
+        app()->call([new ReviewImprovedDesign($run->id), 'handle']);
+        config(['mojo.ai.gemini.api_key' => null]);
+        app()->forgetInstance(Ai::class);
+        $this->post($url, $payload)->assertSessionHasErrors('improvement');
+        config(['mojo.ai.gemini.api_key' => 'test-key', 'queue.default' => 'sync']);
+        app()->forgetInstance(Ai::class);
+        $this->post($url, $payload)->assertSessionHasErrors('improvement');
+        config(['queue.default' => 'database']);
+        $run->refresh();
+        Storage::disk('public')->delete($run->design->image_path);
+        $this->post($url, $payload)->assertSessionHasErrors('improvement');
+        $this->assertDatabaseCount('design_improvements', 1);
+        Queue::assertPushed(GenerateImprovedDesign::class, 1);
+    }
+
     public function test_cross_store_access_is_rejected_for_every_improvement_action(): void
     {
         $evaluation = $this->evaluation();
@@ -179,6 +270,7 @@ class ProductReviewWorkflowTest extends TestCase
         $this->post('/store/evaluations/'.$evaluation->id.'/improvements', $this->payload($evaluation))->assertNotFound();
         $this->post('/store/improvements/'.$run->id.'/retry')->assertNotFound();
         $this->post('/store/improvements/'.$run->id.'/approve')->assertNotFound();
+        $this->post('/store/improvements/'.$run->id.'/regenerate', ['request_key' => (string) Str::uuid(), 'custom_instruction' => 'Change the sleeves'])->assertNotFound();
         $this->get('/store/evaluations/'.$evaluation->id)->assertNotFound();
     }
 

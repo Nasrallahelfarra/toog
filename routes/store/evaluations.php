@@ -20,6 +20,7 @@ Route::post('evaluations/{evaluation}/decide', [EvaluationController::class, 'de
 Route::post('evaluations/{evaluation}/retry', [EvaluationController::class, 'retry'])->name('evaluations.retry');
 Route::post('evaluations/{evaluation}/improvements', [DesignImprovementController::class, 'store'])->name('improvements.store');
 Route::post('improvements/{improvement}/retry', [DesignImprovementController::class, 'retry'])->name('improvements.retry');
+Route::post('improvements/{improvement}/regenerate', [DesignImprovementController::class, 'regenerate'])->name('improvements.regenerate');
 Route::post('improvements/{improvement}/approve', [DesignImprovementController::class, 'approve'])->name('improvements.approve');
 Route::delete('evaluations/{evaluation}', [EvaluationController::class, 'destroy'])->name('evaluations.destroy');
 

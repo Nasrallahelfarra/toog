@@ -182,8 +182,8 @@ class EvaluationController extends Controller
             ->whereIn('status', DesignImprovement::ACTIVE)->where('updated_at', '<', now()->subMinutes(15))
             ->update(['status' => 'failed', 'error' => 'timed_out']);
         $improvements = DesignImprovement::query()->where('evaluation_id', $evaluation->id)
-            ->with(['design', 'result'])->latest()->take(10)->get()->map(fn ($r) => [
-                ...$r->only(['id', 'status', 'recommendations', 'verification', 'error', 'approved_at', 'created_at']),
+            ->with(['design', 'result'])->latest('id')->take(10)->get()->map(fn ($r) => [
+                ...$r->only(['id', 'status', 'recommendations', 'verification', 'error', 'approved_at', 'created_at', 'parent_improvement_id', 'custom_instruction']),
                 'before_url' => $this->imageUrl($r->source_image_path),
                 'after_url' => $r->design?->image_url,
                 'design_id' => $r->design_id,
