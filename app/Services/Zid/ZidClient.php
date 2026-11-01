@@ -4,8 +4,10 @@ namespace App\Services\Zid;
 
 use App\Models\Store;
 use Generator;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -164,6 +166,22 @@ class ZidClient
         yield from $this->paginate(self::PRODUCTS_PATH, ['page_size' => self::PER_PAGE], ['results', 'products', 'data'], $onPage);
     }
 
+    /** @return array{items: list<array<string, mixed>>, has_next: bool, fingerprint: string} */
+    public function productPage(int $page): array
+    {
+        return $this->page(self::PRODUCTS_PATH, ['page_size' => self::PER_PAGE], ['results', 'products', 'data'], $page);
+    }
+
+    /** @return array{items: list<array<string, mixed>>, has_next: bool, fingerprint: string} */
+    public function orderPage(\DateTimeInterface $since, int $page): array
+    {
+        return $this->page(self::ORDERS_PATH, [
+            'per_page' => self::PER_PAGE, 'payload_type' => 'default',
+            'date_attribute' => 'created_at', 'date_from' => $since->format('Y-m-d\TH:i:s.vO'),
+            'order_by' => 'created_at', 'sort_by' => 'asc',
+        ], ['orders', 'results', 'data'], $page);
+    }
+
     /**
      * Orders created since a date, page by page.
      *
@@ -194,48 +212,83 @@ class ZidClient
         $read = 0;
         $seenPages = [];
         for ($page = 1; $page <= self::MAX_PAGES; $page++) {
-            try {
-                $json = $this->request()->get($path, [...$query, 'page' => $page])->throw()->json() ?? [];
-            } catch (RequestException $e) {
-                throw new RuntimeException("Zid request to {$path} failed (HTTP ".$e->response->status().').', previous: $e);
-            }
-
-            $items = null;
-            foreach ($keys as $key) {
-                if (isset($json[$key]) && is_array($json[$key]) && array_is_list($json[$key])) {
-                    $items = $json[$key];
-                    break;
-                }
-            }
-
-            if ($items === null) {
-                throw new RuntimeException("Zid returned an invalid list for {$path}.");
-            }
-            $fingerprint = hash('sha256', json_encode(array_map(fn ($item) => $item['id'] ?? $item, $items), JSON_THROW_ON_ERROR));
+            $result = $this->page($path, $query, $keys, $page);
+            $items = $result['items'];
+            $fingerprint = $result['fingerprint'];
             if ($items !== [] && isset($seenPages[$fingerprint])) {
                 throw new RuntimeException("Zid repeated a page for {$path}; import stopped to avoid duplicate totals.");
             }
             $seenPages[$fingerprint] = true;
 
             foreach ($items as $item) {
-                if (is_array($item)) {
-                    yield $item;
-                    $read++;
-                }
+                yield $item;
+                $read++;
             }
             $onPage && $onPage($page, $read);
 
-            $last = $json['last_page'] ?? $json['pagination']['last_page'] ?? null;
-            $hasNext = $last !== null ? $page < (int) $last
-                : (array_key_exists('next', $json) ? filled($json['next']) : count($items) >= self::PER_PAGE);
-            if (! $hasNext) {
+            if (! $result['has_next']) {
                 return;
-            }
-            if ($items === []) {
-                throw new RuntimeException("Zid returned an empty page with more pages for {$path}.");
             }
         }
         throw new RuntimeException('Zid import exceeded the page limit; no partial catalog was saved.');
+    }
+
+    /**
+     * @param  array<string, mixed>  $query
+     * @param  list<string>  $keys
+     * @return array{items: list<array<string, mixed>>, has_next: bool, fingerprint: string}
+     */
+    private function page(string $path, array $query, array $keys, int $page): array
+    {
+        if ($page < 1 || $page > 10000) {
+            throw new RuntimeException('Zid import exceeded the page limit.');
+        }
+        try {
+            $response = $this->request()->retry(2, 1000, fn ($e) => $e instanceof ConnectionException
+                || ($e instanceof RequestException && $e->response->serverError()), throw: false)
+                ->get($path, [...$query, 'page' => $page]);
+            if ($response->status() === 429) {
+                $header = $response->header('Retry-After');
+                $delay = is_numeric($header) ? (int) $header : 60;
+                if ($header !== '' && ! is_numeric($header)) {
+                    try {
+                        $delay = (int) now()->diffInSeconds(Carbon::parse($header));
+                    } catch (\Throwable) {
+                        $delay = 60;
+                    }
+                }
+                throw new ZidRateLimited(max(1, $delay));
+            }
+            $json = $response->throw()->json() ?? [];
+        } catch (RequestException $e) {
+            throw new RuntimeException("Zid request to {$path} failed (HTTP ".$e->response->status().').', previous: $e);
+        }
+        $items = null;
+        foreach ($keys as $key) {
+            if (isset($json[$key]) && is_array($json[$key]) && array_is_list($json[$key])) {
+                $items = $json[$key];
+                break;
+            }
+        }
+        if ($items === null) {
+            throw new RuntimeException("Zid returned an invalid list for {$path}.");
+        }
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                throw new RuntimeException("Zid returned an invalid item for {$path}.");
+            }
+        }
+        $last = $json['last_page'] ?? $json['pagination']['last_page'] ?? null;
+        $hasNext = $last !== null ? $page < (int) $last
+            : (array_key_exists('next', $json) ? filled($json['next']) : count($items) >= self::PER_PAGE);
+        if ($items === [] && $hasNext) {
+            throw new RuntimeException("Zid returned an empty page with more pages for {$path}.");
+        }
+
+        return [
+            'items' => $items, 'has_next' => $hasNext,
+            'fingerprint' => hash('sha256', json_encode(array_map(fn ($item) => $item['id'] ?? $item, $items), JSON_THROW_ON_ERROR)),
+        ];
     }
 
     private function request(bool $includeStoreId = true): PendingRequest

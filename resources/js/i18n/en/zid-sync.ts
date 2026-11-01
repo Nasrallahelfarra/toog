@@ -12,6 +12,7 @@ export const zidSync: typeof ar = {
         completed: 'Import complete',
         failed: 'Import stopped',
         running: 'Importing',
+        waiting: 'Waiting for Zid',
     },
     products: 'Products read',
     orders: 'Orders read',
@@ -22,6 +23,8 @@ export const zidSync: typeof ar = {
     seconds: '{n} seconds',
     updated: 'Last recorded progress',
     queuedAt: 'Requested at',
+    retrying:
+        'Zid requested a temporary pause. Import will resume automatically from the last saved page. Next attempt: {time}.',
     reading:
         'These counts reflect data read. Results are saved after reading and validation finish. Orders cover the last 12 months.',
     saved: 'Results were saved and product analysis updated. Analyzed orders may differ from orders read because canceled or invalid orders are excluded.',
@@ -45,5 +48,7 @@ export const zidSync: typeof ar = {
             'Reading or saving failed. Previous data was preserved. Check Zid product/order permissions and the failed job log, then retry.',
         job_failed:
             'The import job stopped. Check the failed job log, then sync again.',
+        rate_limited:
+            'Zid continued limiting requests after several waits. Please sync again later.',
     },
 };

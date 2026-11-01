@@ -58,7 +58,17 @@ class ZidSyncProgressTest extends TestCase
 
     private function perform(SyncRun $run): void
     {
-        $this->app->call([new SyncStoreData($this->store, runId: $run->id), 'handle']);
+        $job = new SyncStoreData($this->store, runId: $run->id);
+        for ($step = 0; $step < 20; $step++) {
+            $this->app->call([$job, 'handle']);
+            if ($job->chained === []) {
+                return;
+            }
+            $next = unserialize(array_shift($job->chained));
+            $next->chained = $job->chained;
+            $job = $next;
+        }
+        $this->fail('The import did not terminate.');
     }
 
     public function test_requests_reserve_one_visible_queued_run_before_dispatch(): void
@@ -251,5 +261,97 @@ class ZidSyncProgressTest extends TestCase
         $this->assertSame([], $legacy->chained);
         $this->assertDatabaseCount('sync_runs', 1);
         Http::assertNothingSent();
+    }
+
+    public function test_batches_checkpoint_and_continue_in_a_fresh_job_without_rereading_pages(): void
+    {
+        $run = $this->state->enqueue($this->store);
+        $pages = [];
+        Http::fake(function ($request) use (&$pages) {
+            if (str_contains($request->url(), 'products/')) {
+                $page = (int) $request['page'];
+                $pages[] = $page;
+
+                return Http::response(['results' => $this->products(1, $page), 'next' => $page < 3 ? 'more' : null]);
+            }
+
+            return Http::response(['orders' => []]);
+        });
+        $first = new SyncStoreData($this->store, runId: $run->id);
+        $first->chain([new CheckZidConnection($this->store->id)]);
+        $this->app->call([$first, 'handle']);
+        $this->assertSame([1, 2], $pages);
+        $this->assertDatabaseCount('zid_sync_pages', 2);
+        $this->assertDatabaseCount('products', 0);
+        $this->assertSame(3, $run->fresh()->stats['next_page']);
+        $next = unserialize($first->chained[0]);
+        $first->dispatchNextJobInChain();
+        Bus::assertDispatched(SyncStoreData::class, fn ($job) => $job->step === 1 && $job->delay === 3 && count($job->chained) === 1);
+
+        // A late failure from the previous payload cannot fail the new step.
+        $first->failed(new RuntimeException('Late delivery'));
+        $this->assertSame('running', $run->fresh()->status);
+        $duplicate = new SyncStoreData($this->store, runId: $run->id);
+        $this->app->call([$duplicate, 'handle']);
+        $this->assertSame([1, 2], $pages);
+
+        $this->app->call([$next, 'handle']);
+        $this->assertSame([1, 2, 3], $pages);
+        $this->assertSame('saving', $run->fresh()->stats['cursor_phase']);
+        $this->assertDatabaseCount('products', 0);
+        $save = unserialize($next->chained[0]);
+        $this->app->call([$save, 'handle']);
+        $this->assertSame('completed', $run->fresh()->status);
+        $this->assertDatabaseCount('products', 3);
+        $this->assertDatabaseCount('zid_sync_pages', 0);
+    }
+
+    public function test_429_waits_retry_after_and_resumes_the_same_page_without_losing_progress(): void
+    {
+        $run = $this->state->enqueue($this->store);
+        $secondPageCalls = 0;
+        $pages = [];
+        Http::fake(function ($request) use (&$secondPageCalls, &$pages) {
+            if (! str_contains($request->url(), 'products/')) {
+                return Http::response(['orders' => [$this->order()]]);
+            }
+            $page = (int) $request['page'];
+            $pages[] = $page;
+            if ($page === 2 && ++$secondPageCalls === 1) {
+                return Http::response([], 429, ['Retry-After' => '37']);
+            }
+
+            return Http::response(['results' => $this->products(1, $page - 1), 'next' => $page === 1 ? 'more' : null]);
+        });
+        $first = new SyncStoreData($this->store, runId: $run->id);
+        $this->app->call([$first, 'handle']);
+        $this->assertSame([1, 2], $pages, '429 must not trigger an immediate HTTP retry.');
+        $this->assertSame('waiting', $run->fresh()->stats['phase']);
+        $this->assertSame(1, $run->fresh()->stats['products_read']);
+        $this->assertSame(2, $run->fresh()->stats['next_page']);
+        $this->assertDatabaseCount('zid_sync_pages', 1);
+        $next = unserialize($first->chained[0]);
+        $this->assertSame(37, $next->delay);
+        $this->travel(37)->seconds();
+        $this->app->call([$next, 'handle']);
+        $save = unserialize($next->chained[0]);
+        $this->app->call([$save, 'handle']);
+        $this->assertSame([1, 2, 2], $pages);
+        $this->assertSame('completed', $run->fresh()->status);
+        $this->assertDatabaseCount('products', 2);
+        $this->assertSame(1, $run->fresh()->stats['orders']);
+    }
+
+    public function test_a_long_import_stays_active_while_batches_keep_progressing(): void
+    {
+        $run = $this->state->enqueue($this->store);
+        $run = $this->state->claim($run->id, $this->store);
+        $this->travel(20)->minutes();
+        $this->state->progress($run, 'orders', ['orders_read' => 3000]);
+        $this->state->expire($this->store);
+        $this->assertSame('running', $run->fresh()->status);
+        $this->travel(12)->minutes();
+        $this->state->expire($this->store);
+        $this->assertSame('worker_stopped', $run->fresh()->error);
     }
 }

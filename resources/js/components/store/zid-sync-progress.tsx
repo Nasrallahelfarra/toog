@@ -28,6 +28,7 @@ export type ZidSyncProgressData = {
     started_at: string | null;
     updated_at: string | null;
     finished_at: string | null;
+    retry_at: string | null;
 };
 
 export const syncIsActive = (sync: ZidSyncProgressData | null) =>
@@ -84,6 +85,7 @@ export function ZidSyncProgress({
     );
     const stale =
         active &&
+        phase !== 'waiting' &&
         sync.updated_at &&
         now - Date.parse(sync.updated_at) > 120_000;
     const Icon = completed
@@ -204,6 +206,14 @@ export function ZidSyncProgress({
                 <p className="text-xs leading-relaxed text-muted-foreground">
                     {completed ? s.saved : s.reading}
                 </p>
+                {active && phase === 'waiting' && sync.retry_at && (
+                    <p
+                        role="status"
+                        className="rounded-xl bg-info-soft p-3 text-sm leading-relaxed text-info"
+                    >
+                        {tr(s.retrying, { time: dateTime(sync.retry_at) })}
+                    </p>
+                )}
                 {(failed ||
                     networkError ||
                     sync.status === 'queued' ||

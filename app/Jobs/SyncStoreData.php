@@ -10,6 +10,8 @@ use App\Notifications\PlatformNotification;
 use App\Services\Analytics\PerformanceClassifier;
 use App\Services\Zid\ZidClient;
 use App\Services\Zid\ZidMapper;
+use App\Services\Zid\ZidRateLimited;
+use App\Services\Zid\ZidSyncStaging;
 use App\Services\Zid\ZidSyncState;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -38,11 +40,14 @@ class SyncStoreData implements ShouldQueue
 
     public ?int $runId = null;
 
+    public int $step = 0;
+
     // The run ID is serialized before dispatch, so failed() can find it even
     // though Laravel invokes that hook on a fresh job instance.
-    public function __construct(public Store $store, public ?int $userId = null, ?int $runId = null)
+    public function __construct(public Store $store, public ?int $userId = null, ?int $runId = null, int $step = 0)
     {
         $this->runId = $runId;
+        $this->step = $step;
     }
 
     public function uniqueId(): string
@@ -68,7 +73,7 @@ class SyncStoreData implements ShouldQueue
             }
             $this->runId = $reserved->id;
         }
-        $run = $state->claim($this->runId, $this->store);
+        $run = $state->claim($this->runId, $this->store, $this->step);
         if (! $run) {
             $this->chain([]);
 
@@ -80,65 +85,55 @@ class SyncStoreData implements ShouldQueue
             $state->fail($run->id, 'catalog_busy');
             throw new RuntimeException('The store catalog is being updated by another task.');
         }
-        $products = $orders = null;
+        $staging = app(ZidSyncStaging::class);
 
         try {
             $this->store->refresh();
             $this->assertIdentity($run, $this->store);
-            $state->progress($run, 'connecting');
-            $client = new ZidClient($this->store);
-            $client->refreshIfNeeded();
-            // Keep normalized rows in private temporary streams. Fetching outside
-            // the transaction makes page progress visible and avoids holding
-            // catalog locks while waiting on the remote API. No customer PII.
-            $products = tmpfile();
-            $orders = tmpfile();
-            if ($products === false || $orders === false) {
-                throw new RuntimeException('Could not stage the Zid import.');
-            }
-            $state->progress($run, 'products');
-            foreach ($client->products(function (int $page, int $count) use ($state, $run): void {
-                $state->progress($run, 'products', ['products_read' => $count, 'product_pages' => $page]);
-            }) as $payload) {
-                if ($row = $mapper->product($payload)) {
-                    $this->stage($products, $row);
+            if (($run->stats['cursor_phase'] ?? 'products') !== 'saving') {
+                if ($this->step === 0) {
+                    $state->progress($run, 'connecting');
                 }
-            }
-            $state->progress($run, 'orders');
-            foreach ($client->orders(now()->startOfMonth()->subMonths(11), function (int $page, int $count) use ($state, $run): void {
-                $state->progress($run, 'orders', ['orders_read' => $count, 'order_pages' => $page]);
-            }) as $payload) {
-                if ($row = $mapper->order($payload)) {
-                    $this->stage($orders, $row);
-                }
+                $client = new ZidClient($this->store);
+                $client->refreshIfNeeded();
+                $this->fetchBatch($run, $client, $mapper, $state, $staging);
+                $this->continueImport($run, $state, $run->stats['cursor_phase'], 3);
+
+                return;
             }
 
             $state->progress($run, 'saving');
-            $stats = DB::transaction(function () use ($products, $orders, $classifier, $run): array {
+            $stats = DB::transaction(function () use ($staging, $classifier, $run): array {
                 $store = Store::query()->lockForUpdate()->findOrFail($this->store->id);
                 $this->assertIdentity($run, $store);
                 if ($run->fresh()?->status !== 'running') {
                     throw new RuntimeException('The Zid import is no longer active.');
                 }
-                $stats = $this->import($products, $orders);
+                $stats = $this->import($staging->rows($run->id, 'products'), $staging->rows($run->id, 'orders'));
                 $classifier->classify($store);
                 $store->forceFill(['last_synced_at' => now(), 'connection_status' => 'connected'])->save();
                 $run->update([
                     'status' => 'completed', 'finished_at' => now(),
                     'stats' => [...$run->stats, ...$stats, 'phase' => 'completed', 'heartbeat_at' => now()->toIso8601String()],
                 ]);
+                $staging->clear($run->id);
 
                 return $stats;
             });
+        } catch (ZidRateLimited $e) {
+            $retries = ($run->stats['rate_retries'] ?? 0) + 1;
+            if ($retries > 10) {
+                $state->fail($run->id, 'rate_limited');
+                throw $e;
+            }
+            $state->progress($run, 'waiting', ['rate_retries' => $retries, 'retry_at' => now()->addSeconds($e->retryAfter)->toIso8601String()]);
+            $this->continueImport($run, $state, 'waiting', $e->retryAfter);
+
+            return;
         } catch (Throwable $e) {
             $state->fail($run->id, 'import_failed');
             throw $e; // Record a failed queue job and stop the post-sync chain.
         } finally {
-            foreach ([$products, $orders] as $stream) {
-                if (is_resource($stream)) {
-                    fclose($stream);
-                }
-            }
             $lock->release();
         }
 
@@ -164,7 +159,7 @@ class SyncStoreData implements ShouldQueue
                 $exception instanceof TimeoutExceededException => 'timed_out',
                 $exception instanceof MaxAttemptsExceededException => 'worker_stopped',
                 default => 'job_failed',
-            });
+            }, $this->step);
         }
     }
 
@@ -175,44 +170,66 @@ class SyncStoreData implements ShouldQueue
         }
     }
 
-    /**
-     * @param  resource  $stream
-     * @param  array<string, mixed>  $row
-     */
-    private function stage($stream, array $row): void
+    private function continueImport(SyncRun $run, ZidSyncState $state, string $phase, int $delay): void
     {
-        $line = json_encode($row, JSON_THROW_ON_ERROR)."\n";
-        if (fwrite($stream, $line) !== strlen($line)) {
-            throw new RuntimeException('Could not write the staged Zid import.');
+        $state->progress($run, $phase, ['step' => $this->step + 1, 'step_claimed' => false]);
+        // Carry the optional connection check behind every continuation.
+        // Space the batches below Zid's per-store request limit; a 429 uses
+        // the exact server-provided delay instead of retrying immediately.
+        $next = new self($this->store, $this->userId, $run->id, $this->step + 1);
+        $this->prependToChain($next->delay($delay));
+    }
+
+    private function fetchBatch(SyncRun $run, ZidClient $client, ZidMapper $mapper, ZidSyncState $state, ZidSyncStaging $staging): void
+    {
+        // Two pages per job bound API wait time, regardless of catalog size.
+        // Committed normalized pages survive handoff to another worker.
+        for ($batch = 0; $batch < 2; $batch++) {
+            $phase = $run->stats['cursor_phase'] ?? 'products';
+            if ($phase === 'saving') {
+                return;
+            }
+            $page = (int) ($run->stats['next_page'] ?? 1);
+            $state->progress($run, $phase);
+            $result = $phase === 'products' ? $client->productPage($page)
+                : $client->orderPage(Carbon::parse($run->stats['orders_since'] ?? now()->startOfMonth()->subMonths(11)), $page);
+            $rows = [];
+            foreach ($result['items'] as $payload) {
+                $row = $phase === 'products' ? $mapper->product($payload) : $mapper->order($payload);
+                if ($row !== null) {
+                    $rows[] = $row;
+                }
+            }
+
+            DB::transaction(function () use ($run, $phase, $page, $result, $rows, $state, $staging): void {
+                $locked = SyncRun::query()->lockForUpdate()->findOrFail($run->id);
+                if ($locked->status !== 'running' || ($locked->stats['step'] ?? 0) !== $this->step) {
+                    throw new RuntimeException('The Zid import is no longer active.');
+                }
+                $staging->save($run->id, $phase, $page, $result['fingerprint'], $rows);
+                $nextPhase = $result['has_next'] ? $phase : ($phase === 'products' ? 'orders' : 'saving');
+                $countKey = $phase === 'products' ? 'products_read' : 'orders_read';
+                $pageKey = $phase === 'products' ? 'product_pages' : 'order_pages';
+                $state->progress($run, $nextPhase, [
+                    $countKey => ($run->stats[$countKey] ?? 0) + count($result['items']), $pageKey => $page,
+                    'cursor_phase' => $nextPhase, 'next_page' => $result['has_next'] ? $page + 1 : 1,
+                    'rate_retries' => 0, 'retry_at' => null,
+                ]);
+            });
         }
     }
 
     /**
-     * @param  resource  $stream
-     * @return \Generator<int, array<string, mixed>>
-     */
-    private function rows($stream): \Generator
-    {
-        rewind($stream);
-        while (($line = fgets($stream)) !== false) {
-            yield json_decode($line, true, flags: JSON_THROW_ON_ERROR);
-        }
-        if (! feof($stream)) {
-            throw new RuntimeException('Could not read the staged Zid import.');
-        }
-    }
-
-    /**
-     * @param  resource  $products
-     * @param  resource  $orderRows
+     * @param  iterable<array<string, mixed>>  $products
+     * @param  iterable<array<string, mixed>>  $orderRows
      * @return array{products: int, orders: int, sales_rows: int, returns: int}
      */
-    private function import($products, $orderRows): array
+    private function import(iterable $products, iterable $orderRows): array
     {
         $ids = [];
         $productCount = 0;
 
-        foreach ($this->rows($products) as $row) {
+        foreach ($products as $row) {
             $product = Product::query()->firstOrNew(['store_id' => $this->store->id, 'external_id' => $row['external_id']]);
             $product->fill(array_filter($row, fn ($v) => $v !== null));
             $product->launched_at ??= $row['launched_at'];
@@ -227,7 +244,7 @@ class SyncStoreData implements ShouldQueue
         $orders = 0;
         $returns = 0;
 
-        foreach ($this->rows($orderRows) as $order) {
+        foreach ($orderRows as $order) {
             $orders++;
             $returns += (int) $order['returned'];
 

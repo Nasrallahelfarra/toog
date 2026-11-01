@@ -6,8 +6,10 @@ use App\Jobs\CheckZidConnection;
 use App\Jobs\SyncStoreData;
 use App\Models\Store;
 use App\Models\SyncRun;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 use Throwable;
 
@@ -59,24 +61,40 @@ class ZidSyncState
                     'product_pages' => 0, 'order_pages' => 0,
                     'heartbeat_at' => now()->toIso8601String(),
                     'zid_store_id' => (string) $locked->platform_store_id,
+                    'mode' => 'paged', 'step' => 0, 'step_claimed' => false,
+                    'cursor_phase' => 'products', 'next_page' => 1,
+                    'orders_since' => now()->startOfMonth()->subMonths(11)->toIso8601String(),
                 ],
             ]), true];
         });
     }
 
-    public function claim(int $runId, Store $store): ?SyncRun
+    public function claim(int $runId, Store $store, int $step = 0): ?SyncRun
     {
-        $changed = SyncRun::query()->whereKey($runId)->where('store_id', $store->id)
-            ->where('type', 'zid_sync')->where('status', 'queued')
-            ->update(['status' => 'running', 'started_at' => now(), 'updated_at' => now()]);
+        return DB::transaction(function () use ($runId, $store, $step): ?SyncRun {
+            $run = SyncRun::query()->whereKey($runId)->where('store_id', $store->id)->where('type', 'zid_sync')->lockForUpdate()->first();
+            if (! $run || ! in_array($run->status, self::ACTIVE, true)
+                || ($run->status === 'running' && ($run->stats['mode'] ?? null) !== 'paged')
+                || ($run->stats['step'] ?? 0) !== $step || ($run->stats['step_claimed'] ?? false)) {
+                return null;
+            }
+            $run->update([
+                'status' => 'running', 'started_at' => $run->started_at ?? now(),
+                'stats' => [
+                    ...($run->stats ?? []), 'mode' => 'paged', 'step_claimed' => true,
+                    'cursor_phase' => $run->stats['cursor_phase'] ?? 'products',
+                    'orders_since' => $run->stats['orders_since'] ?? now()->startOfMonth()->subMonths(11)->toIso8601String(),
+                ],
+            ]);
 
-        return $changed ? SyncRun::query()->findOrFail($runId) : null;
+            return $run;
+        });
     }
 
     /**
      * Progress is written between API requests, outside the catalog transaction.
      *
-     * @param  array<string, int>  $counts
+     * @param  array<string, mixed>  $counts
      */
     public function progress(SyncRun $run, string $phase, array $counts = []): void
     {
@@ -87,11 +105,15 @@ class ZidSyncState
         $run->stats = $stats;
     }
 
-    public function fail(int $runId, string $code): void
+    public function fail(int $runId, string $code, ?int $step = null): void
     {
-        SyncRun::query()->whereKey($runId)->whereIn('status', self::ACTIVE)->update([
-            'status' => 'failed', 'error' => $code, 'finished_at' => now(), 'updated_at' => now(),
-        ]);
+        $changed = SyncRun::query()->whereKey($runId)->whereIn('status', self::ACTIVE)
+            ->when($step !== null, fn ($query) => $query->where('stats->step', $step))->update([
+                'status' => 'failed', 'error' => $code, 'finished_at' => now(), 'updated_at' => now(),
+            ]);
+        if ($changed && Schema::hasTable('zid_sync_pages')) {
+            app(ZidSyncStaging::class)->clear($runId);
+        }
     }
 
     /** Recover rows left running after a killed worker or a deployment. */
@@ -102,6 +124,12 @@ class ZidSyncState
             $deadline = $run->status === 'queued'
                 ? $run->created_at?->copy()->addMinutes(15)
                 : ($run->started_at ?? $run->created_at)?->copy()->addSeconds($legacy ? 960 : 660);
+            if (($run->stats['mode'] ?? null) === 'paged' && $run->status === 'running') {
+                $deadline = $run->updated_at?->copy()->addSeconds(($run->stats['step_claimed'] ?? false) ? 660 : 900);
+                if (! empty($run->stats['retry_at'])) {
+                    $deadline = Carbon::parse($run->stats['retry_at'])->addMinutes(15);
+                }
+            }
             if ($deadline?->isPast()) {
                 $this->fail($run->id, $run->status === 'queued' ? 'queue_stalled' : 'worker_stopped');
             }
@@ -131,6 +159,7 @@ class ZidSyncState
             'started_at' => $run->started_at?->toIso8601String(),
             'updated_at' => $run->stats['heartbeat_at'] ?? $run->updated_at?->toIso8601String(),
             'finished_at' => $run->finished_at?->toIso8601String(),
+            'retry_at' => $run->stats['retry_at'] ?? null,
         ];
     }
 }
