@@ -33,6 +33,7 @@ class StoreEvaluationRequest extends FormRequest
             'colors' => ['nullable', 'array', 'max:4'],
             'colors.*' => [Rule::in(array_keys(Vocabulary::colors()))],
             'description' => ['nullable', 'string', 'max:2000'],
+            'target_audience' => ['nullable', 'string', 'max:1000'],
             'image' => ['nullable', 'image', 'max:8192'],
         ];
     }

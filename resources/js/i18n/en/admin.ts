@@ -257,6 +257,8 @@ export const admin: typeof ar = {
         sentiment: 'Review sentiment',
         trend_vision: 'Visual trend analysis',
         design: 'Design generation',
+        design_improvement: 'Apply design improvements',
+        design_verification: 'Verify design edits',
         idea: 'Idea suggestions',
     },
 
@@ -299,6 +301,8 @@ export const admin: typeof ar = {
         'admin.event_updated': 'Updated a seasonal event',
         'admin.event_deleted': 'Deleted a seasonal event',
         'evaluation.created': 'Submitted a product for evaluation',
+        'design.improvement_requested': 'Requested design improvements',
+        'design.improvement_approved': 'Approved an improved design',
         'evaluation.decided': 'Made the final decision',
         'evaluation.override': 'Overrode the recommendation',
         'settings.updated': 'Updated store settings',

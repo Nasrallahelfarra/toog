@@ -256,6 +256,8 @@ export const admin = {
         sentiment: 'تحليل آراء العملاء',
         trend_vision: 'التحليل البصري للتوجهات',
         design: 'توليد التصاميم',
+        design_improvement: 'تطبيق تحسينات التصميم',
+        design_verification: 'فحص تعديلات التصميم',
         idea: 'اقتراح أفكار',
     },
 
@@ -298,6 +300,8 @@ export const admin = {
         'admin.event_updated': 'عدّل مناسبة موسمية',
         'admin.event_deleted': 'حذف مناسبة موسمية',
         'evaluation.created': 'رفع منتجًا للتقييم',
+        'design.improvement_requested': 'طلب تطبيق تحسينات التصميم',
+        'design.improvement_approved': 'اعتمد نسخة التصميم المحسّنة',
         'evaluation.decided': 'اتخذ القرار النهائي',
         'evaluation.override': 'تجاوز توصية المنصة',
         'settings.updated': 'عدّل إعدادات المتجر',

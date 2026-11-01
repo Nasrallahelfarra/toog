@@ -36,6 +36,8 @@ export const activity: typeof ar = {
         'evaluation.deleted': 'Deleted an evaluation',
         'design.generated': 'Generated designs',
         'design.requested': 'Requested designs',
+        'design.improvement_requested': 'Requested design improvements',
+        'design.improvement_approved': 'Approved an improved design',
         'design.status_changed': 'Changed a design’s status',
         'design.approved': 'Approved a design',
         'design.rejected': 'Rejected a design',

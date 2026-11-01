@@ -18,22 +18,22 @@ class RunEvaluation implements ShouldQueue
 
     public int $tries = 1;
 
-    public int $timeout = 240;
+    public int $timeout = 300;
+
+    public bool $failOnTimeout = true;
 
     public function __construct(public int $evaluationId) {}
 
     public function handle(EvaluationService $service): void
     {
-        $evaluation = Evaluation::query()->find($this->evaluationId);
-
-        if ($evaluation && ! $evaluation->isFinished()) {
-            $service->run($evaluation);
+        if (Evaluation::query()->whereKey($this->evaluationId)->where('status', 'pending')->update(['status' => 'processing', 'updated_at' => now()])) {
+            $service->run(Evaluation::query()->findOrFail($this->evaluationId));
         }
     }
 
     public function failed(?Throwable $e): void
     {
-        Evaluation::query()->whereKey($this->evaluationId)->update([
+        Evaluation::query()->whereKey($this->evaluationId)->where('status', 'processing')->update([
             'status' => 'failed',
             'error' => $e?->getMessage(),
         ]);

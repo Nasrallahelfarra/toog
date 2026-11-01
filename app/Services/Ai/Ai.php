@@ -112,7 +112,10 @@ class Ai
         }
 
         $source = null;
-        if ($sourcePath && Storage::disk('public')->exists($sourcePath)) {
+        if ($sourcePath) {
+            if (! Storage::disk('public')->exists($sourcePath)) {
+                throw new AiException('The reference image is missing. Upload it again before editing.');
+            }
             $source = [
                 'mime' => Storage::disk('public')->mimeType($sourcePath) ?: 'image/png',
                 'data' => base64_encode(Storage::disk('public')->get($sourcePath)),

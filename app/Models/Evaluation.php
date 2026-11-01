@@ -58,6 +58,7 @@ use Illuminate\Support\Carbon;
     'image_path', 'status', 'score', 'breakdown', 'recommendation', 'explanation_ar', 'explanation_en',
     'top_factors', 'modifications', 'expected_score', 'cultural_flags', 'alternatives', 'suggested_launch',
     'is_novel', 'final_decision', 'override_reason', 'decided_by', 'decided_at', 'ai_cost', 'error',
+    'target_audience', 'specialist_review', 'image_observations',
 ])]
 class Evaluation extends Model
 {
@@ -75,6 +76,8 @@ class Evaluation extends Model
             'price' => 'decimal:2',
             'colors' => 'array',
             'breakdown' => 'array',
+            'specialist_review' => 'array',
+            'image_observations' => 'array',
             'top_factors' => 'array',
             'modifications' => 'array',
             'cultural_flags' => 'array',

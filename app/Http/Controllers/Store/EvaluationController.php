@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Store\StoreEvaluationRequest;
 use App\Jobs\RunEvaluation;
 use App\Models\Design;
+use App\Models\DesignImprovement;
 use App\Models\Evaluation;
 use App\Models\EvaluationBatch;
 use App\Models\Product;
 use App\Models\Store;
+use App\Services\Ai\Ai;
 use App\Support\Activity;
 use App\Support\CurrentStore;
 use Illuminate\Database\Eloquent\Builder;
@@ -92,6 +94,7 @@ class EvaluationController extends Controller
             'style' => $parent->style,
             'season' => $parent->season,
             'description' => $parent->description,
+            'target_audience' => $parent->target_audience,
         ] : array_filter([
             // Prefill from an idea or a link, e.g. ?name=..&colors=sage,ivory
             'name' => $request->string('name')->toString() ?: null,
@@ -152,6 +155,7 @@ class EvaluationController extends Controller
             'style' => $data['style'] ?? null,
             'season' => $data['season'] ?? null,
             'description' => $data['description'] ?? null,
+            'target_audience' => $data['target_audience'] ?? null,
             'image_path' => $imagePath,
             'status' => 'pending',
         ]);
@@ -173,6 +177,20 @@ class EvaluationController extends Controller
         $store = $this->current->require();
         $this->own($evaluation);
         $evaluation->load(['user:id,name', 'decider:id,name', 'batch:id,name']);
+        // Expire abandoned jobs without showing an endless spinner after a worker outage.
+        DesignImprovement::query()->where('evaluation_id', $evaluation->id)
+            ->whereIn('status', DesignImprovement::ACTIVE)->where('updated_at', '<', now()->subMinutes(15))
+            ->update(['status' => 'failed', 'error' => 'timed_out']);
+        $improvements = DesignImprovement::query()->where('evaluation_id', $evaluation->id)
+            ->with(['design', 'result'])->latest()->take(10)->get()->map(fn ($r) => [
+                ...$r->only(['id', 'status', 'recommendations', 'verification', 'error', 'approved_at', 'created_at']),
+                'before_url' => $this->imageUrl($r->source_image_path),
+                'after_url' => $r->design?->image_url,
+                'design_id' => $r->design_id,
+                'result_id' => $r->result_evaluation_id,
+                'score' => $r->result?->score,
+                'review' => $r->result?->specialist_review,
+            ]);
 
         $designs = Design::query()
             ->where('store_id', $store->id)
@@ -188,6 +206,8 @@ class EvaluationController extends Controller
             'versions' => $this->versions($evaluation),
             'designs' => $designs,
             'thresholds' => $this->thresholds($store),
+            'improvements' => $improvements,
+            'canImprove' => app(Ai::class)->isLive(),
         ]);
     }
 
@@ -258,8 +278,13 @@ class EvaluationController extends Controller
     {
         $this->own($evaluation);
 
-        $evaluation->update(['status' => 'pending', 'error' => null]);
-        RunEvaluation::dispatch($evaluation->id);
+        if (in_array($evaluation->status, ['pending', 'processing'], true)) {
+            return back();
+        }
+
+        if (Evaluation::query()->whereKey($evaluation->id)->whereIn('status', ['completed', 'failed'])->update(['status' => 'pending', 'error' => null, 'updated_at' => now()])) {
+            RunEvaluation::dispatch($evaluation->id);
+        }
 
         Inertia::flash('toast', ['type' => 'info', 'message' => __('mojo.evaluation_queued')]);
 
@@ -327,7 +352,7 @@ class EvaluationController extends Controller
                 'status', 'score', 'breakdown', 'recommendation', 'explanation_ar', 'explanation_en', 'top_factors',
                 'modifications', 'expected_score', 'cultural_flags', 'alternatives', 'suggested_launch', 'is_novel',
                 'final_decision', 'override_reason', 'decided_at', 'version', 'parent_id', 'root_id', 'source',
-                'batch_id', 'design_id', 'error', 'created_at', 'updated_at',
+                'batch_id', 'design_id', 'error', 'created_at', 'updated_at', 'target_audience', 'specialist_review',
             ]),
             'colors' => $e->colors ?? [],
             'image_url' => $this->imageUrl($e->image_path),

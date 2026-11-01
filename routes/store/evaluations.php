@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Store\DesignController;
+use App\Http\Controllers\Store\DesignImprovementController;
 use App\Http\Controllers\Store\EvaluationBatchController;
 use App\Http\Controllers\Store\EvaluationController;
 use App\Http\Controllers\Store\StudioController;
@@ -17,6 +18,9 @@ Route::get('evaluations/{evaluation}', [EvaluationController::class, 'show'])->n
 Route::get('evaluations/{evaluation}/compare', [EvaluationController::class, 'compare'])->name('evaluations.compare');
 Route::post('evaluations/{evaluation}/decide', [EvaluationController::class, 'decide'])->name('evaluations.decide');
 Route::post('evaluations/{evaluation}/retry', [EvaluationController::class, 'retry'])->name('evaluations.retry');
+Route::post('evaluations/{evaluation}/improvements', [DesignImprovementController::class, 'store'])->name('improvements.store');
+Route::post('improvements/{improvement}/retry', [DesignImprovementController::class, 'retry'])->name('improvements.retry');
+Route::post('improvements/{improvement}/approve', [DesignImprovementController::class, 'approve'])->name('improvements.approve');
 Route::delete('evaluations/{evaluation}', [EvaluationController::class, 'destroy'])->name('evaluations.destroy');
 
 Route::get('batches/create', [EvaluationBatchController::class, 'create'])->name('batches.create');

@@ -35,6 +35,8 @@ export const activity = {
         'evaluation.deleted': 'حذف تقييمًا',
         'design.generated': 'ولّد تصاميم',
         'design.requested': 'طلب توليد تصاميم',
+        'design.improvement_requested': 'طلب تطبيق تحسينات التصميم',
+        'design.improvement_approved': 'اعتمد نسخة التصميم المحسّنة',
         'design.status_changed': 'غيّر حالة تصميم',
         'design.approved': 'اعتمد تصميمًا',
         'design.rejected': 'رفض تصميمًا',

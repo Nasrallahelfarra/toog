@@ -34,7 +34,7 @@ class AiUsage extends Model
 {
     public const UPDATED_AT = null;
 
-    public const OPERATIONS = ['evaluation', 'attributes', 'sentiment', 'trend_vision', 'design', 'idea'];
+    public const OPERATIONS = ['evaluation', 'attributes', 'sentiment', 'trend_vision', 'design', 'design_improvement', 'design_verification', 'idea'];
 
     protected function casts(): array
     {

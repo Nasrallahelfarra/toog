@@ -14,6 +14,7 @@ import { performance as arPerformance } from './ar/performance';
 import { reports as arReports } from './ar/reports';
 import { settings as arSettings } from './ar/settings';
 import { studio as arStudio } from './ar/studio';
+import { productReview as arProductReview } from './ar/product-review';
 import { account as enAccount } from './en/account';
 import { activity as enActivity } from './en/activity';
 import { admin as enAdmin } from './en/admin';
@@ -30,6 +31,7 @@ import { performance as enPerformance } from './en/performance';
 import { reports as enReports } from './en/reports';
 import { settings as enSettings } from './en/settings';
 import { studio as enStudio } from './en/studio';
+import { productReview as enProductReview } from './en/product-review';
 
 /**
  * One namespace per module, so modules can be translated independently.
@@ -46,6 +48,7 @@ export const ar = {
     settings: arSettings,
     evaluation: arEvaluation,
     studio: arStudio,
+    productReview: arProductReview,
     market: arMarket,
     balance: arBalance,
     calendar: arCalendar,
@@ -67,6 +70,7 @@ export const en: Dictionary = {
     settings: enSettings,
     evaluation: enEvaluation,
     studio: enStudio,
+    productReview: enProductReview,
     market: enMarket,
     balance: enBalance,
     calendar: enCalendar,
