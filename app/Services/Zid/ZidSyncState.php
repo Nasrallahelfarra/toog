@@ -99,7 +99,11 @@ class ZidSyncState
     public function progress(SyncRun $run, string $phase, array $counts = []): void
     {
         $stats = [...($run->stats ?? []), ...$counts, 'phase' => $phase, 'heartbeat_at' => now()->toIso8601String()];
-        if (! SyncRun::query()->whereKey($run->id)->where('status', 'running')->update(['stats' => json_encode($stats, JSON_THROW_ON_ERROR), 'updated_at' => now()])) {
+        $active = SyncRun::query()->whereKey($run->id)->where('status', 'running');
+        $changed = $active->update(['stats' => json_encode($stats, JSON_THROW_ON_ERROR), 'updated_at' => now()]);
+        // MySQL reports zero changed rows for an identical heartbeat within
+        // the same second. That does not mean the running row disappeared.
+        if (! $changed && ! $active->exists()) {
             throw new RuntimeException('The Zid import is no longer active.');
         }
         $run->stats = $stats;
