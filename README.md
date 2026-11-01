@@ -72,6 +72,8 @@ ZID_CLIENT_SECRET=
 ZID_REDIRECT_URI="${APP_URL}/store/integrations/zid/callback"
 ```
 
+لربط متجر حقيقي بتطبيق زد خاص، حدّد معرّف ذلك المتجر في تفاصيل التطبيق بلوحة الشركاء. رابط التطبيق هو `${APP_URL}/store/settings/integration`، ورابط إعادة التوجيه للتثبيت `${APP_URL}/store/integrations/zid/redirect`، ورابط الاستدعاء يطابق `ZID_REDIRECT_URI` حرفيًا. استخدم عنوان HTTPS المنشور في إعدادات السيرفر ولوحة زد. يتطلب التحقق من هوية المتجر صلاحية `third_store_details_read` لواجهة [بيانات المتجر](https://docs.zid.sa/store-33664558e0)، إضافة إلى صلاحيات قراءة المنتجات والطلبات للمزامنة. تُفحص الهوية قبل حفظ الاتصال أو بدء الاستيراد؛ رمز المدير المنسوخ وحده لا يُكمل تفويض التطبيق.
+
 أسعار النماذج المستخدمة في حساب التكاليف موجودة في `config/mojo.php` (`ai.pricing`).
 
 للتحويل إلى MySQL/PostgreSQL: غيّر `DB_CONNECTION` وبيانات الاتصال ثم `php artisan migrate`.

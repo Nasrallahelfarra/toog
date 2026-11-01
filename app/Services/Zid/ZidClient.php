@@ -31,6 +31,8 @@ class ZidClient
 
     public const PROFILE_PATH = 'managers/account/profile';
 
+    public const STORE_PATH = 'managers/account/store';
+
     public const PRODUCTS_PATH = 'products/';
 
     public const ORDERS_PATH = 'managers/store/orders';
@@ -131,6 +133,22 @@ class ZidClient
         return $this->request()->get(self::PROFILE_PATH)->throw()->json() ?? [];
     }
 
+    /** The store identity must come from Zid, not a previous Store-Id header. */
+    public function storeProfile(): array
+    {
+        $response = $this->request(includeStoreId: false)->get(self::STORE_PATH);
+        if ($response->failed()) {
+            throw new RuntimeException('Could not verify the Zid store (HTTP '.$response->status().'). Check the third_store_details_read permission and reactivate the app.', $response->status());
+        }
+        $profile = $response->json();
+        $id = data_get($profile, 'store.id');
+        if ((! is_int($id) && ! is_string($id)) || ! ctype_digit((string) $id) || (int) $id < 1) {
+            throw new RuntimeException('Zid did not return a valid store identity. Reconnect the app before importing data.');
+        }
+
+        return $profile;
+    }
+
     /**
      * All products, page by page.
      *
@@ -202,7 +220,7 @@ class ZidClient
         }
     }
 
-    private function request(): PendingRequest
+    private function request(bool $includeStoreId = true): PendingRequest
     {
         if (! $this->store->zid_access_token) {
             throw new RuntimeException('The store has no Zid credentials. Connect it from Settings → Integration.');
@@ -213,7 +231,7 @@ class ZidClient
                 'Authorization' => $this->store->zid_authorization ? 'Bearer '.$this->store->zid_authorization : null,
                 'X-Manager-Token' => $this->store->zid_access_token,
                 'Accept-Language' => 'ar',
-                'Store-Id' => $this->store->platform_store_id,
+                'Store-Id' => $includeStoreId ? $this->store->platform_store_id : null,
             ]))
             ->acceptJson()
             ->timeout($this->timeout)

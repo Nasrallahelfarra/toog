@@ -7,6 +7,7 @@ use App\Models\ProductSale;
 use App\Models\Store;
 use App\Models\SyncRun;
 use Illuminate\Http\Client\RequestException;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -78,7 +79,10 @@ class ConnectionCheck
         // 1. The token is accepted and identifies the store.
         if ($apiReady) {
             try {
-                $profile = $client->profile();
+                $profile = $client->storeProfile();
+                if (filled($store->platform_store_id) && (string) $profile['store']['id'] !== (string) $store->platform_store_id) {
+                    throw new RuntimeException('Zid returned a different store. Reconnect before importing data.');
+                }
                 $add('profile', self::PASS, [
                     'store_name' => data_get($profile, 'user.store.title') ?? data_get($profile, 'store.title') ?? data_get($profile, 'user.store.name'),
                     'store_id' => data_get($profile, 'user.store.id') ?? data_get($profile, 'store.id') ?? $store->platform_store_id,
@@ -209,6 +213,9 @@ class ConnectionCheck
     {
         $previous = $e instanceof RequestException ? $e : $e->getPrevious();
         $status = $previous instanceof RequestException ? $previous->response->status() : null;
+        if ($status === null && $e->getCode() >= 400 && $e->getCode() < 600) {
+            $status = $e->getCode();
+        }
 
         return ['http' => $status, 'message' => mb_substr($e->getMessage(), 0, 300)];
     }

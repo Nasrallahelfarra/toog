@@ -147,7 +147,7 @@ export const settings: typeof ar = {
         notImportedTitle: 'What we do not import',
         notImported: ['Customer personal data (names, phones, addresses)', 'Page views and add-to-cart rates — Zid does not provide them; upload a file to add them'],
         permissionsTitle: 'Permissions needed',
-        permissions: ['Read products', 'Read orders'],
+        permissions: ['Read store details', 'Read products', 'Read orders'],
         readOnly: 'Read-only access — we never change anything in your store.',
     },
     zidCheck: {

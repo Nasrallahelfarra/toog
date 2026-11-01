@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Throwable;
 
@@ -110,16 +111,22 @@ class IntegrationController extends Controller
         }
 
         try {
-            ZidClient::storeTokens($store, ZidClient::token([
+            $tokens = ZidClient::token([
                 'grant_type' => 'authorization_code',
                 'code' => $request->query('code'),
-            ]));
-
-            $profile = rescue(fn () => (new ZidClient($store->refresh()))->profile(), [], report: false);
-            $storeId = data_get($profile, 'user.store.id') ?? data_get($profile, 'store.id');
-            if ($storeId) {
-                $store->forceFill(['platform_store_id' => (string) $storeId])->save();
+            ]);
+            if (! is_string($tokens['authorization']) || blank($tokens['authorization']) || ! is_string($tokens['access_token']) || blank($tokens['access_token'])) {
+                throw new RuntimeException('Zid did not return both required tokens. Reactivate the app and try again.');
             }
+            // Verify the new credentials without overwriting the previous connection.
+            // The manager profile no longer guarantees a nested store object.
+            $pending = clone $store;
+            $pending->forceFill(['zid_authorization' => $tokens['authorization'], 'zid_access_token' => $tokens['access_token']]);
+            $profile = (new ZidClient($pending))->storeProfile();
+            // Save identity and the whole new token set together; never reuse an old
+            // store's refresh token when the OAuth response omits one.
+            $store->forceFill(['platform_store_id' => (string) $profile['store']['id'], 'zid_refresh_token' => null]);
+            ZidClient::storeTokens($store, $tokens);
         } catch (Throwable $e) {
             report($e);
             $store->forceFill(['connection_status' => 'error'])->save();

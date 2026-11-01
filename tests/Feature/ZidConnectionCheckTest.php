@@ -41,7 +41,7 @@ class ZidConnectionCheckTest extends TestCase
     private function fakeZid(array $orders, int $productsStatus = 200): void
     {
         Http::fake([
-            'api.zid.sa/v1/managers/account/profile*' => Http::response(['user' => ['store' => ['id' => 777, 'title' => 'متجري']]]),
+            'api.zid.sa/v1/managers/account/store*' => Http::response(['store' => ['id' => 777, 'title' => 'متجري']]),
             'api.zid.sa/v1/products*' => Http::response(['results' => [['id' => 1, 'name' => 'عباية']]], $productsStatus),
             'api.zid.sa/v1/managers/store/orders*' => Http::response(['orders' => $orders]),
         ]);
@@ -98,6 +98,25 @@ class ZidConnectionCheckTest extends TestCase
         $this->assertSame('skip', $statuses['profile']);
         $this->assertSame('skip', $statuses['orders']);
         Http::assertNothingSent();
+    }
+
+    public function test_credentials_for_a_different_store_fail_before_reading_products(): void
+    {
+        $this->fakeZid([]);
+        $this->store->update(['platform_store_id' => '41960']);
+        $statuses = $this->statuses(app(ConnectionCheck::class)->run($this->store));
+        $this->assertSame('fail', $statuses['profile']);
+        $this->assertSame('skip', $statuses['products']);
+        $this->assertSame('skip', $statuses['orders']);
+        Http::assertSentCount(1);
+    }
+
+    public function test_missing_store_details_permission_is_reported_as_forbidden(): void
+    {
+        Http::fake(['api.zid.sa/v1/managers/account/store*' => Http::response(['message' => 'Forbidden'], 403)]);
+        $result = app(ConnectionCheck::class)->run($this->store);
+        $this->assertSame('fail', $this->statuses($result)['profile']);
+        $this->assertSame(403, collect($result['checks'])->firstWhere('key', 'profile')['params']['http']);
     }
 
     public function test_the_owner_can_run_the_check_from_the_settings_page()
