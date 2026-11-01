@@ -15,6 +15,7 @@ use App\Services\Catalog\BalanceService;
 use App\Services\Catalog\DemoCatalogCleanup;
 use App\Services\Zid\ConnectionCheck;
 use App\Services\Zid\ZidClient;
+use App\Services\Zid\ZidSyncState;
 use App\Support\CurrentStore;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -31,6 +32,7 @@ class DashboardController extends Controller
     public function __invoke(Request $request, CurrentStore $current, StorePerformance $performance, BalanceService $balance, DemoCatalogCleanup $cleanup): Response
     {
         $store = $current->require();
+        $sync = app(ZidSyncState::class)->latest($store);
 
         $evaluations = Evaluation::query()
             ->where('store_id', $store->id)
@@ -67,6 +69,7 @@ class DashboardController extends Controller
         $revenuePrev = $trend[4]['revenue'] ?? 0;
 
         return Inertia::render('store/dashboard', [
+            'sync' => $sync,
             'demoCatalog' => fn () => $cleanup->availableInDashboard($store, $request->user()) ? $cleanup->preview($store) : null,
             'kpis' => [
                 'evaluated_this_month' => $thisMonth,
@@ -151,8 +154,8 @@ class DashboardController extends Controller
             return null;
         }
 
-        $run = SyncRun::query()->where('store_id', $store->id)->latest('id')->first();
-        $syncing = $run && $run->status === 'running';
+        $run = SyncRun::query()->where('store_id', $store->id)->where('type', 'zid_sync')->latest('id')->first();
+        $syncing = $run && in_array($run->status, ZidSyncState::ACTIVE, true);
 
         return [
             'state' => match (true) {

@@ -1,7 +1,7 @@
 <?php
 
-use App\Jobs\SyncStoreData;
 use App\Models\Store;
+use App\Services\Zid\ZidSyncState;
 use Illuminate\Support\Facades\Schedule;
 
 /*
@@ -15,7 +15,7 @@ $syncStores = function (string $frequency): void {
         ->where('connection_status', 'connected')
         ->whereNotNull('zid_access_token')
         ->where('sync_frequency', $frequency)
-        ->each(fn (Store $store) => SyncStoreData::dispatch($store));
+        ->each(fn (Store $store) => app(ZidSyncState::class)->enqueue($store));
 };
 
 Schedule::call(fn () => $syncStores('daily'))

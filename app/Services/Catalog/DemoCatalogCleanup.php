@@ -9,7 +9,7 @@ use App\Models\ProductSale;
 use App\Models\Store;
 use App\Models\User;
 use App\Services\Analytics\PerformanceClassifier;
-use Illuminate\Bus\UniqueLock;
+use App\Services\Zid\ZidSyncState;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -52,6 +52,7 @@ class DemoCatalogCleanup
     public function preview(Store $store): array
     {
         $this->assertEligible($store);
+        app(ZidSyncState::class)->expire($store);
 
         return $this->summary($store, $this->snapshot($store));
     }
@@ -60,7 +61,8 @@ class DemoCatalogCleanup
     public function run(Store $store, bool $apply, ?User $actor = null, ?string $previewToken = null): array
     {
         $this->assertEligible($store);
-        $lock = Cache::lock(UniqueLock::getKey(new SyncStoreData($store)), 300);
+        app(ZidSyncState::class)->expire($store);
+        $lock = Cache::lock(SyncStoreData::lockKey($store), 660);
         if (! $lock->get()) {
             throw new DemoCatalogCleanupException('busy', 'A Zid sync or cleanup is already queued/running. Wait for it to finish, then retry. Nothing changed.');
         }
@@ -132,7 +134,7 @@ class DemoCatalogCleanup
 
     private function running(Store $store): bool
     {
-        return $store->syncRuns()->where('type', 'zid_sync')->where('status', 'running')->exists();
+        return $store->syncRuns()->where('type', 'zid_sync')->whereIn('status', ZidSyncState::ACTIVE)->exists();
     }
 
     /** @return array{products: Collection<int, Product>, sales: Collection<int, ProductSale>, preview_token: string} */

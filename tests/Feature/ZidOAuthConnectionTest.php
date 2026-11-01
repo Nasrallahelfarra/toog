@@ -22,6 +22,7 @@ class ZidOAuthConnectionTest extends TestCase
     {
         parent::setUp();
         config(['mojo.zid.client_id' => 'test-client', 'mojo.zid.client_secret' => 'test-secret']);
+        config(['queue.default' => 'database']);
         Bus::fake();
         Http::preventStrayRequests();
         $owner = User::factory()->create();

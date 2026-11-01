@@ -26,6 +26,8 @@ import { SettingsShell } from '@/components/store/settings-shell';
 import { ZidCheck } from '@/components/store/zid-check';
 import type { ZidCheckResult } from '@/components/store/zid-check';
 import { ZidGuide } from '@/components/store/zid-guide';
+import { ZidSyncProgress, syncIsActive } from '@/components/store/zid-sync-progress';
+import type { ZidSyncProgressData } from '@/components/store/zid-sync-progress';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useClipboard } from '@/hooks/use-clipboard';
@@ -35,7 +37,7 @@ import { cn } from '@/lib/utils';
 type Run = {
     id: number;
     type: string;
-    status: 'running' | 'completed' | 'failed';
+    status: 'queued' | 'running' | 'completed' | 'failed';
     stats: Record<string, number | string>;
     error: string | null;
     started_at: string | null;
@@ -50,6 +52,7 @@ type ImportReport = {
 };
 
 type Props = {
+    sync: ZidSyncProgressData | null;
     check: ZidCheckResult | null;
     zid: {
         configured: boolean;
@@ -68,7 +71,7 @@ type Props = {
     importReport: ImportReport | null;
 };
 
-export default function IntegrationSettings({ zid, counts, runs, importReport, check }: Props) {
+export default function IntegrationSettings({ zid, counts, runs, importReport, check, sync }: Props) {
     const { t, tr, number } = useI18n();
     const s = t.settings.integration;
 
@@ -76,12 +79,14 @@ export default function IntegrationSettings({ zid, counts, runs, importReport, c
         <SettingsShell>
             <div className="grid gap-6 xl:grid-cols-5">
                 <FadeIn className="xl:col-span-3">
-                    <ZidCard zid={zid} />
+                    <ZidCard zid={zid} active={syncIsActive(sync)} />
                 </FadeIn>
                 <FadeIn delay={0.08} className="xl:col-span-2">
                     <FrequencyCard zid={zid} counts={counts} />
                 </FadeIn>
             </div>
+
+            {sync && <ZidSyncProgress key={sync.id} sync={sync} refresh={['sync', 'zid', 'counts', 'runs', 'check']} />}
 
             <div className="grid gap-6 xl:grid-cols-5">
                 <FadeIn delay={0.09} className="xl:col-span-3">
@@ -112,7 +117,7 @@ export default function IntegrationSettings({ zid, counts, runs, importReport, c
     );
 }
 
-function ZidCard({ zid }: { zid: Props['zid'] }) {
+function ZidCard({ zid, active }: { zid: Props['zid']; active: boolean }) {
     const { t, relative, date } = useI18n();
     const s = t.settings.integration;
     const [, copy] = useClipboard();
@@ -216,9 +221,9 @@ function ZidCard({ zid }: { zid: Props['zid'] }) {
                             {s.connect}
                         </Button>
                     )}
-                    {connected && zid.has_credentials && (
+                    {zid.has_credentials && (
                         <Button
-                            disabled={syncing}
+                            disabled={syncing || active}
                             onClick={() =>
                                 router.post('/store/integrations/zid/sync', {}, {
                                     preserveScroll: true,
@@ -227,8 +232,8 @@ function ZidCard({ zid }: { zid: Props['zid'] }) {
                                 })
                             }
                         >
-                            <RefreshCw className={cn('size-4', syncing && 'animate-spin')} />
-                            {s.syncNow}
+                            <RefreshCw className={cn('size-4', (syncing || active) && 'animate-spin')} />
+                            {active ? s.runStatus.running : s.syncNow}
                         </Button>
                     )}
                     {zid.status !== 'disconnected' && (
@@ -408,11 +413,15 @@ function ImportResult({ report }: { report: ImportReport }) {
 function RunsCard({ runs }: { runs: Run[] }) {
     const { t, tr, dateTime, number } = useI18n();
     const s = t.settings.integration;
-    const icons = { running: Loader2, completed: CheckCircle2, failed: XCircle };
-    const tones = { running: 'info', completed: 'success', failed: 'danger' } as const;
+    const icons = { queued: Loader2, running: Loader2, completed: CheckCircle2, failed: XCircle };
+    const tones = { queued: 'neutral', running: 'info', completed: 'success', failed: 'danger' } as const;
 
     const describe = (run: Run) => {
         const stats = run.stats ?? {};
+        if (run.type === 'zid_sync') {
+            const done = run.status === 'completed';
+            return `${done ? t.zidSync.productsSaved : t.zidSync.products}: ${number(stats[done ? 'products' : 'products_read'] ?? 0)} · ${done ? t.zidSync.ordersSaved : t.zidSync.orders}: ${number(stats[done ? 'orders' : 'orders_read'] ?? 0)}`;
+        }
 
         return Object.entries(stats)
             .filter(([, v]) => typeof v === 'number')
@@ -456,7 +465,7 @@ function RunsCard({ runs }: { runs: Run[] }) {
                                         </span>
                                     </TableCell>
                                     <TableCell className="text-muted-foreground max-w-md truncate text-xs whitespace-normal">
-                                        {run.error ? <span className="text-danger">{run.error}</span> : describe(run) || '—'}
+                                        {run.error ? <span className="text-danger">{run.type === 'zid_sync' ? t.zidSync.errors[run.error as keyof typeof t.zidSync.errors] ?? t.zidSync.errors.import_failed : run.error}</span> : describe(run) || '—'}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground pe-5 text-xs">
                                         {dateTime(run.started_at)}

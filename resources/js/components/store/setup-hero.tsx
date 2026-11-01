@@ -1,7 +1,7 @@
 import { Link, router } from '@inertiajs/react';
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Link2, Loader2, PlugZap, RefreshCw, Settings } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Stagger, StaggerItem } from '@/components/mojo/motion';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/hooks/use-i18n';
@@ -21,22 +21,12 @@ export type SetupState = {
  * first import live until the dashboard has something to show.
  */
 export function SetupHero({ setup }: { setup: SetupState }) {
-    const { t, tr, relative, number } = useI18n();
+    const { t } = useI18n();
     const s = t.dashboard.setup;
     const [syncing, setSyncing] = useState(false);
     const error = setup.connection_status === 'error';
 
-    // While the first import runs, refresh every few seconds; the full
-    // dashboard replaces this screen as soon as products arrive.
-    useEffect(() => {
-        if (setup.state !== 'syncing') {
-            return;
-        }
-
-        const timer = window.setInterval(() => router.reload(), 4000);
-
-        return () => window.clearInterval(timer);
-    }, [setup.state]);
+    // ZidSyncProgress owns polling for the dashboard, including its setup state.
 
     const status =
         setup.state === 'syncing'
@@ -88,28 +78,12 @@ export function SetupHero({ setup }: { setup: SetupState }) {
                         <p className="text-muted-foreground max-w-xl leading-relaxed">{body}</p>
                     </div>
 
-                    {setup.state === 'syncing' && setup.run && (
-                        <div className="space-y-2">
-                            <div className="bg-muted h-2 overflow-hidden rounded-full">
-                                <motion.div
-                                    className="bg-info h-full w-1/3 rounded-full"
-                                    animate={{ x: ['-100%', '300%'] }}
-                                    transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-                                />
-                            </div>
-                            <p className="text-muted-foreground text-xs">
-                                {tr(s.imported, { products: number(setup.run.stats.products ?? 0), orders: number(setup.run.stats.orders ?? 0) })}
-                                {setup.run.started_at && <> · {tr(s.startedAgo, { time: relative(setup.run.started_at) })}</>}
-                            </p>
-                        </div>
-                    )}
-
                     {setup.run?.status === 'failed' && setup.run.error && (
                         <div className="bg-danger-soft text-danger flex gap-2 rounded-xl p-3 text-xs leading-relaxed">
                             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                             <span>
                                 <strong className="font-semibold">{s.lastError}: </strong>
-                                {setup.run.error}
+                                {t.zidSync.errors[setup.run.error as keyof typeof t.zidSync.errors] ?? t.zidSync.errors.import_failed}
                             </span>
                         </div>
                     )}

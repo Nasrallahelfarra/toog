@@ -76,6 +76,7 @@ export const settings = {
             competitor_scan: 'رصد المنافسين',
         },
         runStatus: {
+            queued: 'بانتظار المعالجة',
             running: 'قيد التنفيذ',
             completed: 'مكتمل',
             failed: 'فشل',

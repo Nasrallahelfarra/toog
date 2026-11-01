@@ -21,6 +21,8 @@ import { motion } from 'motion/react';
 import { SetupHero } from '@/components/store/setup-hero';
 import { DemoCatalogCleanup } from '@/components/store/demo-catalog-cleanup';
 import type { DemoCatalogPreview } from '@/components/store/demo-catalog-cleanup';
+import { ZidSyncProgress } from '@/components/store/zid-sync-progress';
+import type { ZidSyncProgressData } from '@/components/store/zid-sync-progress';
 import type { SetupState } from '@/components/store/setup-hero';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartLegend, ChartTooltip, semanticChart, useChartAxes } from '@/components/mojo/chart';
@@ -94,6 +96,7 @@ type RecentEvaluation = {
 
 type Props = {
     demoCatalog: DemoCatalogPreview | null;
+    sync: ZidSyncProgressData | null;
     kpis: {
         evaluated_this_month: number;
         evaluated_delta: number | null;
@@ -157,6 +160,7 @@ export default function StoreDashboard(props: Props) {
             />
 
             {props.demoCatalog && <DemoCatalogCleanup key={currentStore?.id} data={props.demoCatalog} />}
+            {props.sync && <ZidSyncProgress key={`${currentStore?.id}-${props.sync.id}`} sync={props.sync} refresh={['sync', 'setup', 'demoCatalog', 'kpis', 'revenueTrend', 'decisions', 'atRisk']} />}
 
             {props.setup ? (
                 <SetupHero setup={props.setup} />

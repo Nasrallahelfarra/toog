@@ -17,6 +17,7 @@ return [
     'zid_state_mismatch' => 'The connection request expired, please try again.',
     'zid_disconnected' => 'Zid connection removed.',
     'sync_needs_connection' => 'Connect the store to Zid first to sync.',
+    'sync_start_failed' => 'Could not start the sync. Check the import progress details.',
     'reclassified' => 'Product performance classification updated.',
     'extraction_started' => 'Extracting attributes for :count products.',
     'nothing_to_extract' => 'All products already have complete attributes.',

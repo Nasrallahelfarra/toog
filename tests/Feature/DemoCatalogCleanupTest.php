@@ -8,7 +8,6 @@ use App\Models\ProductSale;
 use App\Models\Store;
 use App\Services\Analytics\PerformanceClassifier;
 use Database\Seeders\DemoStoresSeeder;
-use Illuminate\Bus\UniqueLock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -46,7 +45,7 @@ class DemoCatalogCleanupTest extends TestCase
             ->assertSuccessful();
 
         $this->assertSame($before, $this->snapshot(array_keys($before)));
-        $this->assertNull(Cache::get(UniqueLock::getKey(new SyncStoreData($store))));
+        $this->assertNull(Cache::get(SyncStoreData::lockKey($store)));
         Http::assertNothingSent();
     }
 
@@ -126,7 +125,7 @@ class DemoCatalogCleanupTest extends TestCase
     {
         $store = $this->seededStore();
         $before = $this->snapshot(['products', 'product_sales']);
-        $key = UniqueLock::getKey(new SyncStoreData($store));
+        $key = SyncStoreData::lockKey($store);
         $queueLock = Cache::lock($key, 300);
         $this->assertTrue($queueLock->get());
         $this->artisan('demo:clear-catalog', ['email' => 'lama@demo.sa', '--zid-store' => '41960', '--apply' => true])
@@ -158,7 +157,7 @@ class DemoCatalogCleanupTest extends TestCase
         $this->artisan('demo:clear-catalog', ['email' => 'lama@demo.sa', '--zid-store' => '41960', '--apply' => true])
             ->expectsOutputToContain('Classification failed')->assertFailed();
         $this->assertSame($before, $this->snapshot(array_keys($before)));
-        $this->assertTrue(Cache::lock(UniqueLock::getKey(new SyncStoreData($store)), 1)->get());
+        $this->assertTrue(Cache::lock(SyncStoreData::lockKey($store), 1)->get());
     }
 
     private function snapshot(array $tables): array

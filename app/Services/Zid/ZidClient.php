@@ -64,6 +64,7 @@ class ZidClient
     /**
      * Exchange an authorization code (or a refresh token) for tokens.
      *
+     * @param  array<string, mixed>  $grant
      * @return array{authorization: string|null, access_token: string|null, refresh_token: string|null, expires_in: int|null}
      */
     public static function token(array $grant): array
@@ -133,7 +134,11 @@ class ZidClient
         return $this->request()->get(self::PROFILE_PATH)->throw()->json() ?? [];
     }
 
-    /** The store identity must come from Zid, not a previous Store-Id header. */
+    /**
+     * The store identity must come from Zid, not a previous Store-Id header.
+     *
+     * @return array<string, mixed>
+     */
     public function storeProfile(): array
     {
         $response = $this->request(includeStoreId: false)->get(self::STORE_PATH);
@@ -154,9 +159,9 @@ class ZidClient
      *
      * @return Generator<int, array<string, mixed>>
      */
-    public function products(): Generator
+    public function products(?callable $onPage = null): Generator
     {
-        yield from $this->paginate(self::PRODUCTS_PATH, ['page_size' => self::PER_PAGE], ['results', 'products', 'data']);
+        yield from $this->paginate(self::PRODUCTS_PATH, ['page_size' => self::PER_PAGE], ['results', 'products', 'data'], $onPage);
     }
 
     /**
@@ -164,7 +169,7 @@ class ZidClient
      *
      * @return Generator<int, array<string, mixed>>
      */
-    public function orders(\DateTimeInterface $since): Generator
+    public function orders(\DateTimeInterface $since, ?callable $onPage = null): Generator
     {
         // payload_type=default is the only list format that includes each
         // order's products (the default "simple" omits them), which the
@@ -176,7 +181,7 @@ class ZidClient
             'date_from' => $since->format('Y-m-d\TH:i:s.vO'),
             'order_by' => 'created_at',
             'sort_by' => 'asc',
-        ], ['orders', 'results', 'data']);
+        ], ['orders', 'results', 'data'], $onPage);
     }
 
     /**
@@ -184,40 +189,53 @@ class ZidClient
      * @param  list<string>  $keys  where the list may sit in the payload
      * @return Generator<int, array<string, mixed>>
      */
-    private function paginate(string $path, array $query, array $keys): Generator
+    private function paginate(string $path, array $query, array $keys, ?callable $onPage = null): Generator
     {
+        $read = 0;
+        $seenPages = [];
         for ($page = 1; $page <= self::MAX_PAGES; $page++) {
             try {
                 $json = $this->request()->get($path, [...$query, 'page' => $page])->throw()->json() ?? [];
             } catch (RequestException $e) {
-                throw new RuntimeException("Zid request to {$path} failed: ".($e->response->json('message.description') ?? $e->response->json('message') ?? $e->response->status()), previous: $e);
+                throw new RuntimeException("Zid request to {$path} failed (HTTP ".$e->response->status().').', previous: $e);
             }
 
-            $items = [];
+            $items = null;
             foreach ($keys as $key) {
-                if (isset($json[$key]) && is_array($json[$key])) {
+                if (isset($json[$key]) && is_array($json[$key]) && array_is_list($json[$key])) {
                     $items = $json[$key];
                     break;
                 }
             }
 
+            if ($items === null) {
+                throw new RuntimeException("Zid returned an invalid list for {$path}.");
+            }
+            $fingerprint = hash('sha256', json_encode(array_map(fn ($item) => $item['id'] ?? $item, $items), JSON_THROW_ON_ERROR));
+            if ($items !== [] && isset($seenPages[$fingerprint])) {
+                throw new RuntimeException("Zid repeated a page for {$path}; import stopped to avoid duplicate totals.");
+            }
+            $seenPages[$fingerprint] = true;
+
             foreach ($items as $item) {
                 if (is_array($item)) {
                     yield $item;
+                    $read++;
                 }
             }
+            $onPage && $onPage($page, $read);
 
             $last = $json['last_page'] ?? $json['pagination']['last_page'] ?? null;
-            $hasNext = ! empty($json['next']) || ($last !== null && $page < (int) $last);
-
-            if (count($items) < self::PER_PAGE && ! $hasNext) {
+            $hasNext = $last !== null ? $page < (int) $last
+                : (array_key_exists('next', $json) ? filled($json['next']) : count($items) >= self::PER_PAGE);
+            if (! $hasNext) {
                 return;
             }
-
             if ($items === []) {
-                return;
+                throw new RuntimeException("Zid returned an empty page with more pages for {$path}.");
             }
         }
+        throw new RuntimeException('Zid import exceeded the page limit; no partial catalog was saved.');
     }
 
     private function request(bool $includeStoreId = true): PendingRequest

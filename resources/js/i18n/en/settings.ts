@@ -77,6 +77,7 @@ export const settings: typeof ar = {
             competitor_scan: 'Competitor scan',
         },
         runStatus: {
+            queued: 'Queued',
             running: 'Running',
             completed: 'Completed',
             failed: 'Failed',

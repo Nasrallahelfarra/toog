@@ -3,18 +3,16 @@
 namespace App\Http\Controllers\Store;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\CheckZidConnection;
-use App\Jobs\SyncStoreData;
 use App\Models\Product;
 use App\Models\ProductSale;
 use App\Models\SyncRun;
 use App\Services\Zid\ConnectionCheck;
 use App\Services\Zid\ZidClient;
+use App\Services\Zid\ZidSyncState;
 use App\Support\Activity;
 use App\Support\CurrentStore;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -34,8 +32,10 @@ class IntegrationController extends Controller
     public function show(Request $request): Response
     {
         $store = $this->current->require();
+        $sync = app(ZidSyncState::class)->latest($store);
 
         return Inertia::render('store/settings/integration', [
+            'sync' => $sync,
             'zid' => [
                 'configured' => ZidClient::configured(),
                 // Setting up the Zid app (.env credentials) is the platform admin's job.
@@ -66,7 +66,7 @@ class IntegrationController extends Controller
                     'status' => $r->status,
                     'stats' => $r->stats ?? [],
                     'error' => $r->error,
-                    'started_at' => $r->started_at?->toIso8601String(),
+                    'started_at' => ($r->started_at ?? $r->created_at)?->toIso8601String(),
                     'duration' => $r->started_at && $r->finished_at ? (int) $r->started_at->diffInSeconds($r->finished_at) : null,
                 ]),
             'importReport' => $request->session()->get('importReport'),
@@ -139,10 +139,7 @@ class IntegrationController extends Controller
 
         // First import, then verify the whole chain (token, permissions,
         // order lines, imported data, analysis) and tell the owner.
-        Bus::chain([
-            new SyncStoreData($store, $request->user()->id),
-            new CheckZidConnection($store->id),
-        ])->dispatch();
+        app(ZidSyncState::class)->enqueue($store, $request->user()->id, checkAfter: true);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('store.zid_connected')]);
 
@@ -191,15 +188,15 @@ class IntegrationController extends Controller
     {
         $store = $this->current->require();
 
-        if (! $store->isConnected() || blank($store->zid_access_token)) {
+        if (blank($store->zid_authorization) || blank($store->zid_access_token) || blank($store->platform_store_id)) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('store.sync_needs_connection')]);
 
             return back();
         }
 
-        SyncStoreData::dispatch($store, $request->user()->id);
+        $run = app(ZidSyncState::class)->enqueue($store, $request->user()->id);
         Activity::log('data.sync_requested', $store);
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('mojo.sync_started')]);
+        Inertia::flash('toast', ['type' => $run->status === 'failed' ? 'error' : 'success', 'message' => $run->status === 'failed' ? __('store.sync_start_failed') : __('mojo.sync_started')]);
 
         return back();
     }

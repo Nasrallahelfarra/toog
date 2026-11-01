@@ -12,7 +12,6 @@ use App\Models\User;
 use App\Services\Analytics\PerformanceClassifier;
 use App\Services\Catalog\DemoCatalogCleanup;
 use App\Support\CurrentStore;
-use Illuminate\Bus\UniqueLock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -158,7 +157,7 @@ class DemoCatalogDashboardTest extends TestCase
     public function test_queued_or_running_sync_is_reported_without_deleting_anything(): void
     {
         $token = $this->token();
-        $lock = Cache::lock(UniqueLock::getKey(new SyncStoreData($this->store)), 300);
+        $lock = Cache::lock(SyncStoreData::lockKey($this->store), 300);
         $this->assertTrue($lock->get());
         $this->post('/store/catalog/clear-demo', ['preview_token' => $token])->assertSessionHasErrors('preview_token');
         $lock->release();
