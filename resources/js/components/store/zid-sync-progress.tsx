@@ -34,6 +34,8 @@ export type ZidSyncProgressData = {
     finished_at: string | null;
     retry_at: string | null;
     retry_reason: string | null;
+    scope: 'full' | 'changes';
+    changed_since: string | null;
 };
 
 export const syncIsActive = (sync: ZidSyncProgressData | null) =>
@@ -79,6 +81,7 @@ export function ZidSyncProgress({
     }, [active]);
     const completed = sync.status === 'completed';
     const failed = sync.status === 'failed';
+    const changes = sync.scope === 'changes';
     const phase = active ? sync.phase : sync.status;
     const current = steps.findIndex((step) => step === phase);
     const elapsed = Math.max(
@@ -176,7 +179,11 @@ export function ZidSyncProgress({
                 <dl className="grid grid-cols-2 gap-3">
                     {[
                         {
-                            label: completed ? s.productsSaved : s.products,
+                            label: completed
+                                ? changes
+                                    ? s.productsChanged
+                                    : s.productsSaved
+                                : s.products,
                             value: completed
                                 ? sync.products_saved
                                 : sync.products_read,
@@ -184,7 +191,11 @@ export function ZidSyncProgress({
                             icon: Package,
                         },
                         {
-                            label: completed ? s.ordersSaved : s.orders,
+                            label: completed
+                                ? changes
+                                    ? s.ordersChanged
+                                    : s.ordersSaved
+                                : s.orders,
                             value: completed
                                 ? sync.orders_saved
                                 : sync.orders_read,
@@ -211,6 +222,13 @@ export function ZidSyncProgress({
                 </dl>
                 <p className="text-xs leading-relaxed text-muted-foreground">
                     {completed ? s.saved : s.reading}
+                </p>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                    {changes && sync.changed_since
+                        ? tr(s.scopeChanges, {
+                              date: dateTime(sync.changed_since),
+                          })
+                        : s.scopeFull}
                 </p>
                 {active && phase === 'waiting' && sync.retry_at && (
                     <p

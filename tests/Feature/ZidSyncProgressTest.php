@@ -491,4 +491,79 @@ class ZidSyncProgressTest extends TestCase
         $this->assertSame(255, mb_strlen($row['sku']));
         $this->assertNull($row['image_url']);
     }
+
+    public function test_orders_staged_before_ids_were_kept_still_count_after_an_upgrade(): void
+    {
+        $run = $this->state->enqueue($this->store);
+        $run = $this->state->claim($run->id, $this->store);
+        $order = ['month' => now()->startOfMonth()->toDateString(), 'returned' => false, 'lines' => [['external_id' => 'real-1', 'units' => 2, 'revenue' => 40]]];
+        DB::table('zid_sync_pages')->insert([
+            ['sync_run_id' => $run->id, 'phase' => 'products', 'page' => 1, 'fingerprint' => 'p', 'rows' => json_encode([(new ZidMapper)->product($this->products()[0])])],
+            ['sync_run_id' => $run->id, 'phase' => 'orders', 'page' => 1, 'fingerprint' => 'o', 'rows' => json_encode([$order, $order])],
+        ]);
+        $this->state->progress($run, 'saving', ['cursor_phase' => 'saving', 'next_page' => 1, 'product_pages' => 1, 'order_pages' => 1, 'step_claimed' => false]);
+        $run->update(['stats' => $run->stats]);
+        $this->app->call([new SyncStoreData($this->store, runId: $run->id), 'handle']);
+        $this->assertSame('completed', $run->fresh()->status);
+        $this->assertSame(2, $run->fresh()->stats['orders']);
+        $this->assertSame(4, (int) DB::table('product_sales')->sum('units'));
+    }
+
+    public function test_a_later_sync_reads_only_changes_and_applies_cancellations(): void
+    {
+        $placed = now()->subDays(10)->toDateTimeString();
+        $order = fn (int $id, string $product, int $units, string $status = 'delivered') => [
+            'id' => $id, 'created_at' => $placed, 'status' => $status,
+            'products' => [['id' => $product, 'quantity' => $units, 'total' => 10 * $units]],
+        ];
+        $round = 1;
+        $requests = [];
+        Http::fake(function ($request) use (&$round, &$requests, $order) {
+            $requests[] = [$round, $request->url()];
+            if (str_contains($request->url(), 'products/')) {
+                if ($round === 1) {
+                    return Http::response(['results' => $this->products(2), 'next' => null]);
+                }
+                $this->assertSame('-updated_at', $request['ordering']);
+
+                // The second product was last updated before the previous sync.
+                return Http::response(['results' => [
+                    ['id' => 'real-2', 'name' => 'Renamed', 'price' => 30, 'updated_at' => now()->toDateTimeString()],
+                    ['id' => 'real-1', 'name' => 'Product 1', 'price' => 20, 'updated_at' => now()->subDays(5)->toDateTimeString()],
+                ], 'next' => 'more']);
+            }
+            if ($round === 1) {
+                return Http::response(['orders' => [$order(1, 'real-1', 1), $order(2, 'real-1', 1), $order(3, 'real-1', 1), $order(4, 'real-2', 1)]]);
+            }
+            $this->assertSame('updated_at', $request['date_attribute']);
+
+            return Http::response(['orders' => [$order(2, 'real-1', 1, 'cancelled'), $order(5, 'real-1', 2)]]);
+        });
+
+        $first = $this->state->enqueue($this->store);
+        $this->assertSame('full', $first->stats['scope']);
+        $this->perform($first);
+        $this->assertDatabaseCount('zid_orders', 4);
+        $product = Product::query()->where('external_id', 'real-1')->firstOrFail();
+        $this->assertSame(3, $product->sales()->sum('units'));
+
+        $this->travel(1)->days();
+        $round = 2;
+        $second = $this->state->enqueue($this->store);
+        $this->assertSame('changes', $second->stats['scope']);
+        $this->perform($second);
+        $second->refresh();
+        $this->assertSame('completed', $second->status);
+        $this->assertCount(1, array_filter($requests, fn ($r) => $r[0] === 2 && str_contains($r[1], 'products/')), 'Unchanged products must not be read.');
+        $this->assertSame(2, $second->stats['orders']);
+        $this->assertDatabaseCount('zid_orders', 4);
+        $this->assertDatabaseMissing('zid_orders', ['external_id' => '2']);
+        $this->assertSame(4, $product->sales()->sum('units'));
+        $this->assertEquals(40, $product->sales()->sum('revenue'));
+        $this->assertSame('Renamed', Product::query()->where('external_id', 'real-2')->value('name'));
+
+        // A monthly full read corrects anything the change filters missed.
+        $this->travel(31)->days();
+        $this->assertSame('full', $this->state->enqueue($this->store)->stats['scope']);
+    }
 }

@@ -6,6 +6,7 @@ use App\Jobs\CheckZidConnection;
 use App\Jobs\SyncStoreData;
 use App\Models\Store;
 use App\Models\SyncRun;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
@@ -108,6 +109,7 @@ class ZidSyncState
             }
             // A fresh import replaces any resumable checkpoint of this store.
             app(ZidSyncStaging::class)->clearStore($locked);
+            $changedSince = $this->changedSince($locked);
 
             return [$locked->syncRuns()->create([
                 'type' => 'zid_sync', 'status' => 'queued',
@@ -119,9 +121,32 @@ class ZidSyncState
                     'mode' => 'paged', 'step' => 0, 'step_claimed' => false,
                     'cursor_phase' => 'products', 'next_page' => 1,
                     'orders_since' => now()->startOfMonth()->subMonths(11)->toIso8601String(),
+                    'scope' => $changedSince ? 'changes' : 'full',
+                    'changed_since' => $changedSince?->toIso8601String(),
                 ],
             ]), true];
         });
+    }
+
+    /**
+     * After a complete import that stored its orders, read only what changed
+     * since it started. The day of overlap absorbs time zone differences.
+     */
+    private function changedSince(Store $store): ?CarbonInterface
+    {
+        $runs = $store->syncRuns()->where('type', 'zid_sync')->where('status', 'completed');
+        $previous = (clone $runs)->latest('id')->first();
+        if (! $previous?->started_at || ! ($previous->stats['orders_stored'] ?? false)
+            || ($previous->stats['zid_store_id'] ?? null) !== (string) $store->platform_store_id) {
+            return null;
+        }
+        // A monthly full read corrects anything the change filters missed.
+        $full = (clone $runs)->where('stats->scope', 'full')->latest('id')->first();
+        if (! $full?->started_at?->gt(now()->subDays(30))) {
+            return null;
+        }
+
+        return $previous->started_at->copy()->subDay();
     }
 
     public function claim(int $runId, Store $store, int $step = 0): ?SyncRun
@@ -213,6 +238,8 @@ class ZidSyncState
             'order_pages' => $run->stats['order_pages'] ?? 0,
             'products_saved' => $run->stats['products'] ?? 0,
             'orders_saved' => $run->stats['orders'] ?? 0,
+            'scope' => $run->stats['scope'] ?? 'full',
+            'changed_since' => $run->stats['changed_since'] ?? null,
             'error_code' => $run->status === 'failed' ? $run->error : null,
             'error_detail' => $run->status === 'failed' ? ($run->stats['error_detail'] ?? null) : null,
             'queued_at' => $run->created_at?->toIso8601String(),
