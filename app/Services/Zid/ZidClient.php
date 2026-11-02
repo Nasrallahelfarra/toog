@@ -169,18 +169,33 @@ class ZidClient
         yield from $this->paginate(self::PRODUCTS_PATH, ['page_size' => self::PER_PAGE], ['results', 'products', 'data'], $onPage);
     }
 
-    /** @return array{items: list<array<string, mixed>>, has_next: bool, fingerprint: string} */
-    public function productPage(int $page): array
+    /**
+     * @return array{items: list<array<string, mixed>>, has_next: bool, fingerprint: string}
+     *
+     * @throws ZidApiException
+     * @throws ZidRateLimited
+     */
+    public function productPage(int $page, bool $recentlyUpdatedFirst = false): array
     {
-        return $this->page(self::PRODUCTS_PATH, ['page_size' => self::PER_PAGE], ['results', 'products', 'data'], $page);
+        // The products list has no date filter, only ordering by updated_at.
+        return $this->page(self::PRODUCTS_PATH, [
+            'page_size' => self::PER_PAGE, ...($recentlyUpdatedFirst ? ['ordering' => '-updated_at'] : []),
+        ], ['results', 'products', 'data'], $page);
     }
 
-    /** @return array{items: list<array<string, mixed>>, has_next: bool, fingerprint: string} */
-    public function orderPage(\DateTimeInterface $since, int $page): array
+    /**
+     * @param  'created_at'|'updated_at'  $attribute  updated_at also returns
+     *                                                orders whose status changed
+     * @return array{items: list<array<string, mixed>>, has_next: bool, fingerprint: string}
+     *
+     * @throws ZidApiException
+     * @throws ZidRateLimited
+     */
+    public function orderPage(\DateTimeInterface $since, int $page, string $attribute = 'created_at'): array
     {
         return $this->page(self::ORDERS_PATH, [
             'per_page' => self::ORDERS_PER_PAGE, 'payload_type' => 'default',
-            'date_attribute' => 'created_at', 'date_from' => $since->format('Y-m-d\TH:i:s.vO'),
+            'date_attribute' => $attribute, 'date_from' => $since->format('Y-m-d\TH:i:s.vO'),
             'order_by' => 'created_at', 'sort_by' => 'asc',
         ], ['orders', 'results', 'data'], $page);
     }

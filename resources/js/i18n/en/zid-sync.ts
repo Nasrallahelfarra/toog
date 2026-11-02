@@ -18,6 +18,11 @@ export const zidSync: typeof ar = {
     orders: 'Orders read',
     productsSaved: 'Products saved',
     ordersSaved: 'Orders analyzed',
+    productsChanged: 'New or changed products',
+    ordersChanged: 'New or changed orders',
+    scopeFull: 'Full sync: all products and the last 12 months of orders.',
+    scopeChanges:
+        'Changes only: reading products and orders changed since {date}; nothing else is read again.',
     pages: '{n} pages',
     elapsed: 'Elapsed time',
     seconds: '{n} seconds',
@@ -28,7 +33,7 @@ export const zidSync: typeof ar = {
     retryingApi:
         'Zid is temporarily not responding. Import will resume automatically from the last saved page. Next attempt: {time}.',
     reading:
-        'These counts reflect data read. Results are saved after reading and validation finish. Orders cover the last 12 months.',
+        'These counts reflect data read. Results are saved after reading and validation finish.',
     saved: 'Results were saved and product analysis updated. Analyzed orders may differ from orders read because canceled or invalid orders are excluded.',
     waiting:
         'Import has not started. If this continues, the platform needs to check its queue worker.',

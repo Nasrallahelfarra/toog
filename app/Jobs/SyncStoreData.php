@@ -22,6 +22,7 @@ use Illuminate\Queue\TimeoutExceededException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\LazyCollection;
 use RuntimeException;
 use Throwable;
 
@@ -111,12 +112,12 @@ class SyncStoreData implements ShouldQueue
                 if ($run->fresh()?->status !== 'running') {
                     throw new RuntimeException('The Zid import is no longer active.');
                 }
-                $stats = $this->import($staging->rows($run->id, 'products'), $staging->rows($run->id, 'orders'));
+                $stats = $this->import($run, $staging->rows($run->id, 'products'), $staging->rows($run->id, 'orders'));
                 $classifier->classify($store);
                 $store->forceFill(['last_synced_at' => now(), 'connection_status' => 'connected'])->save();
                 $run->update([
                     'status' => 'completed', 'finished_at' => now(),
-                    'stats' => [...$run->stats, ...$stats, 'phase' => 'completed', 'heartbeat_at' => now()->toIso8601String()],
+                    'stats' => [...$run->stats, ...$stats, 'phase' => 'completed', 'orders_stored' => true, 'heartbeat_at' => now()->toIso8601String()],
                 ]);
                 $staging->clear($run->id);
 
@@ -201,6 +202,9 @@ class SyncStoreData implements ShouldQueue
 
     private function fetchBatch(SyncRun $run, ZidClient $client, ZidMapper $mapper, ZidSyncState $state, ZidSyncStaging $staging): void
     {
+        // A "changes" run reads only orders updated since the last import,
+        // and products newest-updated first until it reaches unchanged ones.
+        $changes = ($run->stats['scope'] ?? 'full') === 'changes';
         // Two pages per job bound API wait time, regardless of catalog size.
         // Committed normalized pages survive handoff to another worker.
         for ($batch = 0; $batch < 2; $batch++) {
@@ -209,27 +213,48 @@ class SyncStoreData implements ShouldQueue
                 return;
             }
             $page = (int) ($run->stats['next_page'] ?? 1);
+            $newestFirst = $changes && ($run->stats['products_newest_first'] ?? true);
             $state->progress($run, $phase);
             try {
-                $result = $phase === 'products' ? $client->productPage($page)
-                    : $client->orderPage(Carbon::parse($run->stats['orders_from'] ?? $run->stats['orders_since'] ?? now()->startOfMonth()->subMonths(11)), $page);
+                $result = match (true) {
+                    $phase === 'products' => $client->productPage($page, $newestFirst),
+                    $changes => $client->orderPage(Carbon::parse($run->stats['changed_since']), $page, 'updated_at'),
+                    default => $client->orderPage(Carbon::parse($run->stats['orders_from'] ?? $run->stats['orders_since'] ?? now()->startOfMonth()->subMonths(11)), $page),
+                };
             } catch (ZidApiException $e) {
+                if ($phase === 'products' && $newestFirst && $e->httpStatus === 422 && $page === 1) {
+                    // The ordering is not accepted: read every product instead.
+                    $state->progress($run, 'products', ['products_newest_first' => false]);
+
+                    continue;
+                }
                 // Zid's order search rejects pages past its result window (about
                 // 10,000 orders) with a 422. Restart from the newest order read.
-                if ($phase === 'orders' && $e->httpStatus === 422 && $page > 1 && $this->shiftOrderWindow($run, $state)) {
+                if ($phase === 'orders' && ! $changes && $e->httpStatus === 422 && $page > 1 && $this->shiftOrderWindow($run, $state)) {
                     continue;
                 }
                 throw $e;
             }
             $rows = [];
             foreach ($result['items'] as $payload) {
-                $row = $phase === 'products' ? $mapper->product($payload) : $mapper->order($payload);
+                // A canceled order is staged as a removal so a changes run
+                // can take it out of the stored orders.
+                $row = $phase === 'products' ? $mapper->product($payload) : ($mapper->order($payload) ?? $this->removal($payload));
                 if ($row !== null) {
                     $rows[] = $row;
                 }
             }
+            $cursor = [];
+            if ($phase === 'products' && $newestFirst) {
+                [$inOrder, $oldest] = $this->updatedOrder($result['items'], $run->stats['products_oldest_at'] ?? null, $run->stats['products_in_order'] ?? true);
+                $cursor = ['products_in_order' => $inOrder, 'products_oldest_at' => $oldest];
+                // Every later page was updated before the last import started.
+                if ($inOrder && $oldest !== null && Carbon::parse($oldest)->lt(Carbon::parse($run->stats['changed_since']))) {
+                    $result['has_next'] = false;
+                }
+            }
 
-            DB::transaction(function () use ($run, $phase, $page, $result, $rows, $state, $staging): void {
+            DB::transaction(function () use ($run, $phase, $page, $result, $rows, $cursor, $state, $staging): void {
                 $locked = SyncRun::query()->lockForUpdate()->findOrFail($run->id);
                 if ($locked->status !== 'running' || ($locked->stats['step'] ?? 0) !== $this->step) {
                     throw new RuntimeException('The Zid import is no longer active.');
@@ -247,9 +272,49 @@ class SyncStoreData implements ShouldQueue
                     $countKey => ($run->stats[$countKey] ?? 0) + count($result['items']), $pageKey => $sequence,
                     'cursor_phase' => $nextPhase, 'next_page' => $result['has_next'] ? $page + 1 : 1,
                     'rate_retries' => 0, 'transient_retries' => 0, 'retry_at' => null, 'retry_reason' => null,
+                    ...$cursor,
                     ...($phase === 'orders' ? ['orders_last_at' => $this->latestOrderTime($result['items'], $run->stats['orders_last_at'] ?? null)] : []),
                 ]);
             });
+        }
+    }
+
+    /**
+     * Whether products keep arriving newest-updated first, and the oldest
+     * update time read so far. A missing time disables the early stop.
+     *
+     * @param  list<array<string, mixed>>  $products
+     * @return array{bool, string|null}
+     */
+    private function updatedOrder(array $products, ?string $oldest, bool $inOrder): array
+    {
+        $previous = $oldest ? Carbon::parse($oldest) : null;
+        foreach ($products as $product) {
+            $time = $this->time($product['updated_at'] ?? null);
+            if (! $time || ($previous && $time->gt($previous))) {
+                return [false, $previous?->toIso8601String()];
+            }
+            $previous = $time;
+        }
+
+        return [$inOrder, $previous?->toIso8601String()];
+    }
+
+    /**
+     * @param  array<string, mixed>  $order
+     * @return array{id: string, removed: true}|null
+     */
+    private function removal(array $order): ?array
+    {
+        return isset($order['id']) && is_scalar($order['id']) ? ['id' => (string) $order['id'], 'removed' => true] : null;
+    }
+
+    private function time(mixed $value): ?Carbon
+    {
+        try {
+            return is_string($value) && $value !== '' ? Carbon::parse($value) : null;
+        } catch (Throwable) {
+            return null;
         }
     }
 
@@ -276,11 +341,7 @@ class SyncStoreData implements ShouldQueue
     {
         $latest = $current ? Carbon::parse($current) : null;
         foreach ($orders as $order) {
-            try {
-                $time = is_string($order['created_at'] ?? null) ? Carbon::parse($order['created_at']) : null;
-            } catch (Throwable) {
-                $time = null;
-            }
+            $time = $this->time($order['created_at'] ?? null);
             if ($time && (! $latest || $time->gt($latest))) {
                 $latest = $time;
             }
@@ -290,73 +351,107 @@ class SyncStoreData implements ShouldQueue
     }
 
     /**
-     * @param  iterable<array<string, mixed>>  $products
-     * @param  iterable<array<string, mixed>>  $orderRows
+     * Saves products, applies the read orders to the stored orders, then
+     * rebuilds only the product × month sales rows those orders touch.
+     *
+     * @param  iterable<int, array<string, mixed>>  $products
+     * @param  iterable<int, array<string, mixed>>  $orderRows
      * @return array{products: int, orders: int, sales_rows: int, returns: int}
      */
-    private function import(iterable $products, iterable $orderRows): array
+    private function import(SyncRun $run, iterable $products, iterable $orderRows): array
     {
-        $ids = [];
         $productCount = 0;
-
         foreach ($products as $row) {
             $product = Product::query()->firstOrNew(['store_id' => $this->store->id, 'external_id' => $row['external_id']]);
             $product->fill(array_filter($row, fn ($v) => $v !== null));
             $product->launched_at ??= $row['launched_at'];
             $product->save();
-
-            $ids[$row['external_id']] = $product->id;
             $productCount++;
         }
+        // A changes run reads few products, so order lines resolve against the whole catalog.
+        $ids = Product::query()->where('store_id', $this->store->id)->whereNotNull('external_id')->pluck('id', 'external_id')->all();
 
-        // Aggregate orders into product × month buckets.
-        $buckets = [];
-        $orders = 0;
-        $returns = 0;
-        $seen = [];
-
-        foreach ($orderRows as $order) {
-            $id = $order['id'] ?? null;
-            if ($id !== null) {
-                if (isset($seen[$id])) {
-                    continue;
+        $full = ($run->stats['scope'] ?? 'full') === 'full';
+        $since = Carbon::parse($run->stats['orders_since'])->startOfMonth()->toDateString();
+        $stored = fn () => DB::table('zid_orders')->where('store_id', $this->store->id);
+        $touched = [];
+        $touch = function (string $month, array $lines) use (&$touched, $ids, $since): void {
+            // Months before the 12-month window keep the totals they have.
+            foreach ($month >= $since ? $lines : [] as $line) {
+                if ($productId = $ids[$line['external_id']] ?? null) {
+                    $touched[$productId][$month] = true;
                 }
-                $seen[$id] = true;
             }
-            $orders++;
-            $returns += (int) $order['returned'];
+        };
+        if ($full) {
+            // A full read replaces every stored order; their buckets are rebuilt or cleared.
+            foreach ($stored()->cursor() as $old) {
+                $touch($old->month, json_decode($old->lines, true, flags: JSON_THROW_ON_ERROR));
+            }
+            $stored()->delete();
+        }
 
-            foreach ($order['lines'] as $line) {
+        $seen = [];
+        $returns = 0;
+        $unnamed = 0;
+        foreach (LazyCollection::make(fn () => yield from $orderRows)->chunk(500) as $chunk) {
+            // Overlapping reads return an order twice; the later read is newer.
+            // Pages staged before orders carried their id still count once each.
+            $latest = $chunk->keyBy(function (array $order) use ($run, &$unnamed): string {
+                return $order['id'] ?? 'run-'.$run->id.'-'.++$unnamed;
+            })->all();
+            foreach ($full ? [] : $stored()->whereIn('external_id', array_keys($latest))->get() as $old) {
+                $touch($old->month, json_decode($old->lines, true, flags: JSON_THROW_ON_ERROR));
+            }
+            $live = array_filter($latest, fn ($order) => ! ($order['removed'] ?? false));
+            $stored()->whereIn('external_id', array_keys(array_diff_key($latest, $live)))->delete();
+            DB::table('zid_orders')->upsert(array_map(fn ($id, $order) => [
+                'store_id' => $this->store->id, 'external_id' => (string) $id, 'month' => $order['month'],
+                'returned' => $order['returned'], 'lines' => json_encode($order['lines'], JSON_THROW_ON_ERROR),
+            ], array_keys($live), $live), ['store_id', 'external_id'], ['month', 'returned', 'lines']);
+            foreach ($live as $order) {
+                $touch($order['month'], $order['lines']);
+                $returns += (int) $order['returned'];
+            }
+            $seen += array_fill_keys(array_keys($latest), true);
+        }
+        $stored()->where('month', '<', $since)->delete();
+
+        $buckets = [];
+        foreach ($stored()->cursor() as $order) {
+            foreach (json_decode($order->lines, true, flags: JSON_THROW_ON_ERROR) as $line) {
                 $productId = $ids[$line['external_id']] ?? null;
-
-                if (! $productId) {
+                if (! $productId || ! isset($touched[$productId][$order->month])) {
                     continue;
                 }
-
-                $bucket = $buckets[$productId][$order['month']] ?? ['orders' => 0, 'units' => 0, 'revenue' => 0.0, 'returns' => 0];
+                $bucket = $buckets[$productId][$order->month] ?? ['orders' => 0, 'units' => 0, 'revenue' => 0.0, 'returns' => 0];
                 $bucket['orders']++;
                 $bucket['units'] += $line['units'];
-                $bucket['revenue'] += $order['returned'] ? 0 : $line['revenue'];
-                $bucket['returns'] += $order['returned'] ? $line['units'] : 0;
-                $buckets[$productId][$order['month']] = $bucket;
+                $bucket['revenue'] += $order->returned ? 0 : $line['revenue'];
+                $bucket['returns'] += $order->returned ? $line['units'] : 0;
+                $buckets[$productId][$order->month] = $bucket;
             }
         }
 
         $rows = 0;
-        foreach ($buckets as $productId => $months) {
-            foreach ($months as $period => $values) {
+        foreach ($touched as $productId => $months) {
+            foreach (array_keys($months) as $period) {
                 // Zid's API has no page views / add-to-cart; keep any values
-                // that came from an analytics file import.
+                // that came from an analytics file import. A bucket whose
+                // orders were all canceled drops to zero.
                 // A date object binds as "Y-m-d H:i:s", matching stored rows.
                 ProductSale::query()->updateOrCreate(
                     ['product_id' => $productId, 'period' => Carbon::parse($period)->startOfDay()],
-                    ['store_id' => $this->store->id, ...$values],
+                    ['store_id' => $this->store->id, ...($buckets[$productId][$period] ?? ['orders' => 0, 'units' => 0, 'revenue' => 0, 'returns' => 0])],
                 );
                 $rows++;
             }
         }
 
-        return ['products' => $productCount, 'orders' => $orders, 'sales_rows' => $rows, 'returns' => $returns];
+        return [
+            'products' => $productCount, 'orders' => $full ? $stored()->count() : count($seen),
+            'sales_rows' => $rows, 'returns' => $returns,
+        ];
     }
 
     private function notify(string $level, string $titleAr, string $titleEn, string $bodyAr, string $bodyEn, bool $email = false): void
