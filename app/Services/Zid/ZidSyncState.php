@@ -19,6 +19,9 @@ class ZidSyncState
 {
     public const ACTIVE = ['queued', 'running'];
 
+    /** Failures caused by a deployment, a worker restart or a Zid outage, not by the data. */
+    private const INTERRUPTED = ['worker_stopped', 'queue_stalled', 'api_unavailable', 'rate_limited', 'catalog_busy'];
+
     public function enqueue(Store $store, ?int $userId = null, bool $checkAfter = false): SyncRun
     {
         [$run, $created] = $this->reserve($store);
@@ -27,6 +30,25 @@ class ZidSyncState
         }
 
         return $this->dispatch($store, $run, $userId, $checkAfter);
+    }
+
+    /**
+     * A scheduled refresh continues an interrupted import from its last page
+     * instead of discarding hours of read data while nobody is watching.
+     */
+    public function continueOrEnqueue(Store $store): SyncRun
+    {
+        $this->expire($store);
+        $run = $store->syncRuns()->where('type', 'zid_sync')->latest('id')->first();
+        if ($run && in_array($run->error, self::INTERRUPTED, true) && $this->canResume($run, $store)) {
+            try {
+                return $this->resume($store, $run->id);
+            } catch (ValidationException) {
+                return $run; // Another task holds the store; the next schedule tries again.
+            }
+        }
+
+        return $this->enqueue($store);
     }
 
     private function dispatch(Store $store, SyncRun $run, ?int $userId, bool $checkAfter): SyncRun
@@ -141,7 +163,9 @@ class ZidSyncState
             return null;
         }
         // A monthly full read corrects anything the change filters missed.
-        $full = (clone $runs)->where('stats->scope', 'full')->latest('id')->first();
+        // Imports reserved before scopes were recorded always read everything.
+        $full = (clone $runs)->where(fn ($query) => $query->where('stats->scope', 'full')->orWhereNull('stats->scope'))
+            ->latest('id')->first();
         if (! $full?->started_at?->gt(now()->subDays(30))) {
             return null;
         }

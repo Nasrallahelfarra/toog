@@ -15,7 +15,7 @@ $syncStores = function (string $frequency): void {
         ->where('connection_status', 'connected')
         ->whereNotNull('zid_access_token')
         ->where('sync_frequency', $frequency)
-        ->each(fn (Store $store) => app(ZidSyncState::class)->enqueue($store));
+        ->each(fn (Store $store) => app(ZidSyncState::class)->continueOrEnqueue($store));
 };
 
 Schedule::call(fn () => $syncStores('daily'))
