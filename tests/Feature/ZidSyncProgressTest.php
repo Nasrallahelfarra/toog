@@ -15,6 +15,7 @@ use App\Services\Zid\ZidMapper;
 use App\Services\Zid\ZidSyncState;
 use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
@@ -507,6 +508,43 @@ class ZidSyncProgressTest extends TestCase
         $this->assertSame('completed', $run->fresh()->status);
         $this->assertSame(2, $run->fresh()->stats['orders']);
         $this->assertSame(4, (int) DB::table('product_sales')->sum('units'));
+    }
+
+    public function test_the_schedule_continues_an_interrupted_import_and_restarts_a_rejected_one(): void
+    {
+        $interrupt = function (string $error): SyncRun {
+            $run = $this->state->claim($this->state->enqueue($this->store)->id, $this->store);
+            DB::table('zid_sync_pages')->insert(['sync_run_id' => $run->id, 'phase' => 'products', 'page' => 1, 'fingerprint' => 'p', 'rows' => '[]']);
+            $this->state->progress($run, 'reading_products', ['next_page' => 2, 'product_pages' => 1]);
+            $this->state->fail($run->id, $error);
+
+            return $run;
+        };
+
+        $stopped = $interrupt('worker_stopped');
+        $continued = $this->state->continueOrEnqueue($this->store);
+        $this->assertSame($stopped->id, $continued->id);
+        $this->assertSame('queued', $continued->status);
+        $this->assertDatabaseHas('zid_sync_pages', ['sync_run_id' => $stopped->id]);
+
+        $continued->update(['status' => 'failed']);
+        $rejected = $interrupt('zid_rejected');
+        $this->assertNotSame($rejected->id, $this->state->continueOrEnqueue($this->store)->id);
+        $this->assertDatabaseCount('zid_sync_pages', 0);
+    }
+
+    public function test_an_import_reserved_before_scopes_were_recorded_counts_as_a_full_read(): void
+    {
+        Http::fake(fn ($request) => str_contains($request->url(), 'products/')
+            ? Http::response(['results' => $this->products(1), 'next' => null])
+            : Http::response(['orders' => []]));
+        $run = $this->state->enqueue($this->store);
+        $run->update(['stats' => Arr::except($run->stats, ['scope', 'changed_since'])]);
+        $this->perform($run);
+        $this->assertSame('completed', $run->fresh()->status);
+
+        $this->travel(1)->days();
+        $this->assertSame('changes', $this->state->enqueue($this->store)->stats['scope']);
     }
 
     public function test_a_later_sync_reads_only_changes_and_applies_cancellations(): void
