@@ -8,6 +8,7 @@ use App\Models\Store;
 use App\Models\SyncRun;
 use App\Notifications\PlatformNotification;
 use App\Services\Analytics\PerformanceClassifier;
+use App\Services\Zid\ZidApiException;
 use App\Services\Zid\ZidClient;
 use App\Services\Zid\ZidMapper;
 use App\Services\Zid\ZidRateLimited;
@@ -15,6 +16,7 @@ use App\Services\Zid\ZidSyncStaging;
 use App\Services\Zid\ZidSyncState;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Queue\TimeoutExceededException;
 use Illuminate\Support\Carbon;
@@ -126,12 +128,29 @@ class SyncStoreData implements ShouldQueue
                 $state->fail($run->id, 'rate_limited');
                 throw $e;
             }
-            $state->progress($run, 'waiting', ['rate_retries' => $retries, 'retry_at' => now()->addSeconds($e->retryAfter)->toIso8601String()]);
+            $state->progress($run, 'waiting', ['rate_retries' => $retries, 'retry_reason' => 'rate_limit', 'retry_at' => now()->addSeconds($e->retryAfter)->toIso8601String()]);
             $this->continueImport($run, $state, 'waiting', $e->retryAfter);
 
             return;
         } catch (Throwable $e) {
-            $state->fail($run->id, 'import_failed');
+            $transient = $e instanceof ConnectionException || ($e instanceof ZidApiException && $e->httpStatus >= 500);
+            $retries = ($run->stats['transient_retries'] ?? 0) + 1;
+            if ($transient && $retries <= 5) {
+                $delay = min(600, 30 * (2 ** ($retries - 1)));
+                $state->progress($run, 'waiting', [
+                    'transient_retries' => $retries, 'retry_reason' => 'api_unavailable',
+                    'retry_at' => now()->addSeconds($delay)->toIso8601String(),
+                ]);
+                $this->continueImport($run, $state, 'waiting', $delay);
+
+                return;
+            }
+            $state->fail($run->id, match (true) {
+                $transient => 'api_unavailable',
+                $e instanceof ZidApiException && in_array($e->httpStatus, [401, 403], true) => 'authorization_failed',
+                $e instanceof ZidApiException => 'zid_rejected',
+                default => 'import_failed',
+            }, detail: $e instanceof ZidApiException ? $e->detail : null);
             throw $e; // Record a failed queue job and stop the post-sync chain.
         } finally {
             $lock->release();
@@ -191,8 +210,17 @@ class SyncStoreData implements ShouldQueue
             }
             $page = (int) ($run->stats['next_page'] ?? 1);
             $state->progress($run, $phase);
-            $result = $phase === 'products' ? $client->productPage($page)
-                : $client->orderPage(Carbon::parse($run->stats['orders_since'] ?? now()->startOfMonth()->subMonths(11)), $page);
+            try {
+                $result = $phase === 'products' ? $client->productPage($page)
+                    : $client->orderPage(Carbon::parse($run->stats['orders_from'] ?? $run->stats['orders_since'] ?? now()->startOfMonth()->subMonths(11)), $page);
+            } catch (ZidApiException $e) {
+                // Zid's order search rejects pages past its result window (about
+                // 10,000 orders) with a 422. Restart from the newest order read.
+                if ($phase === 'orders' && $e->httpStatus === 422 && $page > 1 && $this->shiftOrderWindow($run, $state)) {
+                    continue;
+                }
+                throw $e;
+            }
             $rows = [];
             foreach ($result['items'] as $payload) {
                 $row = $phase === 'products' ? $mapper->product($payload) : $mapper->order($payload);
@@ -206,17 +234,59 @@ class SyncStoreData implements ShouldQueue
                 if ($locked->status !== 'running' || ($locked->stats['step'] ?? 0) !== $this->step) {
                     throw new RuntimeException('The Zid import is no longer active.');
                 }
-                $staging->save($run->id, $phase, $page, $result['fingerprint'], $rows);
-                $nextPhase = $result['has_next'] ? $phase : ($phase === 'products' ? 'orders' : 'saving');
                 $countKey = $phase === 'products' ? 'products_read' : 'orders_read';
                 $pageKey = $phase === 'products' ? 'product_pages' : 'order_pages';
+                // Staged pages are numbered in reading order: the API page
+                // restarts at 1 in each order window. Overlapping windows
+                // may return the same orders, so a repeat is per window.
+                $sequence = ($run->stats[$pageKey] ?? 0) + 1;
+                $fingerprint = $phase === 'orders' ? hash('sha256', ($run->stats['order_windows'] ?? 0).':'.$result['fingerprint']) : $result['fingerprint'];
+                $staging->save($run->id, $phase, $sequence, $fingerprint, $rows);
+                $nextPhase = $result['has_next'] ? $phase : ($phase === 'products' ? 'orders' : 'saving');
                 $state->progress($run, $nextPhase, [
-                    $countKey => ($run->stats[$countKey] ?? 0) + count($result['items']), $pageKey => $page,
+                    $countKey => ($run->stats[$countKey] ?? 0) + count($result['items']), $pageKey => $sequence,
                     'cursor_phase' => $nextPhase, 'next_page' => $result['has_next'] ? $page + 1 : 1,
-                    'rate_retries' => 0, 'retry_at' => null,
+                    'rate_retries' => 0, 'transient_retries' => 0, 'retry_at' => null, 'retry_reason' => null,
+                    ...($phase === 'orders' ? ['orders_last_at' => $this->latestOrderTime($result['items'], $run->stats['orders_last_at'] ?? null)] : []),
                 ]);
             });
         }
+    }
+
+    private function shiftOrderWindow(SyncRun $run, ZidSyncState $state): bool
+    {
+        $last = $run->stats['orders_last_at'] ?? null;
+        $from = Carbon::parse($run->stats['orders_from'] ?? $run->stats['orders_since']);
+        // A day of overlap absorbs any time zone gap between Zid's order
+        // timestamps and the filter; the save step counts each order once.
+        $next = $last ? Carbon::parse($last)->subDay() : null;
+        if (! $next?->gt($from)) {
+            return false; // No progress since the last window: stop rather than loop.
+        }
+        $state->progress($run, 'orders', [
+            'orders_from' => $next->toIso8601String(), 'next_page' => 1,
+            'order_windows' => ($run->stats['order_windows'] ?? 0) + 1,
+        ]);
+
+        return true;
+    }
+
+    /** @param list<array<string, mixed>> $orders */
+    private function latestOrderTime(array $orders, ?string $current): ?string
+    {
+        $latest = $current ? Carbon::parse($current) : null;
+        foreach ($orders as $order) {
+            try {
+                $time = is_string($order['created_at'] ?? null) ? Carbon::parse($order['created_at']) : null;
+            } catch (Throwable) {
+                $time = null;
+            }
+            if ($time && (! $latest || $time->gt($latest))) {
+                $latest = $time;
+            }
+        }
+
+        return $latest?->toIso8601String();
     }
 
     /**
@@ -243,8 +313,16 @@ class SyncStoreData implements ShouldQueue
         $buckets = [];
         $orders = 0;
         $returns = 0;
+        $seen = [];
 
         foreach ($orderRows as $order) {
+            $id = $order['id'] ?? null;
+            if ($id !== null) {
+                if (isset($seen[$id])) {
+                    continue;
+                }
+                $seen[$id] = true;
+            }
             $orders++;
             $returns += (int) $order['returned'];
 

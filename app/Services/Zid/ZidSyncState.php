@@ -8,8 +8,9 @@ use App\Models\Store;
 use App\Models\SyncRun;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Throwable;
 
@@ -24,12 +25,17 @@ class ZidSyncState
             return $run;
         }
 
+        return $this->dispatch($store, $run, $userId, $checkAfter);
+    }
+
+    private function dispatch(Store $store, SyncRun $run, ?int $userId, bool $checkAfter): SyncRun
+    {
         try {
             $driver = config('queue.connections.'.config('queue.default').'.driver');
             if (in_array($driver, ['sync', 'null', 'deferred'], true)) {
                 throw new RuntimeException('Zid imports require a background queue worker.');
             }
-            $job = new SyncStoreData($store, $userId, $run->id);
+            $job = new SyncStoreData($store, $userId, $run->id, (int) ($run->stats['step'] ?? 0));
             if ($checkAfter) {
                 Bus::chain([$job, new CheckZidConnection($store->id)])->dispatch();
             } else {
@@ -43,6 +49,53 @@ class ZidSyncState
         return $run->refresh();
     }
 
+    /** Resume only a complete checkpoint belonging to the current connection. */
+    public function resume(Store $store, int $runId, ?int $userId = null): SyncRun
+    {
+        $lock = Cache::lock(SyncStoreData::lockKey($store), 660);
+        if (! $lock->get()) {
+            throw ValidationException::withMessages(['sync' => __('store.sync_resume_busy')]);
+        }
+        try {
+            [$run, $dispatch] = DB::transaction(function () use ($store, $runId): array {
+                $locked = Store::query()->lockForUpdate()->findOrFail($store->id);
+                $run = $locked->syncRuns()->where('type', 'zid_sync')->latest('id')->lockForUpdate()->first();
+                if (! $run || $run->id !== $runId) {
+                    throw ValidationException::withMessages(['sync' => __('store.sync_resume_unavailable')]);
+                }
+                if (in_array($run->status, self::ACTIVE, true)) {
+                    return [$run, false];
+                }
+                if (! $this->canResume($run, $locked)) {
+                    throw ValidationException::withMessages(['sync' => __('store.sync_resume_unavailable')]);
+                }
+                $run->update([
+                    'status' => 'queued', 'error' => null, 'finished_at' => null,
+                    'stats' => [
+                        ...$run->stats, 'step' => ($run->stats['step'] ?? 0) + 1,
+                        'step_claimed' => false, 'phase' => 'queued', 'retry_at' => null,
+                        'retry_reason' => null, 'rate_retries' => 0, 'transient_retries' => 0, 'error_detail' => null,
+                        'resumed_at' => now()->toIso8601String(), 'heartbeat_at' => now()->toIso8601String(),
+                    ],
+                ]);
+
+                return [$run, true];
+            });
+        } finally {
+            $lock->release();
+        }
+
+        return $dispatch ? $this->dispatch($store, $run, $userId, false) : $run;
+    }
+
+    public function canResume(SyncRun $run, Store $store): bool
+    {
+        return $run->status === 'failed' && ($run->stats['mode'] ?? null) === 'paged'
+            && (string) $store->platform_store_id === ($run->stats['zid_store_id'] ?? null)
+            && filled($store->zid_access_token) && filled($store->zid_authorization)
+            && app(ZidSyncStaging::class)->hasCheckpoint($run);
+    }
+
     /** @return array{SyncRun, bool} */
     public function reserve(Store $store): array
     {
@@ -53,6 +106,8 @@ class ZidSyncState
             if ($active) {
                 return [$active, false];
             }
+            // A fresh import replaces any resumable checkpoint of this store.
+            app(ZidSyncStaging::class)->clearStore($locked);
 
             return [$locked->syncRuns()->create([
                 'type' => 'zid_sync', 'status' => 'queued',
@@ -109,15 +164,15 @@ class ZidSyncState
         $run->stats = $stats;
     }
 
-    public function fail(int $runId, string $code, ?int $step = null): void
+    public function fail(int $runId, string $code, ?int $step = null, ?string $detail = null): void
     {
-        $changed = SyncRun::query()->whereKey($runId)->whereIn('status', self::ACTIVE)
+        SyncRun::query()->whereKey($runId)->whereIn('status', self::ACTIVE)
             ->when($step !== null, fn ($query) => $query->where('stats->step', $step))->update([
                 'status' => 'failed', 'error' => $code, 'finished_at' => now(), 'updated_at' => now(),
+                ...($detail !== null ? ['stats->error_detail' => $detail] : []),
             ]);
-        if ($changed && Schema::hasTable('zid_sync_pages')) {
-            app(ZidSyncStaging::class)->clear($runId);
-        }
+        // Keep committed pages and the cursor. A failed API call, save, worker
+        // or deployment must not discard hours of successfully read data.
     }
 
     /** Recover rows left running after a killed worker or a deployment. */
@@ -126,7 +181,7 @@ class ZidSyncState
         foreach ($store->syncRuns()->where('type', 'zid_sync')->whereIn('status', self::ACTIVE)->get() as $run) {
             $legacy = ! isset($run->stats['phase']);
             $deadline = $run->status === 'queued'
-                ? $run->created_at?->copy()->addMinutes(15)
+                ? $run->updated_at?->copy()->addMinutes(15)
                 : ($run->started_at ?? $run->created_at)?->copy()->addSeconds($legacy ? 960 : 660);
             if (($run->stats['mode'] ?? null) === 'paged' && $run->status === 'running') {
                 $deadline = $run->updated_at?->copy()->addSeconds(($run->stats['step_claimed'] ?? false) ? 660 : 900);
@@ -159,11 +214,14 @@ class ZidSyncState
             'products_saved' => $run->stats['products'] ?? 0,
             'orders_saved' => $run->stats['orders'] ?? 0,
             'error_code' => $run->status === 'failed' ? $run->error : null,
+            'error_detail' => $run->status === 'failed' ? ($run->stats['error_detail'] ?? null) : null,
             'queued_at' => $run->created_at?->toIso8601String(),
             'started_at' => $run->started_at?->toIso8601String(),
             'updated_at' => $run->stats['heartbeat_at'] ?? $run->updated_at?->toIso8601String(),
             'finished_at' => $run->finished_at?->toIso8601String(),
             'retry_at' => $run->stats['retry_at'] ?? null,
+            'retry_reason' => $run->stats['retry_reason'] ?? null,
+            'can_resume' => $this->canResume($run, $store),
         ];
     }
 }

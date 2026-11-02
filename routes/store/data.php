@@ -42,4 +42,5 @@ Route::get('integrations/zid/redirect', [IntegrationController::class, 'redirect
 Route::get('integrations/zid/callback', [IntegrationController::class, 'callback'])->name('integrations.zid.callback');
 Route::delete('integrations/zid', [IntegrationController::class, 'disconnect'])->name('integrations.zid.disconnect');
 Route::post('integrations/zid/sync', [IntegrationController::class, 'sync'])->name('integrations.zid.sync');
+Route::post('integrations/zid/sync/{run}/resume', [IntegrationController::class, 'resume'])->whereNumber('run')->name('integrations.zid.sync.resume');
 Route::post('integrations/zid/check', [IntegrationController::class, 'check'])->name('integrations.zid.check');

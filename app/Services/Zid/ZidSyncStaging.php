@@ -2,6 +2,8 @@
 
 namespace App\Services\Zid;
 
+use App\Models\Store;
+use App\Models\SyncRun;
 use Generator;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -9,6 +11,37 @@ use RuntimeException;
 /** Durable normalized pages, shared by workers; never stores customer details. */
 class ZidSyncStaging
 {
+    public function hasCheckpoint(SyncRun $run): bool
+    {
+        $phase = $run->stats['cursor_phase'] ?? null;
+        if (! in_array($phase, ['products', 'orders', 'saving'], true)) {
+            return false;
+        }
+        // Reject missing or incomplete old checkpoints instead of skipping
+        // their pages and presenting a partial catalog as a complete import.
+        foreach (['products' => 'product_pages', 'orders' => 'order_pages'] as $kind => $key) {
+            $expected = $run->stats[$key] ?? null;
+            if (! is_int($expected) || $expected < 0) {
+                return false;
+            }
+            $summary = DB::table('zid_sync_pages')->where('sync_run_id', $run->id)->where('phase', $kind)
+                ->selectRaw('COUNT(*) as pages, MIN(page) as first_page, MAX(page) as last_page')->first();
+            if ((int) $summary->pages !== $expected
+                || ($expected > 0 && ((int) $summary->first_page !== 1 || (int) $summary->last_page !== $expected))) {
+                return false;
+            }
+        }
+        $next = $run->stats['next_page'] ?? null;
+
+        // Order pages restart at 1 in each date window, so only the product
+        // cursor can be matched against its staged page count.
+        return is_int($next) && $next >= 1 && match ($phase) {
+            'products' => $run->stats['order_pages'] === 0 && $next === $run->stats['product_pages'] + 1,
+            'orders' => $run->stats['product_pages'] > 0,
+            'saving' => $run->stats['product_pages'] > 0 && $run->stats['order_pages'] > 0,
+        };
+    }
+
     /** @param list<array<string, mixed>> $rows */
     public function save(int $runId, string $phase, int $page, string $fingerprint, array $rows): void
     {
@@ -34,5 +67,10 @@ class ZidSyncStaging
     public function clear(int $runId): void
     {
         DB::table('zid_sync_pages')->where('sync_run_id', $runId)->delete();
+    }
+
+    public function clearStore(Store $store): void
+    {
+        DB::table('zid_sync_pages')->whereIn('sync_run_id', $store->syncRuns()->where('type', 'zid_sync')->select('id'))->delete();
     }
 }

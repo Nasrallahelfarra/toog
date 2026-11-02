@@ -1,4 +1,4 @@
-import { usePoll } from '@inertiajs/react';
+import { router, usePoll } from '@inertiajs/react';
 import {
     AlertTriangle,
     CheckCircle2,
@@ -6,10 +6,12 @@ import {
     Clock3,
     Loader2,
     Package,
+    RotateCcw,
     ShoppingBag,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { SectionCard } from '@/components/mojo/section-card';
+import { Button } from '@/components/ui/button';
 import { useI18n } from '@/hooks/use-i18n';
 import { cn } from '@/lib/utils';
 
@@ -24,11 +26,14 @@ export type ZidSyncProgressData = {
     products_saved: number;
     orders_saved: number;
     error_code: string | null;
+    error_detail: string | null;
+    can_resume: boolean;
     queued_at: string | null;
     started_at: string | null;
     updated_at: string | null;
     finished_at: string | null;
     retry_at: string | null;
+    retry_reason: string | null;
 };
 
 export const syncIsActive = (sync: ZidSyncProgressData | null) =>
@@ -65,6 +70,7 @@ export function ZidSyncProgress({
     const s = t.zidSync;
     const [now, setNow] = useState(() => Date.now());
     const [networkError, setNetworkError] = useState(false);
+    const [resuming, setResuming] = useState(false);
     const active = syncIsActive(sync);
     useEffect(() => {
         if (!active) return;
@@ -211,7 +217,12 @@ export function ZidSyncProgress({
                         role="status"
                         className="rounded-xl bg-info-soft p-3 text-sm leading-relaxed text-info"
                     >
-                        {tr(s.retrying, { time: dateTime(sync.retry_at) })}
+                        {tr(
+                            sync.retry_reason === 'api_unavailable'
+                                ? s.retryingApi
+                                : s.retrying,
+                            { time: dateTime(sync.retry_at) },
+                        )}
                     </p>
                 )}
                 {(failed ||
@@ -228,13 +239,46 @@ export function ZidSyncProgress({
                         )}
                     >
                         {failed
-                            ? error
+                            ? sync.error_detail
+                                ? `${error} ${tr(s.detail, { detail: sync.error_detail })}`
+                                : error
                             : networkError
                               ? s.network
                               : sync.status === 'queued'
                                 ? s.waiting
                                 : s.slow}
                     </p>
+                )}
+                {failed && sync.can_resume && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3">
+                        <p className="text-sm leading-relaxed text-muted-foreground">
+                            {s.resumeHint}
+                        </p>
+                        <Button
+                            size="sm"
+                            disabled={resuming}
+                            onClick={() =>
+                                router.post(
+                                    `/store/integrations/zid/sync/${sync.id}/resume`,
+                                    {},
+                                    {
+                                        preserveScroll: true,
+                                        onStart: () => setResuming(true),
+                                        onFinish: () => setResuming(false),
+                                    },
+                                )
+                            }
+                        >
+                            <RotateCcw
+                                className={cn(
+                                    'size-4',
+                                    resuming &&
+                                        'animate-spin motion-reduce:animate-none',
+                                )}
+                            />
+                            {s.resume}
+                        </Button>
+                    </div>
                 )}
                 <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
                     <span>

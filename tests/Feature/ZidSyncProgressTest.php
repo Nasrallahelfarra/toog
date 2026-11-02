@@ -11,8 +11,11 @@ use App\Models\SyncRun;
 use App\Models\User;
 use App\Services\Analytics\PerformanceClassifier;
 use App\Services\Zid\ZidClient;
+use App\Services\Zid\ZidMapper;
 use App\Services\Zid\ZidSyncState;
+use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -56,9 +59,9 @@ class ZidSyncProgressTest extends TestCase
         return ['id' => 200, 'created_at' => now()->toDateTimeString(), 'status' => 'delivered', 'products' => [['id' => 'real-1', 'quantity' => 2, 'total' => 40]]];
     }
 
-    private function perform(SyncRun $run): void
+    private function perform(SyncRun $run, ?SyncStoreData $job = null): void
     {
-        $job = new SyncStoreData($this->store, runId: $run->id);
+        $job ??= new SyncStoreData($this->store, runId: $run->id);
         for ($step = 0; $step < 20; $step++) {
             $this->app->call([$job, 'handle']);
             if ($job->chained === []) {
@@ -132,7 +135,7 @@ class ZidSyncProgressTest extends TestCase
             $this->assertStringContainsString('HTTP 403', $e->getMessage());
         }
         $this->assertSame('failed', $run->fresh()->status);
-        $this->assertSame('import_failed', $run->fresh()->error);
+        $this->assertSame('authorization_failed', $run->fresh()->error);
         $this->assertSame('Existing', $product->fresh()->name);
         $this->assertNull($this->store->fresh()->last_synced_at);
         $this->assertSame('connected', $this->store->fresh()->connection_status);
@@ -375,5 +378,117 @@ class ZidSyncProgressTest extends TestCase
         $this->state->fail($run->id, 'job_failed');
         $this->expectException(RuntimeException::class);
         $this->state->progress($run, 'products');
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function orders(int $from, int $to): array
+    {
+        $start = now()->subMonths(2)->startOfDay();
+
+        return array_map(fn ($n) => [
+            'id' => $n, 'created_at' => $start->copy()->addHours($n)->toDateTimeString(), 'status' => 'delivered',
+            'products' => [['id' => 'real-1', 'quantity' => 1, 'total' => 10]],
+        ], range($from, $to));
+    }
+
+    private function rejected(): PromiseInterface
+    {
+        return Http::response(['status' => 'validation_error', 'message' => [
+            'type' => 'validation_errors', 'code' => 'ERROR_POPUP_OK', 'name' => 'المدخلات', 'description' => 'رقم الصفحة غير صالح',
+        ]], 422);
+    }
+
+    public function test_rejected_deep_order_page_restarts_from_the_newest_order_and_counts_each_order_once(): void
+    {
+        $run = $this->state->enqueue($this->store);
+        $windows = [];
+        Http::fake(function ($request) use (&$windows) {
+            if (str_contains($request->url(), 'products/')) {
+                return Http::response(['results' => $this->products(), 'next' => null]);
+            }
+            $this->assertSame(ZidClient::ORDERS_PER_PAGE, (int) $request['per_page']);
+            $windows[] = [$request['date_from'], (int) $request['page']];
+            if (count($windows) === 1) {
+                return Http::response(['orders' => $this->orders(1, 100)]);
+            }
+            if (count($windows) === 2) {
+                return $this->rejected();
+            }
+
+            // The new window overlaps the last day already read.
+            return Http::response(['orders' => $this->orders(91, 120)]);
+        });
+        $this->perform($run);
+        $run->refresh();
+        $this->assertSame('completed', $run->status);
+        $this->assertSame([1, 2, 1], array_column($windows, 1));
+        $this->assertSame($windows[0][0], $windows[1][0]);
+        $this->assertTrue(Carbon::parse($windows[2][0])->gt(Carbon::parse($windows[0][0])));
+        $this->assertSame(120, $run->stats['orders']);
+        $this->assertSame(1, $run->stats['order_windows']);
+        $this->assertSame(120, (int) DB::table('product_sales')->sum('units'));
+    }
+
+    public function test_failed_read_keeps_saved_pages_and_resumes_without_rereading_them(): void
+    {
+        $run = $this->state->enqueue($this->store);
+        $requests = ['products' => 0, 'orders' => 0];
+        $ordersFail = true;
+        Http::fake(function ($request) use (&$requests, &$ordersFail) {
+            if (str_contains($request->url(), 'products/')) {
+                $requests['products']++;
+
+                return Http::response(['results' => $this->products(), 'next' => null]);
+            }
+            $requests['orders']++;
+
+            return $ordersFail ? $this->rejected() : Http::response(['orders' => $this->orders(1, 3)]);
+        });
+        try {
+            $this->perform($run);
+            $this->fail('Expected Zid to reject the order request.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('HTTP 422', $e->getMessage());
+        }
+        $run->refresh();
+        $this->assertSame('zid_rejected', $run->error);
+        $this->assertSame('رقم الصفحة غير صالح', $run->stats['error_detail']);
+        $this->assertDatabaseCount('zid_sync_pages', 1);
+        $this->get('/store/settings/integration')->assertInertia(fn ($page) => $page
+            ->where('sync.can_resume', true)->where('sync.error_detail', 'رقم الصفحة غير صالح'));
+
+        $ordersFail = false;
+        $this->post("/store/integrations/zid/sync/{$run->id}/resume")->assertRedirect();
+        $this->assertSame('queued', $run->fresh()->status);
+        $job = Bus::dispatched(SyncStoreData::class)->last();
+        $this->perform($run, $job);
+        $run->refresh();
+        $this->assertSame('completed', $run->status);
+        $this->assertSame(1, $requests['products'], 'Saved product pages must not be read again.');
+        $this->assertSame(3, $run->stats['orders']);
+        $this->assertDatabaseCount('zid_sync_pages', 0);
+
+        // A completed run cannot be resumed again.
+        $this->post("/store/integrations/zid/sync/{$run->id}/resume")->assertRedirect();
+        $this->assertSame('completed', $run->fresh()->status);
+    }
+
+    public function test_a_new_sync_discards_checkpoints_of_earlier_runs(): void
+    {
+        $old = $this->store->syncRuns()->create(['type' => 'zid_sync', 'status' => 'failed', 'error' => 'zid_rejected']);
+        DB::table('zid_sync_pages')->insert(['sync_run_id' => $old->id, 'phase' => 'products', 'page' => 1, 'fingerprint' => 'x', 'rows' => '[]']);
+        $this->state->enqueue($this->store);
+        $this->assertDatabaseCount('zid_sync_pages', 0);
+    }
+
+    public function test_product_values_fit_their_columns(): void
+    {
+        $row = (new ZidMapper)->product([
+            'id' => 7, 'name' => str_repeat('ب', 300), 'sku' => str_repeat('s', 300),
+            'images' => [['image' => ['medium' => 'https://media.zid.store/'.str_repeat('%D8%A7', 50).'.jpg']]],
+        ]);
+        $this->assertSame(255, mb_strlen($row['name']));
+        $this->assertSame(255, mb_strlen($row['sku']));
+        $this->assertNull($row['image_url']);
     }
 }
