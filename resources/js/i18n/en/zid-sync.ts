@@ -25,6 +25,8 @@ export const zidSync: typeof ar = {
     queuedAt: 'Requested at',
     retrying:
         'Zid requested a temporary pause. Import will resume automatically from the last saved page. Next attempt: {time}.',
+    retryingApi:
+        'Zid is temporarily not responding. Import will resume automatically from the last saved page. Next attempt: {time}.',
     reading:
         'These counts reflect data read. Results are saved after reading and validation finish. Orders cover the last 12 months.',
     saved: 'Results were saved and product analysis updated. Analyzed orders may differ from orders read because canceled or invalid orders are excluded.',
@@ -33,6 +35,10 @@ export const zidSync: typeof ar = {
     slow: 'No new progress for over two minutes. The import may be waiting for Zid; completion has not been confirmed.',
     network:
         'Could not refresh import status. Retrying automatically; these are the last received counts.',
+    detail: 'Zid replied: {detail}',
+    resumeHint:
+        'Pages read before the stop are saved. You can continue from the last page instead of reading everything again.',
+    resume: 'Continue from last page',
     errors: {
         queue_failed:
             'Could not queue the import. Check the queue connection and worker, then retry.',
@@ -45,7 +51,13 @@ export const zidSync: typeof ar = {
         catalog_busy:
             'Another task is updating this catalog. Wait briefly, then sync again.',
         import_failed:
-            'Reading or saving failed. Previous data was preserved. Check Zid product/order permissions and the failed job log, then retry.',
+            'Reading or saving failed. The store’s previous data is unchanged. Check the failed job log, then retry.',
+        authorization_failed:
+            'Zid refused access. Reconnect the store with product and order permissions, then sync again.',
+        zid_rejected:
+            'Zid rejected one of the read requests. The store’s previous data is unchanged.',
+        api_unavailable:
+            'Zid did not respond after several waits. The store’s previous data is unchanged.',
         job_failed:
             'The import job stopped. Check the failed job log, then sync again.',
         rate_limited:

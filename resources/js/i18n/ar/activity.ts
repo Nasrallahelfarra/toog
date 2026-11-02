@@ -59,6 +59,7 @@ export const activity = {
         'data.features_extraction': 'استخلص سمات المنتجات',
         'data.reclassified': 'أعاد تصنيف أداء المنتجات',
         'data.sync_requested': 'طلب مزامنة البيانات',
+        'data.sync_resumed': 'استأنف مزامنة البيانات',
         'integration.connected': 'ربط المتجر بزد',
         'integration.disconnected': 'ألغى ربط زد',
         'integration.checked': 'فحص ربط زد',

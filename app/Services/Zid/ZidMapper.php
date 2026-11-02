@@ -29,15 +29,20 @@ class ZidMapper
         }
 
         $category = Arr::first($p['categories'] ?? []) ?? ($p['category'] ?? null);
+        $category = is_array($category) ? $this->localised($category['name'] ?? null) : $this->localised($category);
+
+        // Fit the 255-character columns: strict MySQL rejects the whole save
+        // for one overlong value. A cut URL would break, so drop it instead.
+        $image = $this->image($p);
 
         return [
             'external_id' => (string) $id,
-            'sku' => $p['sku'] ?? null,
-            'name' => $name,
-            'category' => is_array($category) ? $this->localised($category['name'] ?? null) : $this->localised($category),
+            'sku' => is_scalar($p['sku'] ?? null) ? mb_substr((string) $p['sku'], 0, 255) : null,
+            'name' => mb_substr($name, 0, 255),
+            'category' => $category === null ? null : mb_substr($category, 0, 255),
             'price' => $this->number($p['sale_price'] ?? null) ?: $this->number($p['price'] ?? null),
             'stock' => (int) ($p['quantity'] ?? $p['stock'] ?? 0),
-            'image_url' => $this->image($p),
+            'image_url' => $image !== null && strlen($image) <= 255 ? $image : null,
             'launched_at' => $this->date($p['created_at'] ?? null),
         ];
     }
@@ -46,7 +51,7 @@ class ZidMapper
      * Order lines as [external_id, units, revenue] plus the order month.
      *
      * @param  array<string, mixed>  $o
-     * @return array{month: string, returned: bool, lines: list<array{external_id: string, units: int, revenue: float}>}|null
+     * @return array{id: string|null, month: string, returned: bool, lines: list<array{external_id: string, units: int, revenue: float}>}|null
      */
     public function order(array $o): ?array
     {
@@ -77,6 +82,8 @@ class ZidMapper
         }
 
         return [
+            // Lets the save step count an order once when read windows overlap.
+            'id' => isset($o['id']) && is_scalar($o['id']) ? (string) $o['id'] : null,
             'month' => Carbon::parse($date)->startOfMonth()->toDateString(),
             'returned' => in_array($status, self::RETURNED_STATUSES, true),
             'lines' => $lines,

@@ -41,6 +41,9 @@ class ZidClient
 
     public const PER_PAGE = 50;
 
+    /** The documented maximum; halves the requests of a long order import. */
+    public const ORDERS_PER_PAGE = 100;
+
     public const MAX_PAGES = 200;
 
     /**
@@ -176,7 +179,7 @@ class ZidClient
     public function orderPage(\DateTimeInterface $since, int $page): array
     {
         return $this->page(self::ORDERS_PATH, [
-            'per_page' => self::PER_PAGE, 'payload_type' => 'default',
+            'per_page' => self::ORDERS_PER_PAGE, 'payload_type' => 'default',
             'date_attribute' => 'created_at', 'date_from' => $since->format('Y-m-d\TH:i:s.vO'),
             'order_by' => 'created_at', 'sort_by' => 'asc',
         ], ['orders', 'results', 'data'], $page);
@@ -261,7 +264,7 @@ class ZidClient
             }
             $json = $response->throw()->json() ?? [];
         } catch (RequestException $e) {
-            throw new RuntimeException("Zid request to {$path} failed (HTTP ".$e->response->status().').', previous: $e);
+            throw new ZidApiException($e->response->status(), $path, $e);
         }
         $items = null;
         foreach ($keys as $key) {
@@ -278,9 +281,17 @@ class ZidClient
                 throw new RuntimeException("Zid returned an invalid item for {$path}.");
             }
         }
+        // The orders list reports only total_order_count, not a last page.
+        $perPage = (int) ($query['per_page'] ?? $query['page_size'] ?? self::PER_PAGE);
         $last = $json['last_page'] ?? $json['pagination']['last_page'] ?? null;
-        $hasNext = $last !== null ? $page < (int) $last
-            : (array_key_exists('next', $json) ? filled($json['next']) : count($items) >= self::PER_PAGE);
+        $total = $json['total_order_count'] ?? null;
+        $hasNext = match (true) {
+            $last !== null => $page < (int) $last,
+            array_key_exists('next', $json) => filled($json['next']),
+            count($items) < $perPage => false,
+            is_numeric($total) => $page * $perPage < (int) $total,
+            default => true,
+        };
         if ($items === [] && $hasNext) {
             throw new RuntimeException("Zid returned an empty page with more pages for {$path}.");
         }

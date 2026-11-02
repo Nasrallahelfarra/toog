@@ -60,6 +60,7 @@ export const activity: typeof ar = {
         'data.features_extraction': 'Extracted product attributes',
         'data.reclassified': 'Reclassified product performance',
         'data.sync_requested': 'Requested a data sync',
+        'data.sync_resumed': 'Resumed a data sync',
         'integration.connected': 'Connected the store to Zid',
         'integration.disconnected': 'Disconnected Zid',
         'integration.checked': 'Checked the Zid connection',

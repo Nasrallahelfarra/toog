@@ -14,6 +14,7 @@ use App\Support\CurrentStore;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
@@ -197,6 +198,24 @@ class IntegrationController extends Controller
         $run = app(ZidSyncState::class)->enqueue($store, $request->user()->id);
         Activity::log('data.sync_requested', $store);
         Inertia::flash('toast', ['type' => $run->status === 'failed' ? 'error' : 'success', 'message' => $run->status === 'failed' ? __('store.sync_start_failed') : __('mojo.sync_started')]);
+
+        return back();
+    }
+
+    /** Continue a failed import from its saved pages instead of re-reading Zid. */
+    public function resume(Request $request, int $run): RedirectResponse
+    {
+        $store = $this->current->require();
+
+        try {
+            $resumed = app(ZidSyncState::class)->resume($store, $run, $request->user()->id);
+        } catch (ValidationException $e) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => $e->getMessage()]);
+
+            return back();
+        }
+        Activity::log('data.sync_resumed', $store);
+        Inertia::flash('toast', ['type' => $resumed->status === 'failed' ? 'error' : 'success', 'message' => $resumed->status === 'failed' ? __('store.sync_start_failed') : __('store.sync_resumed')]);
 
         return back();
     }
