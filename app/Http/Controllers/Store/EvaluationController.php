@@ -7,6 +7,7 @@ use App\Http\Requests\Store\StoreEvaluationRequest;
 use App\Jobs\RunEvaluation;
 use App\Models\Design;
 use App\Models\DesignImprovement;
+use App\Models\DesignRequest;
 use App\Models\Evaluation;
 use App\Models\EvaluationBatch;
 use App\Models\Product;
@@ -17,6 +18,7 @@ use App\Support\CurrentStore;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -34,7 +36,7 @@ class EvaluationController extends Controller
 
     public function __construct(private readonly CurrentStore $current) {}
 
-    public function index(Request $request): Response
+    public function index(Request $request): Response|RedirectResponse
     {
         $store = $this->current->require();
         $filters = $request->only(['recommendation', 'decision', 'category', 'search', 'from', 'to', 'source']);
@@ -57,6 +59,10 @@ class EvaluationController extends Controller
             ->paginate(12)
             ->withQueryString()
             ->through(fn (Evaluation $e) => $this->summary($e));
+
+        if ($evaluations->currentPage() > $evaluations->lastPage()) {
+            return to_route('store.evaluations.index', [...$request->query(), 'page' => $evaluations->lastPage()]);
+        }
 
         $base = Evaluation::query()->where('store_id', $store->id)->where('source', '!=', 'design');
 
@@ -291,16 +297,25 @@ class EvaluationController extends Controller
         return back();
     }
 
-    public function destroy(Evaluation $evaluation): RedirectResponse
+    public function destroy(Request $request, Evaluation $evaluation): RedirectResponse
     {
         $this->own($evaluation);
 
-        Activity::log('evaluation.deleted', $evaluation, ['name' => $evaluation->name]);
-        $evaluation->delete();
+        $data = $request->validate([
+            'return_to' => ['nullable', 'string', 'max:2048', 'regex:~\A/store(?:/evaluations)?(?:\?[^#\r\n]*)?\z~'],
+        ]);
+
+        DB::transaction(function () use ($evaluation) {
+            Activity::log('evaluation.deleted', $evaluation, ['name' => $evaluation->name]);
+            // These references are nullable IDs without database foreign keys.
+            Design::query()->where('store_id', $evaluation->store_id)->where('evaluation_id', $evaluation->id)->update(['evaluation_id' => null]);
+            DesignRequest::query()->where('store_id', $evaluation->store_id)->where('evaluation_id', $evaluation->id)->update(['evaluation_id' => null]);
+            $evaluation->delete();
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('mojo.deleted')]);
 
-        return to_route('store.evaluations.index');
+        return redirect($data['return_to'] ?? route('store.evaluations.index'));
     }
 
     private function find(int $id): Evaluation

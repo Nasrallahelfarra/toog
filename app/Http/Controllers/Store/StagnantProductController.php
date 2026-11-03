@@ -20,7 +20,7 @@ class StagnantProductController extends Controller
 {
     public function __construct(private readonly CurrentStore $current) {}
 
-    public function index(Request $request, StagnantProducts $catalog): Response
+    public function index(Request $request, StagnantProducts $catalog): Response|RedirectResponse
     {
         $store = $this->current->require();
         $filters = $request->validate(['search' => 'nullable|string|max:150', 'category' => 'nullable|string|max:80']);
@@ -29,6 +29,10 @@ class StagnantProductController extends Controller
             ->when($filters['category'] ?? null, fn ($q, $category) => $q->where('category', $category))
             ->orderByDesc('stock')->orderBy('performance_score')->orderBy('id')->paginate(12)->withQueryString()
             ->through(fn (Product $p) => $catalog->product($p));
+
+        if ($products->currentPage() > $products->lastPage()) {
+            return redirect()->route('store.stagnant.index', [...$filters, 'page' => $products->lastPage()]);
+        }
 
         return Inertia::render('store/stagnant', [
             'products' => $products, 'summary' => fn () => $catalog->summary($store), 'filters' => $filters,

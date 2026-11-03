@@ -38,6 +38,23 @@ class ExtractProductFeatures implements ShouldQueue
             return false;
         }
 
+        $result = $this->read($ai);
+        if ($result['features'] !== []) {
+            $this->product->features = array_merge($this->product->features ?? [], $result['features']);
+            $this->product->save();
+        }
+
+        return $result['answered'];
+    }
+
+    /**
+     * Read without writing, so a store run can save the product and its
+     * progress together after checking that this worker still owns the step.
+     *
+     * @return array{features: array<string, mixed>, answered: bool}
+     */
+    public function read(Ai $ai): array
+    {
         $product = $this->product;
         $result = $ai->json(
             operation: 'attributes',
@@ -63,12 +80,7 @@ class ExtractProductFeatures implements ShouldQueue
             $features['extracted_at'] = now()->toIso8601String();
         }
 
-        if ($features !== []) {
-            $product->features = array_merge($product->features ?? [], $features);
-            $product->save();
-        }
-
-        return $answered;
+        return ['features' => $features, 'answered' => $answered];
     }
 
     /**

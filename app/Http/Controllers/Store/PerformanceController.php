@@ -132,6 +132,7 @@ class PerformanceController extends Controller
         Inertia::flash('toast', match (true) {
             $run->status === 'failed' => ['type' => 'error', 'message' => __('store.extraction_failed')],
             $run->wasRecentlyCreated => ['type' => 'success', 'message' => __('store.extraction_started', ['count' => $run->stats['total'] ?? 0])],
+            isset($run->stats['resumed_at']) => ['type' => 'info', 'message' => __('store.extraction_resuming', ['count' => $run->stats['resume_done'] ?? 0])],
             default => ['type' => 'info', 'message' => __('store.extraction_running')],
         });
 

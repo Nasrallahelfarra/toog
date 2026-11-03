@@ -113,12 +113,14 @@ class SyncStoreData implements ShouldQueue
                     throw new RuntimeException('The Zid import is no longer active.');
                 }
                 $stats = $this->import($run, $staging->rows($run->id, 'products'), $staging->rows($run->id, 'orders'));
-                $classifier->classify($store);
                 $store->forceFill(['last_synced_at' => now(), 'connection_status' => 'connected'])->save();
                 $run->update([
                     'status' => 'completed', 'finished_at' => now(),
                     'stats' => [...$run->stats, ...$stats, 'phase' => 'completed', 'orders_stored' => true, 'heartbeat_at' => now()->toIso8601String()],
                 ]);
+                // Make the completed sales window available to classification
+                // inside this transaction; an analysis failure rolls it all back.
+                $classifier->classify($store);
                 $staging->clear($run->id);
 
                 return $stats;

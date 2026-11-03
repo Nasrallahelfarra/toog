@@ -170,7 +170,9 @@ export default function Performance(props: Props) {
                 }
             />
 
-            {props.extraction?.recent ? (
+            {props.extraction &&
+            (props.extraction.recent ||
+                (props.extraction.status === 'failed' && props.sync.missing_features > 0)) ? (
                 <FadeIn>
                     <FeatureExtractionProgress
                         run={props.extraction}

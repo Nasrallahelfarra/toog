@@ -52,6 +52,7 @@ export type StagnantSummary = {
     total: number;
     stock: number;
     stock_value: number;
+    unclassified: number;
 };
 export type StagnantDashboard = StagnantSummary & {
     products: StagnantProduct[];
@@ -110,6 +111,13 @@ export function StagnantDashboardCard({ data }: { data: StagnantDashboard }) {
                 </Button>
             }
         >
+            {data.unclassified > 0 && (
+                <p className="mb-4 rounded-xl bg-muted/50 p-3 text-sm leading-7 text-muted-foreground">
+                    {tr(t.stagnant.unclassified, {
+                        count: number(data.unclassified),
+                    })}
+                </p>
+            )}
             <StagnantProductGrid products={data.products} dashboard />
         </SectionCard>
     );

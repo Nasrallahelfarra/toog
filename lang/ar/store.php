@@ -25,6 +25,7 @@ return [
     'extraction_started' => 'بدأ استخلاص سمات :count منتج.',
     'nothing_to_extract' => 'لا توجد منتجات بانتظار استخلاص السمات.',
     'extraction_running' => 'استخلاص السمات قيد التشغيل، تابع التقدم أعلى الصفحة.',
+    'extraction_resuming' => 'طلب الاستئناف قيد المعالجة. سمات :count منتج محفوظة، وسنكمل المنتجات المتبقية فقط.',
     'extraction_failed' => 'تعذّر بدء استخلاص السمات. حاول مرة أخرى.',
     'import_summary' => 'تم استيراد :imported صفًا، وتخطي :skipped.',
     'import_failed' => 'لم يُستورد أي صف. راجع الأخطاء أدناه.',

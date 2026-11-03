@@ -23,6 +23,7 @@ export const performance: typeof ar = {
         unread: 'Could not be read',
         remaining: 'Remaining',
         elapsed: 'Elapsed',
+        elapsedResume: 'Time since resuming',
         eta: 'About',
         seconds: '{n}s',
         minutes: '{m}m {s}s',
@@ -35,8 +36,8 @@ export const performance: typeof ar = {
         done: 'Attribute extraction finished for {count} products.',
         summary: 'Attributes extracted for {extracted} of {total} products. Products without a clear pattern or colours stay under “Data quality” for you to complete.',
         pendingHint: '{count} products have not been read by AI yet.',
-        continue: 'Extract the rest',
-        retry: 'Try again',
+        savedHint: 'Attributes for {count} products are saved and will not be read again.',
+        resume: 'Resume extraction',
         detail: 'Details: {detail}',
         queue: {
             ahead: '{n} tasks are ahead of this request in the queue; it starts automatically after them.',
@@ -60,6 +61,7 @@ export const performance: typeof ar = {
         },
         errors: {
             job_failed: 'The processing task stopped because of a server error.',
+            worker_stopped: 'The queue worker stopped. Progress is saved; you can resume the remaining products.',
             budget_exceeded: 'Extraction stopped because the store reached this month’s AI budget.',
             ai_unavailable: 'Extraction stopped because the AI did not respond for several products in a row. Try again shortly.',
             timed_out: 'Extraction stopped before finishing. You can continue with the rest from where it stopped.',
@@ -106,7 +108,7 @@ export const performance: typeof ar = {
     signals: {
         velocity: {
             what: 'How many units the product sells per month.',
-            how: 'Units sold over the last 12 months ÷ the months in which the product actually sold. Months without sales are left out so a recently launched product is not penalised.',
+            how: 'Units sold divided by observed months. After a full sync, observation starts at the later of sales coverage or product launch and includes days without sales. Otherwise, recorded sales months are used, including explicit zero-sales months.',
             why: 'The clearest sign of real demand for a product, so it carries the largest weight.',
             source: 'Synced Zid orders or the imported sales file. Cancelled orders are excluded.',
         },

@@ -1,5 +1,5 @@
-import { Link, router } from '@inertiajs/react';
-import { Banknote, Package, Search, Turtle } from 'lucide-react';
+import { Link, router, useForm } from '@inertiajs/react';
+import { Banknote, Package, RefreshCw, Search, Turtle } from 'lucide-react';
 import { useState } from 'react';
 import { PageBody, PageHeader } from '@/components/mojo/page-header';
 import { Pagination } from '@/components/mojo/pagination';
@@ -27,10 +27,11 @@ export default function Stagnant({
     filters,
     categories,
 }: Props) {
-    const { t, money } = useI18n();
+    const { t, tr, number, money } = useI18n();
     const s = t.stagnant;
     const [search, setSearch] = useState(filters.search ?? '');
     const [category, setCategory] = useState(filters.category ?? '');
+    const reclassify = useForm({});
     return (
         <PageBody>
             <PageHeader
@@ -38,9 +39,33 @@ export default function Stagnant({
                 description={s.subtitle}
                 icon={Turtle}
                 actions={
-                    <Button asChild variant="outline">
-                        <Link href="/store/performance">{s.performance}</Link>
-                    </Button>
+                    <>
+                        <Button
+                            disabled={reclassify.processing}
+                            onClick={() =>
+                                reclassify.post(
+                                    '/store/performance/reclassify',
+                                    { preserveScroll: true },
+                                )
+                            }
+                        >
+                            <RefreshCw
+                                className={
+                                    reclassify.processing
+                                        ? 'size-4 animate-spin motion-reduce:animate-none'
+                                        : 'size-4'
+                                }
+                            />
+                            {reclassify.processing
+                                ? s.reclassifying
+                                : s.reclassify}
+                        </Button>
+                        <Button asChild variant="outline">
+                            <Link href="/store/performance">
+                                {s.performance}
+                            </Link>
+                        </Button>
+                    </>
                 }
             />
             <div className="grid gap-4 sm:grid-cols-3">
@@ -67,7 +92,22 @@ export default function Stagnant({
             <div className="space-y-2 text-xs leading-6 text-muted-foreground">
                 <p>{s.classification}</p>
                 <p>{s.period}</p>
+                <p>{s.reclassifyHint}</p>
             </div>
+            {summary.unclassified > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/40 p-4 text-sm leading-7">
+                    <p className="flex-1 text-muted-foreground">
+                        {tr(s.unclassified, {
+                            count: number(summary.unclassified),
+                        })}
+                    </p>
+                    <Button asChild variant="outline" size="sm">
+                        <Link href="/store/settings/integration">
+                            {s.importSales}
+                        </Link>
+                    </Button>
+                </div>
+            )}
             <form
                 className="flex flex-col gap-3 sm:flex-row"
                 onSubmit={(event) => {

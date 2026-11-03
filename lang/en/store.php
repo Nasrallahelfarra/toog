@@ -25,6 +25,7 @@ return [
     'extraction_started' => 'Extracting attributes for :count products.',
     'nothing_to_extract' => 'No products are waiting for attribute extraction.',
     'extraction_running' => 'Attribute extraction is already running; follow its progress at the top of the page.',
+    'extraction_resuming' => 'Resume request is in progress. Attributes for :count products are saved; only the remaining products will be processed.',
     'extraction_failed' => 'Could not start attribute extraction. Try again.',
     'import_summary' => ':imported rows imported, :skipped skipped.',
     'import_failed' => 'No rows were imported. See the errors below.',

@@ -54,13 +54,13 @@ class StorePerformance
      */
     public function signals(Store $store): array
     {
-        $products = Product::query()->where('store_id', $store->id)->get(['id', 'name', 'stock']);
+        $products = Product::query()->where('store_id', $store->id)->get(['id', 'name', 'stock', 'external_id', 'launched_at', 'created_at']);
         $names = $products->pluck('name', 'id');
         $metrics = $this->classifier->metrics($store, $products)->filter(fn (array $m) => $m['has_data']);
 
         return collect(PerformanceClassifier::WEIGHTS)->map(function (int $weight, string $signal) use ($metrics, $names, $products) {
             $measured = $signal === 'add_to_cart' ? $metrics->filter(fn (array $m) => $m['views'] > 0) : $metrics;
-            $values = $measured->map(fn (array $m) => $m[$signal]);
+            $values = $measured->map(fn (array $m) => (float) $m[$signal]);
             $ranked = PerformanceClassifier::lowerIsBetter($signal) ? $values->sort() : $values->sortDesc();
             $row = fn (float|int $value, int $id) => ['name' => $names[$id] ?? '—', 'value' => round($value, 2)];
 
@@ -177,7 +177,7 @@ class StorePerformance
     public function dataQuality(Store $store): array
     {
         $products = Product::query()->where('store_id', $store->id)->get();
-        $withSales = ProductSale::query()->where('store_id', $store->id)->distinct()->pluck('product_id')->flip();
+        $withSales = $this->classifier->metrics($store, $products)->filter(fn (array $m) => $m['has_data'])->keys()->flip();
         $badReturns = ProductSale::query()->where('store_id', $store->id)->whereColumn('returns', '>', 'units')->pluck('product_id')->unique()->flip();
 
         $issue = fn (string $key, string $severity, Collection $items) => [

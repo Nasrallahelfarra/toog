@@ -29,6 +29,7 @@ import type { SetupState } from '@/components/store/setup-hero';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartLegend, ChartTooltip, semanticChart, useChartAxes } from '@/components/mojo/chart';
 import { ColorChips } from '@/components/mojo/color-chips';
+import { DeleteEvaluationButton } from '@/components/evaluation/delete-evaluation-button';
 import { DecisionBadge } from '@/components/mojo/decision-badge';
 import { EmptyState } from '@/components/mojo/empty-state';
 import { Meter } from '@/components/mojo/meter';
@@ -654,30 +655,33 @@ function RecentEvaluationsCard({ items, thresholds }: { items: RecentEvaluation[
                 <Stagger className="space-y-1">
                     {items.map((item) => (
                         <StaggerItem key={item.id}>
-                            <Link
-                                href={`/store/evaluations/${item.id}`}
-                                prefetch
-                                className="hover:bg-muted/50 flex items-center gap-3 rounded-xl p-2 transition-colors"
-                            >
-                                <ScoreRing score={item.score} size={46} stroke={5} accept={thresholds.accept} reject={thresholds.reject} />
-                                <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2">
-                                        <span className="truncate text-sm font-medium">{item.name}</span>
-                                        {item.version > 1 && (
-                                            <span className="bg-muted text-muted-foreground shrink-0 rounded-md px-1.5 text-[10px]">
-                                                {tr(d.version, { n: item.version })}
-                                            </span>
-                                        )}
+                            <div className="flex items-center gap-1">
+                                <Link
+                                    href={`/store/evaluations/${item.id}`}
+                                    prefetch
+                                    className="hover:bg-muted/50 flex min-w-0 flex-1 items-center gap-3 rounded-xl p-2 transition-colors"
+                                >
+                                    <ScoreRing score={item.score} size={46} stroke={5} accept={thresholds.accept} reject={thresholds.reject} />
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <span className="truncate text-sm font-medium">{item.name}</span>
+                                            {item.version > 1 && (
+                                                <span className="bg-muted text-muted-foreground shrink-0 rounded-md px-1.5 text-[10px]">
+                                                    {tr(d.version, { n: item.version })}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="text-muted-foreground text-xs">
+                                            {item.category ?? '—'} · {relative(item.created_at)}
+                                        </div>
                                     </div>
-                                    <div className="text-muted-foreground text-xs">
-                                        {item.category ?? '—'} · {relative(item.created_at)}
+                                    <div className="flex shrink-0 flex-col items-end gap-1">
+                                        <DecisionBadge value={item.status === 'completed' ? item.recommendation : item.status} />
+                                        {item.final_decision && <DecisionBadge value={item.final_decision} className="opacity-80" />}
                                     </div>
-                                </div>
-                                <div className="flex shrink-0 flex-col items-end gap-1">
-                                    <DecisionBadge value={item.status === 'completed' ? item.recommendation : item.status} />
-                                    {item.final_decision && <DecisionBadge value={item.final_decision} className="opacity-80" />}
-                                </div>
-                            </Link>
+                                </Link>
+                                <DeleteEvaluationButton evaluation={item} compact />
+                            </div>
                         </StaggerItem>
                     ))}
                 </Stagger>

@@ -6,6 +6,14 @@ export const evaluation: typeof ar = {
     new: 'Evaluate a product',
     batchNew: 'Evaluate a collection',
 
+    deletion: {
+        button: 'Delete evaluation',
+        named: 'Delete evaluation for “{name}”',
+        confirm: 'The evaluation for “{name}” will be permanently removed from the evaluation log. This cannot be undone.',
+        deleting: 'Deleting…',
+        failed: 'The evaluation could not be deleted. Please try again.',
+    },
+
     stats: {
         total: 'Total evaluations',
         accept: 'Accept',

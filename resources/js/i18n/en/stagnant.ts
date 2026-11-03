@@ -15,13 +15,20 @@ export const stagnant: typeof ar = {
     turnover: 'Days to clear stock',
     price: 'Product price',
     classification:
-        'Based on store performance: a low score (33 or below) or slow stock turnover (240+ days).',
+        'Based on store performance: a low score (33 or below) or slow stock turnover (240+ days). Includes stocked products with no sales for at least 90 days after launch covered by a completed sync.',
+    reclassify: 'Refresh classification',
+    reclassifying: 'Refreshing classification',
+    reclassifyHint:
+        'Classification uses saved sales data and does not wait for image attribute extraction.',
+    unclassified:
+        '{count} products are unclassified. Refresh classification, then complete missing sales data if needed. Missing data does not mean a product is slow-moving.',
+    importSales: 'Sync or import sales',
     search: 'Search by product name or SKU',
     searchButton: 'Search',
     categories: 'All categories',
     empty: 'No products classified as slow movers',
     emptyHint:
-        'Slow-moving products appear here after sales sync and performance classification.',
+        'Refresh classification on this page. If the list stays empty, check that sales sync or import is complete.',
     noResults: 'No products match your search',
     reset: 'Clear filters',
     performance: 'View store performance',

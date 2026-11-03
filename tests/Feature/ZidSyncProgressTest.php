@@ -144,6 +144,23 @@ class ZidSyncProgressTest extends TestCase
         $this->assertTrue(Cache::lock(SyncStoreData::lockKey($this->store), 1)->get());
     }
 
+    public function test_successful_full_sync_classifies_unsold_stock_without_inventing_sales_rows(): void
+    {
+        $run = $this->state->enqueue($this->store);
+        $products = $this->products(2);
+        $products[0]['created_at'] = now()->subYear()->toDateString();
+        $products[1]['created_at'] = now()->subDays(10)->toDateString();
+        Http::fake([
+            '*products/*' => Http::response(['results' => $products, 'next' => null]),
+            '*orders*' => Http::response(['orders' => [], 'pagination' => ['last_page' => 1]]),
+        ]);
+        $this->perform($run);
+        $this->assertSame('completed', $run->fresh()->status);
+        $this->assertSame(Product::STAGNANT, $this->store->products()->where('external_id', 'real-1')->first()->performance);
+        $this->assertNull($this->store->products()->where('external_id', 'real-2')->first()->performance);
+        $this->assertDatabaseCount('product_sales', 0);
+    }
+
     public function test_save_or_analysis_failure_rolls_back_all_catalog_changes(): void
     {
         $run = $this->state->enqueue($this->store);

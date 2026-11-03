@@ -7,11 +7,12 @@ use App\Services\Ai\Ai;
 use App\Services\Catalog\FeatureExtraction;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\MaxAttemptsExceededException;
 use Throwable;
 
 /**
  * Works through a store's pending products one at a time (FR-1.4) and saves
- * progress on the run after each. It re-queues itself every few minutes so
+ * progress on the run after each. It re-queues itself in short batches so
  * syncs and evaluations are not stuck behind a large catalog.
  */
 class ExtractStoreFeatures implements ShouldQueue
@@ -22,74 +23,72 @@ class ExtractStoreFeatures implements ShouldQueue
 
     public int $timeout = 600;
 
+    public bool $failOnTimeout = true;
+
+    // Defaults also apply to jobs serialized before resumable steps existed.
+    public int $step = 0;
+
     /** Seconds of work per job; one more product (image + model retries) still fits the timeout. */
-    private const SLICE = 180;
+    private const SLICE = 45;
+
+    private const PRODUCTS_PER_JOB = 10;
 
     /** Consecutive model failures that stop the run instead of burning through the catalog. */
     private const MAX_FAILURES = 5;
 
-    public function __construct(public int $runId, public ?int $userId = null) {}
+    public function __construct(public int $runId, public ?int $userId = null, int $step = 0)
+    {
+        $this->step = $step;
+    }
 
     public function handle(Ai $ai, FeatureExtraction $extraction): void
     {
-        $run = SyncRun::query()->find($this->runId);
-
-        if (! $run || ! in_array($run->status, FeatureExtraction::ACTIVE, true)) {
+        $run = $extraction->claim($this->runId, $this->step);
+        if (! $run) {
             return;
         }
 
         $store = $run->store;
-        $stats = $run->stats ?? [];
-        $failures = 0;
+        $processed = 0;
         $until = microtime(true) + self::SLICE;
-        $run->update(['status' => 'running', 'started_at' => $run->started_at ?? now()]);
 
-        while (microtime(true) < $until) {
+        while (microtime(true) < $until && $processed < self::PRODUCTS_PER_JOB) {
             // Walk by id so a product the model failed on is not retried in the same run.
-            $product = $extraction->pending($store->id)->where('id', '>', $stats['cursor'] ?? 0)->orderBy('id')->first();
+            $product = $extraction->pending($store->id)->where('id', '>', $run->stats['cursor'] ?? 0)->orderBy('id')->first();
 
             if (! $product) {
-                $run->update(['status' => 'completed', 'stats' => [...$stats, 'current' => null], 'finished_at' => now()]);
+                $extraction->complete($run, $this->step);
 
                 return;
             }
 
             if ($store->aiBudgetExceeded()) {
-                $extraction->fail($run, 'budget_exceeded');
+                $extraction->fail($run, 'budget_exceeded', step: $this->step);
 
                 return;
             }
 
-            // Stop when the run was expired while the previous product was read.
-            if ($run->fresh()?->status !== 'running') {
+            if (! $extraction->current($run, $this->step, $product)) {
                 return;
             }
 
-            // Name the product in progress for the progress panel.
-            $stats['current'] = $product->name;
-            $run->update(['stats' => $stats]);
-            $answered = (new ExtractProductFeatures($product->setRelation('store', $store), $this->userId))->handle($ai);
-            $failures = $answered ? 0 : $failures + 1;
-            $stats = [
-                ...$stats,
-                'cursor' => $product->id,
-                'done' => ($stats['done'] ?? 0) + 1,
-                'extracted' => ($stats['extracted'] ?? 0) + (int) $answered,
-            ];
-            $run->update(['stats' => $stats]);
+            $result = (new ExtractProductFeatures($product->setRelation('store', $store), $this->userId))->read($ai);
+            if (! $extraction->checkpoint($run, $this->step, $product->id, $result)) {
+                return;
+            }
+            $processed++;
 
-            if ($failures >= self::MAX_FAILURES) {
-                $extraction->fail($run, 'ai_unavailable');
+            if (($run->stats['consecutive_failures'] ?? 0) >= self::MAX_FAILURES) {
+                $extraction->fail($run, 'ai_unavailable', step: $this->step);
 
                 return;
             }
         }
 
-        try {
-            self::dispatch($this->runId, $this->userId);
-        } catch (Throwable $e) {
-            report($e);
-            $extraction->fail($run, 'queue_failed');
+        if (! $extraction->pending($store->id)->where('id', '>', $run->stats['cursor'] ?? 0)->exists()) {
+            $extraction->complete($run, $this->step);
+        } else {
+            $extraction->next($run, $this->step, $this->userId);
         }
     }
 
@@ -100,7 +99,9 @@ class ExtractStoreFeatures implements ShouldQueue
     public function failed(?Throwable $e): void
     {
         if ($run = SyncRun::query()->find($this->runId)) {
-            app(FeatureExtraction::class)->fail($run, 'job_failed', $e?->getMessage());
+            // TimeoutExceededException also extends MaxAttemptsExceededException.
+            $code = $e instanceof MaxAttemptsExceededException ? 'worker_stopped' : 'job_failed';
+            app(FeatureExtraction::class)->fail($run, $code, $e?->getMessage(), $this->step);
         }
     }
 }

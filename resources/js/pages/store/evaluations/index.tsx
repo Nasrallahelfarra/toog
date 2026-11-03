@@ -1,6 +1,7 @@
 import { Link, router } from '@inertiajs/react';
 import { CheckCircle2, ChevronDown, FileSpreadsheet, FileText, Gauge, Layers, PenLine, Plus, ScanSearch, Search, X, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { DeleteEvaluationButton } from '@/components/evaluation/delete-evaluation-button';
 import type { EvaluationSummary, Thresholds } from '@/components/evaluation/types';
 import { ColorChips } from '@/components/mojo/color-chips';
 import { DecisionBadge } from '@/components/mojo/decision-badge';
@@ -212,11 +213,11 @@ export default function EvaluationsIndex({ evaluations, filters, stats, categori
                 <Stagger key={evaluations.current_page + JSON.stringify(filters)} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {evaluations.data.map((ev) => (
                         <StaggerItem key={ev.id}>
-                            <HoverLift className="h-full">
+                            <HoverLift className="bg-card group flex h-full flex-col rounded-2xl border border-border/70 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-shadow hover:shadow-md">
                                 <Link
                                     href={`/store/evaluations/${ev.id}`}
                                     prefetch
-                                    className="bg-card group flex h-full gap-4 rounded-2xl border border-border/70 p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-shadow hover:shadow-md"
+                                    className="flex flex-1 gap-4 rounded-t-2xl p-4"
                                 >
                                     <div className="bg-muted relative size-20 shrink-0 overflow-hidden rounded-xl">
                                         {ev.image_url ? (
@@ -252,6 +253,9 @@ export default function EvaluationsIndex({ evaluations, filters, stats, categori
                                         </p>
                                     </div>
                                 </Link>
+                                <div className="flex justify-end border-t border-border/50 px-3 py-1.5">
+                                    <DeleteEvaluationButton evaluation={ev} />
+                                </div>
                             </HoverLift>
                         </StaggerItem>
                     ))}

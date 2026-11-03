@@ -5,7 +5,7 @@ import {
     Clock3,
     Hourglass,
     Loader2,
-    RotateCcw,
+    Play,
     ScanSearch,
     Sparkles,
     XCircle,
@@ -40,6 +40,8 @@ export type FeatureExtractionRun = {
     started_at: string | null;
     updated_at: string | null;
     finished_at: string | null;
+    resumed_at: string | null;
+    resume_done: number;
 };
 
 export const extractionIsActive = (run: FeatureExtractionRun | null) =>
@@ -105,14 +107,17 @@ export function FeatureExtractionProgress({
         0,
         Math.floor(
             ((run.finished_at ? Date.parse(run.finished_at) : now) -
-                Date.parse(run.started_at ?? run.queued_at ?? '')) /
+                Date.parse(
+                    run.resumed_at ?? run.started_at ?? run.queued_at ?? '',
+                )) /
                 1000,
         ),
     );
-    // Average pace so far, once a few products give a steady estimate.
+    // Use only this session's work, excluding the time the run was stopped.
+    const sessionDone = run.done - run.resume_done;
     const eta =
-        run.status === 'running' && run.done >= 3 && Number.isFinite(elapsed)
-            ? Math.round((elapsed / run.done) * remaining)
+        run.status === 'running' && sessionDone >= 3 && Number.isFinite(elapsed)
+            ? Math.round((elapsed / sessionDone) * remaining)
             : null;
     const stale =
         run.status === 'running' &&
@@ -175,7 +180,8 @@ export function FeatureExtractionProgress({
                     </p>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         <span>
-                            {e.elapsed}: {duration(elapsed)}
+                            {run.resumed_at ? e.elapsedResume : e.elapsed}:{' '}
+                            {duration(elapsed)}
                         </span>
                         {eta !== null && (
                             <span>
@@ -311,17 +317,30 @@ export function FeatureExtractionProgress({
                 )}
                 {!active && pending > 0 && (
                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3">
-                        <p className="text-sm leading-relaxed text-muted-foreground">
-                            {tr(e.pendingHint, { count: number(pending) })}
-                        </p>
+                        <div className="space-y-1 text-sm leading-relaxed text-muted-foreground">
+                            {run.extracted > 0 && (
+                                <p className="text-success">
+                                    {tr(e.savedHint, {
+                                        count: number(run.extracted),
+                                    })}
+                                </p>
+                            )}
+                            <p>
+                                {tr(e.pendingHint, { count: number(pending) })}
+                            </p>
+                        </div>
                         <Button
                             size="sm"
                             variant="gold"
                             disabled={disabled}
                             onClick={onStart}
                         >
-                            <RotateCcw className="size-4" />
-                            {failed ? e.retry : e.continue}
+                            {disabled ? (
+                                <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
+                            ) : (
+                                <Play className="size-4" />
+                            )}
+                            {e.resume}
                         </Button>
                     </div>
                 )}
