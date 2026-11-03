@@ -17,6 +17,8 @@ class StorePerformance
 {
     public const PROFILE_GROUPS = ['colors', 'patterns', 'materials', 'styles', 'price_tiers'];
 
+    public function __construct(private readonly PerformanceClassifier $classifier) {}
+
     /**
      * Products per class and the criteria used to classify them (FR-1.3).
      *
@@ -41,6 +43,38 @@ class StorePerformance
             'weights' => PerformanceClassifier::WEIGHTS,
             'thresholds' => ['winner' => PerformanceClassifier::WINNER_FROM, 'stagnant' => PerformanceClassifier::STAGNANT_UNTIL],
         ];
+    }
+
+    /**
+     * How the store's products spread on each classification signal, for
+     * the criteria details: coverage, median, and the best and weakest
+     * products. Add-to-cart only counts products with recorded views.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function signals(Store $store): array
+    {
+        $products = Product::query()->where('store_id', $store->id)->get(['id', 'name', 'stock']);
+        $names = $products->pluck('name', 'id');
+        $metrics = $this->classifier->metrics($store, $products)->filter(fn (array $m) => $m['has_data']);
+
+        return collect(PerformanceClassifier::WEIGHTS)->map(function (int $weight, string $signal) use ($metrics, $names, $products) {
+            $measured = $signal === 'add_to_cart' ? $metrics->filter(fn (array $m) => $m['views'] > 0) : $metrics;
+            $values = $measured->map(fn (array $m) => $m[$signal]);
+            $ranked = PerformanceClassifier::lowerIsBetter($signal) ? $values->sort() : $values->sortDesc();
+            $row = fn (float|int $value, int $id) => ['name' => $names[$id] ?? '—', 'value' => round($value, 2)];
+
+            return [
+                'weight' => $weight,
+                'lower_is_better' => PerformanceClassifier::lowerIsBetter($signal),
+                'products' => $products->count(),
+                'with_sales' => $metrics->count(),
+                'measured' => $measured->count(),
+                'median' => $values->isEmpty() ? null : round((float) $values->median(), 2),
+                'best' => $ranked->take(3)->map($row)->values()->all(),
+                'weakest' => $ranked->reverse()->take(3)->map($row)->values()->all(),
+            ];
+        })->all();
     }
 
     /**

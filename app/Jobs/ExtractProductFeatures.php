@@ -32,6 +32,12 @@ class ExtractProductFeatures implements ShouldQueue
      */
     public function handle(Ai $ai): bool
     {
+        // Queued copies are left over from the old 50-per-click batches. The
+        // store-wide run (ExtractStoreFeatures) reads these products now.
+        if ($this->job) {
+            return false;
+        }
+
         $product = $this->product;
         $result = $ai->json(
             operation: 'attributes',
