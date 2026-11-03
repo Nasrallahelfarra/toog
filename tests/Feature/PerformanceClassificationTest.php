@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Actions\Stores\CreateStore;
+use App\Jobs\ReclassifyProducts;
 use App\Models\Product;
 use App\Models\ProductSale;
 use App\Models\Store;
@@ -11,6 +12,7 @@ use App\Models\User;
 use App\Services\Analytics\PerformanceClassifier;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -156,6 +158,8 @@ class PerformanceClassificationTest extends TestCase
 
     public function test_reclassifying_from_stagnant_page_updates_dashboard_and_list_without_extracting_images(): void
     {
+        config(['queue.default' => 'database']);
+        Queue::fake();
         $product = $this->product(['name' => 'Unsold stock']);
         $unknown = $this->product(['launched_at' => now()->subDay()]);
         $this->sync();
@@ -164,6 +168,8 @@ class PerformanceClassificationTest extends TestCase
 
         $this->actingAs($this->store->owner)->from('/store/stagnant')
             ->post('/store/performance/reclassify')->assertRedirect('/store/stagnant');
+        $queued = Queue::pushed(ReclassifyProducts::class)->sole();
+        app()->call([$queued, 'handle']);
         $this->get('/store/stagnant')->assertInertia(fn (Assert $page) => $page
             ->where('summary.total', 1)->where('summary.unclassified', 1)
             ->has('products.data', 1)->where('products.data.0.id', $product->id));

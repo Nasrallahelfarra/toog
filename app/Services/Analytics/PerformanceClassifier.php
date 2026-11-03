@@ -8,6 +8,7 @@ use App\Models\Store;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Classifies every catalog product as winner / average / stagnant (FR-1.3).
@@ -18,6 +19,10 @@ use Illuminate\Support\Collection;
  */
 class PerformanceClassifier
 {
+    private const WRITE_BATCH = 100;
+
+    private const RESULT_COLUMNS = ['performance', 'performance_score', 'units_sold', 'revenue', 'views', 'add_to_cart_rate', 'return_rate', 'turnover_days'];
+
     public const WEIGHTS = [
         'velocity' => 45,        // units sold per observed month
         'revenue' => 20,
@@ -34,7 +39,8 @@ class PerformanceClassifier
 
     public function classify(Store $store, int $months = 12): void
     {
-        $products = Product::query()->where('store_id', $store->id)->get();
+        $products = Product::query()->where('store_id', $store->id)
+            ->get(['id', 'external_id', 'stock', 'launched_at', 'created_at', ...self::RESULT_COLUMNS]);
         $metrics = $this->metrics($store, $products, $months);
         $measured = $metrics->filter(fn (array $m) => $m['has_data']);
 
@@ -43,13 +49,17 @@ class PerformanceClassifier
                 ->map(fn ($m) => (float) $m[$signal]), lowerIsBetter: self::lowerIsBetter($signal)),
         ]);
 
+        $updates = [];
         foreach ($products as $product) {
             $m = $metrics[$product->id];
 
             if (! $m['has_data']) {
-                $product->update(['performance' => null, 'performance_score' => null,
+                $product->fill(['performance' => null, 'performance_score' => null,
                     'units_sold' => 0, 'revenue' => 0, 'views' => 0, 'add_to_cart_rate' => 0,
                     'return_rate' => 0, 'turnover_days' => null]);
+                if ($product->isDirty(self::RESULT_COLUMNS)) {
+                    $updates[$product->id] = $product->only(self::RESULT_COLUMNS);
+                }
 
                 continue;
             }
@@ -66,7 +76,7 @@ class PerformanceClassifier
                 default => Product::AVERAGE,
             };
 
-            $product->update([
+            $product->fill([
                 'performance' => $class,
                 'performance_score' => $score,
                 'units_sold' => $m['units'],
@@ -76,7 +86,42 @@ class PerformanceClassifier
                 'return_rate' => round($m['returns'], 2),
                 'turnover_days' => $m['turnover'],
             ]);
+            if ($product->isDirty(self::RESULT_COLUMNS)) {
+                $updates[$product->id] = $product->only(self::RESULT_COLUMNS);
+            }
         }
+
+        // Save only derived metrics, in bounded statements. Product names,
+        // images and features are never overwritten or reinserted.
+        DB::transaction(function () use ($store, $updates): void {
+            foreach (array_chunk($updates, self::WRITE_BATCH, true) as $batch) {
+                $this->saveBatch($store->id, $batch);
+            }
+        });
+    }
+
+    /** @param array<int, array<string, mixed>> $batch */
+    private function saveBatch(int $storeId, array $batch): void
+    {
+        $grammar = DB::connection()->getQueryGrammar();
+        $id = $grammar->wrap('id');
+        $sets = [];
+        $bindings = [];
+        foreach (self::RESULT_COLUMNS as $column) {
+            $cases = [];
+            foreach ($batch as $productId => $values) {
+                // IDs come from the database and are rendered as integers;
+                // every result value remains a bound parameter.
+                $cases[] = 'WHEN '.(int) $productId.' THEN ?';
+                $bindings[] = $values[$column];
+            }
+            $sets[] = $grammar->wrap($column).' = CASE '.$id.' '.implode(' ', $cases).' ELSE '.$grammar->wrap($column).' END';
+        }
+        $sets[] = $grammar->wrap('updated_at').' = ?';
+        $ids = array_keys($batch);
+        DB::update('UPDATE '.$grammar->wrapTable('products').' SET '.implode(', ', $sets)
+            .' WHERE '.$grammar->wrap('store_id').' = ? AND '.$id.' IN ('.implode(', ', array_fill(0, count($ids), '?')).')',
+            [...$bindings, now()->toDateTimeString(), $storeId, ...$ids]);
     }
 
     public static function lowerIsBetter(string $signal): bool
@@ -99,14 +144,13 @@ class PerformanceClassifier
             ->where('store_id', $store->id)
             ->where('period', '>=', $since)
             ->where('period', '<=', now())
-            ->get()
-            ->groupBy('product_id');
+            ->selectRaw('product_id, COUNT(*) AS observed_months, SUM(units) AS units, SUM(revenue) AS revenue, SUM(views) AS views, SUM(add_to_cart) AS add_to_cart, SUM(returns) AS returns')
+            ->groupBy('product_id')->get()->keyBy('product_id');
 
         return $products->mapWithKeys(function (Product $p) use ($sales, $coverage) {
-            /** @var Collection<int, ProductSale> $rows */
-            $rows = $sales->get($p->id, collect());
-            $units = (int) $rows->sum('units');
-            $views = (int) $rows->sum('views');
+            $row = $sales->get($p->id);
+            $units = (int) ($row->units ?? 0);
+            $views = (int) ($row->views ?? 0);
             // An absent order row is only evidence of zero sales after a
             // complete Zid import, for a product old enough to be observed.
             $observedDays = null;
@@ -115,18 +159,18 @@ class PerformanceClassifier
                 $start = $launched->gt($coverage['since']) ? $launched : $coverage['since'];
                 $observedDays = max(0, (int) $start->diffInDays($coverage['until'], false));
             }
-            $observedMonths = max(1, $observedDays !== null ? $observedDays / 30 : $rows->count());
+            $observedMonths = max(1, $observedDays !== null ? $observedDays / 30 : (int) ($row?->getAttribute('observed_months') ?? 0));
             $dailyUnits = $units / ($observedMonths * 30);
 
             return [$p->id => [
                 'units' => $units,
-                'revenue' => (float) $rows->sum('revenue'),
+                'revenue' => (float) ($row->revenue ?? 0),
                 'views' => $views,
                 'velocity' => $units / $observedMonths,
-                'add_to_cart' => $views > 0 ? $rows->sum('add_to_cart') / $views * 100 : 0,
-                'returns' => $units > 0 ? $rows->sum('returns') / $units * 100 : 0,
+                'add_to_cart' => $views > 0 ? ($row->add_to_cart ?? 0) / $views * 100 : 0,
+                'returns' => $units > 0 ? ($row->returns ?? 0) / $units * 100 : 0,
                 'turnover' => $p->stock <= 0 ? 0 : ($dailyUnits > 0 ? min(365, (int) round($p->stock / $dailyUnits)) : 365),
-                'has_data' => $rows->isNotEmpty() || ($p->stock > 0 && $observedDays !== null && $observedDays >= self::UNSOLD_AFTER_DAYS),
+                'has_data' => $row !== null || ($p->stock > 0 && $observedDays !== null && $observedDays >= self::UNSOLD_AFTER_DAYS),
             ]];
         });
     }

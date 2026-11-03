@@ -7,6 +7,7 @@ use App\Jobs\RecommendStagnantProduct;
 use App\Models\Product;
 use App\Models\ProductRecommendation;
 use App\Services\Ai\Ai;
+use App\Services\Analytics\ClassificationRefresh;
 use App\Services\Catalog\StagnantProducts;
 use App\Support\CurrentStore;
 use Illuminate\Http\RedirectResponse;
@@ -37,6 +38,7 @@ class StagnantProductController extends Controller
         return Inertia::render('store/stagnant', [
             'products' => $products, 'summary' => fn () => $catalog->summary($store), 'filters' => $filters,
             'categories' => fn () => $catalog->query($store)->whereNotNull('category')->distinct()->orderBy('category')->pluck('category'),
+            'classification' => fn () => app(ClassificationRefresh::class)->latest($store),
         ]);
     }
 

@@ -1,6 +1,22 @@
 import type { performance as ar } from '../ar/performance';
 
 export const performance: typeof ar = {
+    classification: {
+        active: 'Classification in progress',
+        stages: { queued: 'Classification queued', running: 'Analyzing sales and classifying products', failed: 'Classification did not finish' },
+        completed: 'Classification updated for {count} products',
+        background: 'Processing continues in the background. You can keep working or leave this page; results refresh automatically when finished.',
+        waiting: 'The request starts after earlier jobs and any active sync. If it keeps waiting, check that the queue worker is running.',
+        updated: 'The list shows the latest saved classification results.',
+        network: 'Could not refresh the status because of a connection issue. Retrying automatically.',
+        requestFailed: 'Could not send the request. Refresh the page to check its status before trying again.',
+        errors: {
+            queue_unavailable: 'Configure a background queue and run its worker on the server to update classification.',
+            queue_failed: 'Could not queue the task. Please try again.',
+            job_failed: 'The task stopped before finishing. You can request classification again.',
+            timed_out: 'The task exceeded its waiting or processing time. Check the queue worker and try again.',
+        },
+    },
     title: 'Store performance',
     description: 'What sells and what doesn’t in your store, and the attributes linked to success and failure',
     reclassify: 'Reclassify',

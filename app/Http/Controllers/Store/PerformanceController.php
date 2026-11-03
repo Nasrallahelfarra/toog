@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Store;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
-use App\Services\Analytics\PerformanceClassifier;
+use App\Services\Analytics\ClassificationRefresh;
 use App\Services\Analytics\StorePerformance;
 use App\Services\Catalog\FeatureExtraction;
 use App\Services\Zid\ZidClient;
@@ -94,19 +94,27 @@ class PerformanceController extends Controller
                 'missing_features' => $extraction->pending($store->id)->count(),
             ],
             'extraction' => $extraction->latest($store),
+            'classification' => fn () => app(ClassificationRefresh::class)->latest($store),
         ]);
     }
 
     /**
      * Re-run the winner / average / stagnant classification on current data.
      */
-    public function reclassify(PerformanceClassifier $classifier): RedirectResponse
+    public function reclassify(Request $request, ClassificationRefresh $refresh): RedirectResponse
     {
         $store = $this->current->require();
-        $classifier->classify($store);
+        // The import already classifies its saved catalog. Avoid inserting a
+        // second run while its store-row lock could block the foreign key check.
+        if ($store->syncRuns()->where('type', 'zid_sync')->whereIn('status', ['queued', 'running'])->exists()) {
+            Inertia::flash('toast', ['type' => 'info', 'message' => __('store.classification_sync_running')]);
 
-        Activity::log('data.reclassified', $store);
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('store.reclassified')]);
+            return back();
+        }
+        $run = $refresh->start($store, $request->user()->id);
+        Inertia::flash('toast', $run?->status === 'failed'
+            ? ['type' => 'error', 'message' => __('store.classification_queue_failed')]
+            : ['type' => 'info', 'message' => __('store.classification_queued')]);
 
         return back();
     }

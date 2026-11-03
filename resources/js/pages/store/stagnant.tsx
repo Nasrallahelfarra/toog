@@ -1,10 +1,15 @@
-import { Link, router, useForm } from '@inertiajs/react';
-import { Banknote, Package, RefreshCw, Search, Turtle } from 'lucide-react';
+import { Link, router } from '@inertiajs/react';
+import { Banknote, Package, Search, Turtle } from 'lucide-react';
 import { useState } from 'react';
 import { PageBody, PageHeader } from '@/components/mojo/page-header';
 import { Pagination } from '@/components/mojo/pagination';
 import type { Paginated } from '@/components/mojo/pagination';
 import { StatCard } from '@/components/mojo/stat-card';
+import {
+    ClassificationButton,
+    ClassificationProgress,
+} from '@/components/store/classification-refresh';
+import type { ClassificationRun } from '@/components/store/classification-refresh';
 import { StagnantProductGrid } from '@/components/store/stagnant-products';
 import type {
     StagnantProduct,
@@ -19,6 +24,7 @@ type Props = {
     summary: StagnantSummary;
     filters: { search?: string; category?: string };
     categories: string[];
+    classification: ClassificationRun | null;
 };
 
 export default function Stagnant({
@@ -26,12 +32,12 @@ export default function Stagnant({
     summary,
     filters,
     categories,
+    classification,
 }: Props) {
     const { t, tr, number, money } = useI18n();
     const s = t.stagnant;
     const [search, setSearch] = useState(filters.search ?? '');
     const [category, setCategory] = useState(filters.category ?? '');
-    const reclassify = useForm({});
     return (
         <PageBody>
             <PageHeader
@@ -40,26 +46,7 @@ export default function Stagnant({
                 icon={Turtle}
                 actions={
                     <>
-                        <Button
-                            disabled={reclassify.processing}
-                            onClick={() =>
-                                reclassify.post(
-                                    '/store/performance/reclassify',
-                                    { preserveScroll: true },
-                                )
-                            }
-                        >
-                            <RefreshCw
-                                className={
-                                    reclassify.processing
-                                        ? 'size-4 animate-spin motion-reduce:animate-none'
-                                        : 'size-4'
-                                }
-                            />
-                            {reclassify.processing
-                                ? s.reclassifying
-                                : s.reclassify}
-                        </Button>
+                        <ClassificationButton run={classification} />
                         <Button asChild variant="outline">
                             <Link href="/store/performance">
                                 {s.performance}
@@ -68,6 +55,7 @@ export default function Stagnant({
                     </>
                 }
             />
+            <ClassificationProgress run={classification} />
             <div className="grid gap-4 sm:grid-cols-3">
                 <StatCard
                     label={s.total}

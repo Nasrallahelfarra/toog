@@ -7,7 +7,6 @@ import {
     ChevronRight,
     Info,
     LineChart as LineChartIcon,
-    ListChecks,
     PackageSearch,
     RefreshCw,
     Search,
@@ -34,6 +33,8 @@ import { Sparkline } from '@/components/mojo/stat-card';
 import { toneClasses } from '@/components/mojo/tone';
 import type { Tone } from '@/components/mojo/tone';
 import { FeatureExtractionProgress } from '@/components/store/feature-extraction-progress';
+import { ClassificationButton, ClassificationProgress } from '@/components/store/classification-refresh';
+import type { ClassificationRun } from '@/components/store/classification-refresh';
 import type { FeatureExtractionRun } from '@/components/store/feature-extraction-progress';
 import { SignalDetails } from '@/components/store/signal-details';
 import type { SignalKey, SignalStats } from '@/components/store/signal-details';
@@ -103,6 +104,7 @@ type Props = {
     categoryNames: string[];
     sync: { status: string; last_synced_at: string | null; can_sync: boolean; missing_features: number };
     extraction: FeatureExtractionRun | null;
+    classification: ClassificationRun | null;
     /** Loaded on demand when a classification criterion is opened. */
     signals?: Record<SignalKey, SignalStats>;
 };
@@ -149,10 +151,7 @@ export default function Performance(props: Props) {
                 eyebrow={props.sync.last_synced_at ? tr(p.lastSync, { time: relative(props.sync.last_synced_at) }) : p.neverSynced}
                 actions={
                     <>
-                        <Button variant="outline" onClick={() => post('/store/performance/reclassify', 'reclassify')} disabled={busy !== null}>
-                            <ListChecks className="size-4" />
-                            {p.reclassify}
-                        </Button>
+                        <ClassificationButton run={props.classification} disabled={busy !== null} outline />
                         {props.sync.can_sync ? (
                             <Button onClick={() => post('/store/integrations/zid/sync', 'sync')} disabled={busy !== null}>
                                 <RefreshCw className={cn('size-4', busy === 'sync' && 'animate-spin')} />
@@ -169,6 +168,8 @@ export default function Performance(props: Props) {
                     </>
                 }
             />
+
+            <ClassificationProgress run={props.classification} />
 
             {props.extraction &&
             (props.extraction.recent ||
