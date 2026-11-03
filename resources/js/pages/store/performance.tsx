@@ -4,6 +4,7 @@ import {
     AlertTriangle,
     BarChart3,
     CheckCircle2,
+    ChevronRight,
     Info,
     LineChart as LineChartIcon,
     ListChecks,
@@ -34,6 +35,8 @@ import { toneClasses } from '@/components/mojo/tone';
 import type { Tone } from '@/components/mojo/tone';
 import { FeatureExtractionProgress } from '@/components/store/feature-extraction-progress';
 import type { FeatureExtractionRun } from '@/components/store/feature-extraction-progress';
+import { SignalDetails } from '@/components/store/signal-details';
+import type { SignalKey, SignalStats } from '@/components/store/signal-details';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -100,6 +103,8 @@ type Props = {
     categoryNames: string[];
     sync: { status: string; last_synced_at: string | null; can_sync: boolean; missing_features: number };
     extraction: FeatureExtractionRun | null;
+    /** Loaded on demand when a classification criterion is opened. */
+    signals?: Record<SignalKey, SignalStats>;
 };
 
 /** Prompt to read the products still missing attributes. */
@@ -199,7 +204,7 @@ export default function Performance(props: Props) {
                 </SectionCard>
             ) : (
                 <>
-                    <ClassificationSection summary={props.summary} />
+                    <ClassificationSection summary={props.summary} signals={props.signals} />
 
                     <div className="grid gap-6 xl:grid-cols-5">
                         <FadeIn delay={0.08} className="xl:col-span-3">
@@ -226,13 +231,27 @@ export default function Performance(props: Props) {
     );
 }
 
-function ClassificationSection({ summary }: { summary: Props['summary'] }) {
+function ClassificationSection({ summary, signals }: { summary: Props['summary']; signals: Props['signals'] }) {
     const { t, tr, number } = useI18n();
     const p = t.performance;
     const total = Math.max(1, summary.total - summary.unclassified);
+    const [signal, setSignal] = useState<SignalKey | null>(null);
+
+    const open = (key: SignalKey) => {
+        setSignal(key);
+        if (!signals) {
+            router.reload({ only: ['signals'] });
+        }
+    };
 
     return (
         <div className="grid gap-4 lg:grid-cols-4">
+            <SignalDetails
+                signal={signal}
+                weight={signal ? (summary.weights[signal] ?? 0) : 0}
+                stats={signal ? signals?.[signal] : undefined}
+                onClose={() => setSignal(null)}
+            />
             <Stagger className="grid gap-4 sm:grid-cols-3 lg:col-span-3">
                 {(['winner', 'average', 'stagnant'] as ClassKey[]).map((key) => {
                     const meta = classMeta[key];
@@ -264,19 +283,32 @@ function ClassificationSection({ summary }: { summary: Props['summary'] }) {
             <FadeIn delay={0.1}>
                 <SectionCard title={p.criteriaTitle} icon={Info} className="h-full">
                     <p className="text-muted-foreground mb-3 text-xs leading-relaxed">{p.criteriaHint}</p>
-                    <div className="space-y-2.5">
+                    <div className="-mx-2 space-y-0.5">
                         {Object.entries(summary.weights).map(([key, weight], i) => (
-                            <Meter
+                            <button
                                 key={key}
-                                label={<span className="text-xs">{p.criteria[key as keyof typeof p.criteria] ?? key}</span>}
-                                valueLabel={`${weight}%`}
-                                value={weight * 2}
-                                tone="navy"
-                                height={5}
-                                delay={i * 0.05}
-                            />
+                                type="button"
+                                onClick={() => open(key as SignalKey)}
+                                aria-haspopup="dialog"
+                                className="group hover:bg-muted/60 focus-visible:ring-ring block w-full rounded-lg px-2 py-1.5 text-start transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                            >
+                                <Meter
+                                    label={
+                                        <span className="flex items-center gap-1 text-xs">
+                                            {p.criteria[key as keyof typeof p.criteria] ?? key}
+                                            <ChevronRight className="text-muted-foreground size-3.5 opacity-40 transition-opacity group-hover:opacity-100 rtl:rotate-180" />
+                                        </span>
+                                    }
+                                    valueLabel={`${weight}%`}
+                                    value={weight * 2}
+                                    tone="navy"
+                                    height={5}
+                                    delay={i * 0.05}
+                                />
+                            </button>
                         ))}
                     </div>
+                    <p className="text-muted-foreground mt-2 text-[11px]">{p.criteriaTap}</p>
                     <p className="text-muted-foreground mt-4 border-t pt-3 text-[11px] leading-relaxed">
                         {tr(p.thresholds, { winner: summary.thresholds.winner, stagnant: summary.thresholds.stagnant })}
                     </p>

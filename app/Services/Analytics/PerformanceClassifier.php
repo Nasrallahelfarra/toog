@@ -30,38 +30,11 @@ class PerformanceClassifier
 
     public function classify(Store $store, int $months = 12): void
     {
-        $since = now()->subMonths($months)->startOfMonth();
-
-        $sales = ProductSale::query()
-            ->where('store_id', $store->id)
-            ->where('period', '>=', $since)
-            ->get()
-            ->groupBy('product_id');
-
         $products = Product::query()->where('store_id', $store->id)->get();
-
-        $metrics = $products->mapWithKeys(function (Product $p) use ($sales) {
-            /** @var Collection<int, ProductSale> $rows */
-            $rows = $sales->get($p->id, collect());
-            $units = (int) $rows->sum('units');
-            $views = (int) $rows->sum('views');
-            $activeMonths = max(1, $rows->where('units', '>', 0)->count());
-            $dailyUnits = $units / max(30, $rows->count() * 30);
-
-            return [$p->id => [
-                'units' => $units,
-                'revenue' => (float) $rows->sum('revenue'),
-                'views' => $views,
-                'velocity' => $units / $activeMonths,
-                'add_to_cart' => $views > 0 ? $rows->sum('add_to_cart') / $views * 100 : 0,
-                'returns' => $units > 0 ? $rows->sum('returns') / $units * 100 : 0,
-                'turnover' => $dailyUnits > 0 ? min(365, (int) round(max(0, $p->stock) / $dailyUnits)) : 365,
-                'has_data' => $rows->isNotEmpty(),
-            ]];
-        });
+        $metrics = $this->metrics($store, $products, $months);
 
         $ranked = collect(array_keys(self::WEIGHTS))->mapWithKeys(fn ($signal) => [
-            $signal => $this->percentiles($metrics->map(fn ($m) => $m[$signal]), lowerIsBetter: in_array($signal, ['returns', 'turnover'], true)),
+            $signal => $this->percentiles($metrics->map(fn ($m) => $m[$signal]), lowerIsBetter: self::lowerIsBetter($signal)),
         ]);
 
         foreach ($products as $product) {
@@ -95,6 +68,48 @@ class PerformanceClassifier
                 'turnover_days' => $m['turnover'],
             ]);
         }
+    }
+
+    public static function lowerIsBetter(string $signal): bool
+    {
+        return in_array($signal, ['returns', 'turnover'], true);
+    }
+
+    /**
+     * Each product's raw value on every signal over the last $months.
+     *
+     * @param  Collection<int, Product>  $products
+     * @return Collection<int, array{units: int, revenue: float, views: int, velocity: float, add_to_cart: float, returns: float, turnover: int, has_data: bool}>
+     */
+    public function metrics(Store $store, Collection $products, int $months = 12): Collection
+    {
+        $since = now()->subMonths($months)->startOfMonth();
+
+        $sales = ProductSale::query()
+            ->where('store_id', $store->id)
+            ->where('period', '>=', $since)
+            ->get()
+            ->groupBy('product_id');
+
+        return $products->mapWithKeys(function (Product $p) use ($sales) {
+            /** @var Collection<int, ProductSale> $rows */
+            $rows = $sales->get($p->id, collect());
+            $units = (int) $rows->sum('units');
+            $views = (int) $rows->sum('views');
+            $activeMonths = max(1, $rows->where('units', '>', 0)->count());
+            $dailyUnits = $units / max(30, $rows->count() * 30);
+
+            return [$p->id => [
+                'units' => $units,
+                'revenue' => (float) $rows->sum('revenue'),
+                'views' => $views,
+                'velocity' => $units / $activeMonths,
+                'add_to_cart' => $views > 0 ? $rows->sum('add_to_cart') / $views * 100 : 0,
+                'returns' => $units > 0 ? $rows->sum('returns') / $units * 100 : 0,
+                'turnover' => $dailyUnits > 0 ? min(365, (int) round(max(0, $p->stock) / $dailyUnits)) : 365,
+                'has_data' => $rows->isNotEmpty(),
+            ]];
+        });
     }
 
     /**

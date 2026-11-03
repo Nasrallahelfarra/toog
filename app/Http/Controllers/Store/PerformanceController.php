@@ -85,6 +85,8 @@ class PerformanceController extends Controller
             'products' => $products,
             'filters' => $filters,
             'categoryNames' => fn () => $performance->categoryNames($store),
+            // Loaded only when a classification criterion is opened.
+            'signals' => Inertia::optional(fn () => $performance->signals($store)),
             'sync' => [
                 'status' => $store->connection_status,
                 'last_synced_at' => $store->last_synced_at?->toIso8601String(),
