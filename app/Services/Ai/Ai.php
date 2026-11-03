@@ -56,8 +56,12 @@ class Ai
         Closure $fallback,
         array $images = [],
         ?int $userId = null,
+        ?int $timeoutSeconds = null,
     ): AiJsonResult {
         $provider = $this->provider();
+        if ($provider instanceof GeminiProvider && $timeoutSeconds !== null) {
+            $provider = $provider->withTimeout($timeoutSeconds);
+        }
 
         if (! $this->isLive()) {
             $this->record($operation, $store, $userId, $provider->name(), 'fake', meta: ['mode' => 'demo']);

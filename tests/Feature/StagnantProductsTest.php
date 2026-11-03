@@ -11,10 +11,12 @@ use App\Models\ProductRecommendation;
 use App\Models\User;
 use App\Services\Ai\Ai;
 use App\Services\Ai\AiJsonResult;
+use App\Services\Catalog\RecommendationProgress;
 use App\Services\Design\DesignService;
 use App\Services\Design\PromptBuilder;
 use App\Support\CurrentStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -30,7 +32,7 @@ class StagnantProductsTest extends TestCase
     {
         parent::setUp();
         $this->withoutVite();
-        config(['inertia.ssr.enabled' => false, 'mojo.ai.provider' => 'gemini', 'mojo.ai.gemini.api_key' => 'test-key']);
+        config(['queue.default' => 'database', 'inertia.ssr.enabled' => false, 'mojo.ai.provider' => 'gemini', 'mojo.ai.gemini.api_key' => 'test-key']);
         Queue::fake();
         Http::preventStrayRequests();
         Storage::fake('public');
@@ -64,9 +66,9 @@ class StagnantProductsTest extends TestCase
         ];
     }
 
-    private function requestRecommendation(Product $product): ProductRecommendation
+    private function requestRecommendation(Product $product, array $options = []): ProductRecommendation
     {
-        $this->actingAs($product->store->owner)->from('/store/stagnant')->post("/store/stagnant/{$product->id}/recommendation")
+        $this->actingAs($product->store->owner)->from('/store/stagnant')->post("/store/stagnant/{$product->id}/recommendation", $options)
             ->assertSessionHasNoErrors()->assertRedirect('/store/stagnant');
 
         return ProductRecommendation::query()->where('product_id', $product->id)->latest('id')->firstOrFail();
@@ -77,10 +79,18 @@ class StagnantProductsTest extends TestCase
         $run = $this->requestRecommendation($product);
         $ai = Mockery::mock(Ai::class);
         $ai->shouldReceive('isLive')->andReturn(true);
-        $ai->shouldReceive('json')->once()->withArgs(function ($operation, $store, $system, $prompt, $schema, $fallback, $images, $userId) use ($product) {
+        $ai->shouldReceive('json')->once()->withArgs(function ($operation, $store, $system, $prompt, $schema, $fallback, $images, $userId, $timeoutSeconds) use ($product, $run) {
             $context = json_decode(explode("\nImage available:", $prompt)[0], true);
             $this->assertSame('product_recovery', $operation);
             $this->assertStringContainsString('product recovery specialist', $system);
+            $this->assertStringContainsString('THREE distinct alternative visual directions', $system);
+            $this->assertStringContainsString('shopper understanding, trust or purchase consideration', $prompt);
+            $this->assertSame(120, $timeoutSeconds);
+            $presentation = $run->fresh()->presentation();
+            $this->assertSame('processing', $presentation['status']);
+            $this->assertSame('model', $presentation['phase']);
+            $this->assertNotNull($presentation['started_at']);
+            $this->assertNull($presentation['review']);
             $this->assertSame(50, $context['product_performance']['stock']);
             $this->assertSame(2, $context['product_performance']['units_sold']);
             $this->assertEmpty($context['sources'][0]['data']['stagnant']);
@@ -129,6 +139,7 @@ class StagnantProductsTest extends TestCase
         $this->assertSame('completed', $run->status);
         $this->assertTrue($run->review['image_reviewed']);
         $this->assertCount(2, $run->review['recommendations']);
+        $this->assertArrayNotHasKey('_progress', $run->presentation()['review']);
         Storage::disk('public')->assertExists($run->source_image_path);
         $this->assertSame(Storage::disk('public')->get('catalog.png'), Storage::disk('public')->get($run->source_image_path));
         $this->requestRecommendation($product);
@@ -204,6 +215,107 @@ class StagnantProductsTest extends TestCase
         return ['product_recommendation_id' => $run->id, 'recommendation_key' => 'r1', 'type' => 'modification',
             'title' => $run->snapshot['name'], 'prompt' => $run->review['recommendations'][0]['instruction']['ar'],
             'category' => 'Bags', 'output_type' => 'product_photo', 'aspect_ratio' => '1:1', 'variants_count' => 1];
+    }
+
+    public function test_three_visual_alternatives_are_saved_and_only_the_chosen_one_reaches_studio(): void
+    {
+        $answer = $this->review();
+        $visual = $answer['recommendations'][0];
+        $answer['recommendations'] = [];
+        foreach (['Use a clean backdrop', 'Create a restrained palette', 'Simplify the pattern'] as $instruction) {
+            $answer['recommendations'][] = [...$visual, 'title' => ['ar' => $instruction, 'en' => $instruction],
+                'instruction' => ['ar' => $instruction, 'en' => $instruction]];
+        }
+        $run = $this->complete($this->product(), $answer);
+        $this->assertCount(3, $run->review['recommendations']);
+        $this->get("/store/studio?recovery={$run->id}&action=r2")->assertInertia(fn (Assert $page) => $page
+            ->where('source.prompt', 'Create a restrained palette')->where('source.action', 'r2')
+            ->where('source.image_url', Storage::disk('public')->url($run->source_image_path)));
+        $this->post('/store/studio', [...$this->studioPayload($run), 'recommendation_key' => 'r2', 'prompt' => 'Create a restrained palette'])
+            ->assertSessionHasNoErrors()->assertRedirect('/store/studio');
+        $design = DesignRequest::query()->firstOrFail();
+        $this->assertSame('Create a restrained palette', $design->prompt);
+        $this->assertSame($run->source_image_path, $design->source_image_path);
+        $this->assertSame($run->id, $design->product_recommendation_id);
+        Queue::assertPushed(GenerateDesigns::class, 1);
+    }
+
+    public function test_queued_work_is_distinguished_from_ai_processing_and_is_not_duplicated_when_waiting(): void
+    {
+        $product = $this->product();
+        $run = $this->requestRecommendation($product);
+        // Use real database queue payloads without running any external work.
+        $queue = Queue::getFacadeRoot()->queue->connection('database');
+        $busy = $queue->push(new RecommendStagnantProduct(99999));
+        DB::table('jobs')->where('id', $busy)->update(['reserved_at' => now()->timestamp]);
+        $queue->push(new RecommendStagnantProduct(99998));
+        $queue->push(new RecommendStagnantProduct($run->id));
+        $run->forceFill(['updated_at' => now()->subMinutes(20)])->save();
+        $this->app->forgetInstance(RecommendationProgress::class);
+        $state = $run->presentation();
+        $this->assertSame('pending', $state['status']);
+        $this->assertSame('queued', $state['phase']);
+        $this->assertNull($state['started_at']);
+        $this->assertTrue($state['queue']['found']);
+        $this->assertSame(1, $state['queue']['ahead']);
+        $this->assertSame('RecommendStagnantProduct', $state['queue']['busy']);
+        $this->assertSame($run->id, $this->requestRecommendation($product)->id);
+        Queue::assertPushed(RecommendStagnantProduct::class, 1);
+    }
+
+    public function test_a_lost_job_becomes_retryable_without_waiting_for_a_fifteen_minute_spinner(): void
+    {
+        $product = $this->product();
+        $run = $this->requestRecommendation($product);
+        $run->forceFill(['updated_at' => now()->subMinutes(3)])->save();
+        $this->assertSame('job_lost', $run->presentation()['error']);
+        $this->assertSame('failed', $run->fresh()->status);
+        $this->assertNotSame($run->id, $this->requestRecommendation($product)->id);
+    }
+
+    public function test_new_options_require_an_explicit_request_and_repeated_requests_are_deduplicated(): void
+    {
+        $product = $this->product();
+        $saved = $this->complete($product);
+        $this->assertSame($saved->id, $this->requestRecommendation($product)->id);
+        $new = $this->requestRecommendation($product, ['replace_recommendation_id' => $saved->id]);
+        $this->assertNotSame($saved->id, $new->id);
+        $this->assertSame('completed', $saved->fresh()->status);
+        // Even a late duplicate after completion cannot regenerate an already-replaced result.
+        $new->update(['status' => 'completed', 'review' => $saved->review]);
+        $this->assertSame($new->id, $this->requestRecommendation($product, ['replace_recommendation_id' => $saved->id])->id);
+        $this->assertDatabaseCount('product_recommendations', 2);
+        Queue::assertPushed(RecommendStagnantProduct::class, 2);
+    }
+
+    public function test_inline_queue_is_rejected_without_running_ai_in_the_http_request(): void
+    {
+        config(['queue.default' => 'sync']);
+        $run = $this->requestRecommendation($this->product());
+        $this->assertSame('failed', $run->status);
+        $this->assertSame('queue_unavailable', $run->error);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_timed_out_processing_is_persisted_and_late_ai_results_cannot_replace_it(): void
+    {
+        $run = $this->requestRecommendation($this->product());
+        $ai = Mockery::mock(Ai::class);
+        $ai->shouldReceive('isLive')->andReturn(true);
+        $ai->shouldReceive('json')->once()->andReturnUsing(function () use ($run) {
+            // Simulate a worker stuck beyond its deadline while the browser checks status.
+            $this->travel(8)->minutes();
+            $state = $run->fresh()->presentation();
+            $this->assertSame('failed', $state['status']);
+            $this->assertSame('timed_out', $state['error']);
+
+            return new AiJsonResult($this->review(), true, 0.01);
+        });
+        $this->app->instance(Ai::class, $ai);
+        app()->call([new RecommendStagnantProduct($run->id), 'handle']);
+        $this->assertSame('failed', $run->fresh()->status);
+        $this->assertArrayNotHasKey('recommendations', $run->fresh()->review);
+        $this->travelBack();
     }
 
     public function test_other_stores_and_non_visual_actions_cannot_be_used_for_design(): void

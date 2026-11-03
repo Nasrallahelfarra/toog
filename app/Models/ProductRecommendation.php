@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Services\Catalog\RecommendationProgress;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -33,7 +35,13 @@ class ProductRecommendation extends Model
 
     public function expired(): bool
     {
-        return in_array($this->status, ['pending', 'processing'], true) && $this->updated_at->lt(now()->subMinutes(15));
+        if ($this->status === 'processing') {
+            $started = $this->review['_progress']['started_at'] ?? $this->updated_at;
+
+            return Carbon::parse($started)->lt(now()->subMinutes(7));
+        }
+
+        return $this->status === 'pending' && $this->updated_at->lt(now()->subMinutes(15));
     }
 
     /** @return array<string, mixed>|null */
@@ -51,8 +59,6 @@ class ProductRecommendation extends Model
     /** @return array<string, mixed> */
     public function presentation(): array
     {
-        return ['id' => $this->id, 'status' => $this->expired() ? 'failed' : $this->status,
-            'review' => $this->review, 'error' => $this->expired() ? 'timed_out' : $this->error,
-            'created_at' => $this->created_at->toIso8601String()];
+        return app(RecommendationProgress::class)->presentation($this);
     }
 }

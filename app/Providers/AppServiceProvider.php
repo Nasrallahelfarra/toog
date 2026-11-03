@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Services\Ai\Ai;
+use App\Services\Catalog\RecommendationProgress;
 use App\Support\CurrentStore;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
@@ -18,6 +19,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(CurrentStore::class);
+        $this->app->scoped(RecommendationProgress::class);
         $this->app->singleton(Ai::class);
     }
 

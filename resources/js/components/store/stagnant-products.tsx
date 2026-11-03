@@ -1,4 +1,4 @@
-import { Link, useForm, usePoll } from '@inertiajs/react';
+import { Link, router, useForm, usePoll } from '@inertiajs/react';
 import {
     AlertCircle,
     ArrowUpRight,
@@ -11,7 +11,7 @@ import {
     WandSparkles,
 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { SpecialistReview } from '@/components/evaluation/types';
 import { EmptyState } from '@/components/mojo/empty-state';
 import { SectionCard } from '@/components/mojo/section-card';
@@ -32,6 +32,9 @@ type Recovery = {
     review: SpecialistReview | null;
     error: string | null;
     created_at: string;
+    started_at: string | null;
+    phase: 'queued' | 'context' | 'image' | 'model' | 'saving';
+    queue: { found: boolean; ahead: number; busy: string | null } | null;
 };
 
 export type StagnantProduct = {
@@ -58,8 +61,26 @@ export type StagnantDashboard = StagnantSummary & {
     products: StagnantProduct[];
 };
 
-function RecommendationPoll({ dashboard }: { dashboard: boolean }) {
-    usePoll(3000, { only: [dashboard ? 'stagnant' : 'products'] });
+function RecommendationPoll({
+    dashboard,
+    onNetwork,
+}: {
+    dashboard: boolean;
+    onNetwork: (failed: boolean) => void;
+}) {
+    usePoll(3000, {
+        only: [dashboard ? 'stagnant' : 'products'],
+        onSuccess: () => onNetwork(false),
+        onError: () => onNetwork(true),
+        onHttpException: () => {
+            onNetwork(true);
+            return false;
+        },
+        onNetworkError: () => {
+            onNetwork(true);
+            return false;
+        },
+    });
     return null;
 }
 
@@ -139,25 +160,66 @@ export function StagnantProductGrid({
     const selected = products.find((p) => p.id === selectedId);
     const request = useForm({});
     const [requestError, setRequestError] = useState(false);
+    const [networkError, setNetworkError] = useState(false);
+    const refresh = () =>
+        router.reload({
+            only: [dashboard ? 'stagnant' : 'products'],
+            onSuccess: () => {
+                setNetworkError(false);
+                setRequestError(false);
+            },
+            onError: () => setNetworkError(true),
+            onHttpException: () => {
+                setNetworkError(true);
+                return false;
+            },
+            onNetworkError: () => {
+                setNetworkError(true);
+                return false;
+            },
+        });
     const active = products.some(
         (p) =>
             p.recovery?.status === 'pending' ||
             p.recovery?.status === 'processing',
     );
 
-    const recommend = (product: StagnantProduct) => {
+    const recommend = (product: StagnantProduct, regenerate = false) => {
         setSelectedId(product.id);
         setRequestError(false);
-        if (product.recovery && product.recovery.status !== 'failed') return;
+        if (
+            product.recovery &&
+            product.recovery.status !== 'failed' &&
+            !regenerate
+        )
+            return;
+        request.transform(() =>
+            regenerate && product.recovery
+                ? { replace_recommendation_id: product.recovery.id }
+                : {},
+        );
         request.post(`/store/stagnant/${product.id}/recommendation`, {
             preserveScroll: true,
             onError: () => setRequestError(true),
+            onHttpException: () => {
+                setRequestError(true);
+                return false;
+            },
+            onNetworkError: () => {
+                setRequestError(true);
+                return false;
+            },
         });
     };
 
     return (
         <>
-            {active && <RecommendationPoll dashboard={dashboard} />}
+            {active && (
+                <RecommendationPoll
+                    dashboard={dashboard}
+                    onNetwork={setNetworkError}
+                />
+            )}
             {products.length ? (
                 <div
                     className={cn(
@@ -374,11 +436,15 @@ export function StagnantProductGrid({
                                             <Button
                                                 variant="outline"
                                                 onClick={() =>
-                                                    recommend(selected)
+                                                    requestError
+                                                        ? refresh()
+                                                        : recommend(selected)
                                                 }
                                                 disabled={request.processing}
                                             >
-                                                {s.retry}
+                                                {requestError
+                                                    ? s.refreshStatus
+                                                    : s.retry}
                                             </Button>
                                         </div>
                                     ) : selected.recovery?.status ===
@@ -386,10 +452,34 @@ export function StagnantProductGrid({
                                       selected.recovery.review?.status ===
                                           'available' ? (
                                         <RecoveryResult
+                                            key={selected.recovery.id}
                                             recovery={selected.recovery}
+                                            regenerate={() =>
+                                                recommend(selected, true)
+                                            }
+                                            requesting={request.processing}
                                         />
                                     ) : (
-                                        <ReviewLoading />
+                                        <>
+                                            <ReviewLoading
+                                                recovery={selected.recovery}
+                                                networkError={networkError}
+                                                refresh={refresh}
+                                                sending={request.processing}
+                                            />
+                                            {!selected.recovery &&
+                                                !request.processing &&
+                                                !networkError && (
+                                                    <Button
+                                                        className="w-full"
+                                                        onClick={() =>
+                                                            recommend(selected)
+                                                        }
+                                                    >
+                                                        {s.request}
+                                                    </Button>
+                                                )}
+                                        </>
                                     )}
                                 </motion.div>
                             </AnimatePresence>
@@ -401,9 +491,40 @@ export function StagnantProductGrid({
     );
 }
 
-function ReviewLoading() {
-    const { t } = useI18n();
+function ReviewLoading({
+    recovery,
+    networkError,
+    refresh,
+    sending,
+}: {
+    recovery: Recovery | null;
+    networkError: boolean;
+    refresh: () => void;
+    sending: boolean;
+}) {
+    const { t, tr, number } = useI18n();
     const s = t.stagnant;
+    const [now, setNow] = useState(() => Date.now());
+    useEffect(() => {
+        const timer = window.setInterval(() => setNow(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, []);
+    const phase = recovery?.phase ?? 'queued';
+    const queued = recovery?.status === 'pending';
+    const elapsed = Math.max(
+        0,
+        Math.floor(
+            (now -
+                Date.parse(
+                    recovery?.started_at ??
+                        recovery?.created_at ??
+                        new Date(now).toISOString(),
+                )) /
+                1000,
+        ),
+    );
+    const phases = ['context', 'image', 'model', 'saving'] as const;
+    const current = phases.indexOf(phase as (typeof phases)[number]);
     return (
         <div
             role="status"
@@ -415,19 +536,58 @@ function ReviewLoading() {
                 <Sparkles className="size-8 text-primary motion-safe:animate-pulse" />
             </div>
             <div>
-                <h3 className="text-lg font-semibold">{s.loading}</h3>
+                <h3 className="text-lg font-semibold">
+                    {!recovery
+                        ? sending
+                            ? s.sending
+                            : s.checkStatus
+                        : s.phases[phase]}
+                </h3>
                 <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                    {s.loadingHint}
+                    {!recovery ? s.sendingHint : s.phaseHints[phase]}
                 </p>
+                {recovery && (
+                    <p
+                        className="mt-2 text-xs text-muted-foreground"
+                        aria-live="off"
+                    >
+                        {tr(queued ? s.queueElapsed : s.elapsed, {
+                            minutes: number(Math.floor(elapsed / 60)),
+                            seconds: number(elapsed % 60),
+                        })}
+                    </p>
+                )}
+                {queued && recovery.queue && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                        {recovery.queue.ahead > 0
+                            ? tr(s.queueAhead, {
+                                  count: number(recovery.queue.ahead),
+                              })
+                            : s.queueWaiting}
+                        {recovery.queue.busy && ` ${s.queueBusy}`}
+                    </p>
+                )}
             </div>
-            <ol className="grid gap-2 text-xs sm:grid-cols-3">
-                {s.steps.map((step) => (
+            <ol className="grid gap-2 text-xs sm:grid-cols-2">
+                {phases.map((step, index) => (
                     <li
                         key={step}
-                        className="flex items-center justify-center gap-2 rounded-xl bg-muted/60 p-3"
+                        aria-current={current === index ? 'step' : undefined}
+                        className={cn(
+                            'flex items-center justify-center gap-2 rounded-xl p-3',
+                            current === index
+                                ? 'bg-primary/10 text-primary ring-1 ring-primary/25'
+                                : 'bg-muted/60 text-muted-foreground',
+                        )}
                     >
-                        <Clock3 className="size-3.5 text-primary" />
-                        {step}
+                        {current > index ? (
+                            <CheckCircle2 className="size-3.5 text-success" />
+                        ) : current === index ? (
+                            <Loader2 className="size-3.5 motion-safe:animate-spin" />
+                        ) : (
+                            <Clock3 className="size-3.5" />
+                        )}
+                        {s.phases[step]}
                     </li>
                 ))}
             </ol>
@@ -443,16 +603,46 @@ function ReviewLoading() {
             <p className="text-xs leading-6 text-muted-foreground">
                 {s.waiting}
             </p>
+            {queued && elapsed >= 60 && (
+                <p className="text-xs leading-6 text-muted-foreground">
+                    {s.queueSlow}
+                </p>
+            )}
+            {networkError && (
+                <p role="alert" className="text-sm text-danger">
+                    {s.network}
+                </p>
+            )}
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={refresh}
+                disabled={sending}
+            >
+                {s.refreshStatus}
+            </Button>
         </div>
     );
 }
 
-function RecoveryResult({ recovery }: { recovery: Recovery }) {
+function RecoveryResult({
+    recovery,
+    regenerate,
+    requesting,
+}: {
+    recovery: Recovery;
+    regenerate: () => void;
+    requesting: boolean;
+}) {
     const { t, locale, dateTime } = useI18n();
     const reduced = useReducedMotion();
     const review = recovery.review!;
     const c = t.productReview;
     const s = t.stagnant;
+    const [selectedAction, setSelectedAction] = useState<string | null>(null);
+    const visualOptions = review.recommendations.filter(
+        (item) => item.kind === 'visual',
+    );
     return (
         <div className="space-y-5">
             <div
@@ -480,6 +670,17 @@ function RecoveryResult({ recovery }: { recovery: Recovery }) {
                     {review.summary?.[locale]}
                 </p>
             </div>
+            {visualOptions.length > 0 && (
+                <div className="rounded-xl border border-primary/25 bg-primary/5 p-4">
+                    <h3 className="flex items-center gap-2 font-semibold">
+                        <WandSparkles className="size-4 text-primary" />
+                        {s.visualOptions}
+                    </h3>
+                    <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                        {s.chooseHint}
+                    </p>
+                </div>
+            )}
             <div className="space-y-3">
                 {review.recommendations.map((item, index) => (
                     <motion.section
@@ -490,7 +691,11 @@ function RecoveryResult({ recovery }: { recovery: Recovery }) {
                             duration: 0.3,
                             delay: reduced ? 0 : index * 0.08,
                         }}
-                        className="overflow-hidden rounded-2xl border"
+                        className={cn(
+                            'overflow-hidden rounded-2xl border transition-colors',
+                            selectedAction === item.id &&
+                                'border-primary bg-primary/5 ring-1 ring-primary/30',
+                        )}
                     >
                         <div className="space-y-3 p-4 sm:p-5">
                             <div className="flex flex-wrap items-center gap-2">
@@ -512,11 +717,21 @@ function RecoveryResult({ recovery }: { recovery: Recovery }) {
                                 </span>
                             </div>
                             <p className="text-sm leading-7">
-                                <strong>{c.why}: </strong>
+                                <strong>
+                                    {item.kind === 'visual'
+                                        ? s.visualImpact
+                                        : c.why}
+                                    :{' '}
+                                </strong>
                                 {item.reason[locale]}
                             </p>
                             <p className="text-sm leading-7 text-muted-foreground">
-                                <strong>{c.effect}: </strong>
+                                <strong>
+                                    {item.kind === 'visual'
+                                        ? s.persuasion
+                                        : c.effect}
+                                    :{' '}
+                                </strong>
                                 {item.effect[locale]}
                             </p>
                             <div className="rounded-xl bg-muted/50 p-3 text-sm leading-7">
@@ -530,17 +745,27 @@ function RecoveryResult({ recovery }: { recovery: Recovery }) {
                         </div>
                         {item.kind === 'visual' && (
                             <div className="space-y-2 border-t bg-primary/5 p-4">
-                                <Button asChild className="w-full sm:w-auto">
-                                    <Link
-                                        href={`/store/studio?recovery=${recovery.id}&action=${encodeURIComponent(item.id)}`}
-                                    >
-                                        <WandSparkles className="size-4" />
-                                        {s.apply}
-                                    </Link>
+                                <Button
+                                    type="button"
+                                    variant={
+                                        selectedAction === item.id
+                                            ? 'default'
+                                            : 'outline'
+                                    }
+                                    aria-pressed={selectedAction === item.id}
+                                    onClick={() => setSelectedAction(item.id)}
+                                    className="w-full sm:w-auto"
+                                >
+                                    {selectedAction === item.id && (
+                                        <CheckCircle2 className="size-4" />
+                                    )}
+                                    {selectedAction === item.id
+                                        ? s.selected
+                                        : s.choose}
+                                    <span className="sr-only">
+                                        : {item.title[locale]}
+                                    </span>
                                 </Button>
-                                <p className="text-xs leading-6 text-muted-foreground">
-                                    {s.applyHint}
-                                </p>
                             </div>
                         )}
                     </motion.section>
@@ -551,6 +776,33 @@ function RecoveryResult({ recovery }: { recovery: Recovery }) {
                     </p>
                 )}
             </div>
+            {visualOptions.length > 0 && (
+                <div className="sticky bottom-0 space-y-2 rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur">
+                    <p aria-live="polite" className="text-sm font-medium">
+                        {selectedAction
+                            ? `${s.selected}: ${visualOptions.find((item) => item.id === selectedAction)?.title[locale]}`
+                            : s.chooseFirst}
+                    </p>
+                    {selectedAction ? (
+                        <Button asChild className="w-full">
+                            <Link
+                                href={`/store/studio?recovery=${recovery.id}&action=${encodeURIComponent(selectedAction)}`}
+                            >
+                                <WandSparkles className="size-4" />
+                                {s.apply}
+                            </Link>
+                        </Button>
+                    ) : (
+                        <Button disabled className="w-full">
+                            <WandSparkles className="size-4" />
+                            {s.apply}
+                        </Button>
+                    )}
+                    <p className="text-xs leading-6 text-muted-foreground">
+                        {s.applyHint}
+                    </p>
+                </div>
+            )}
             {!!review.missing_data?.length && (
                 <details className="rounded-xl border p-4 text-sm">
                     <summary className="cursor-pointer font-medium">
@@ -593,6 +845,19 @@ function RecoveryResult({ recovery }: { recovery: Recovery }) {
             <p className="text-xs leading-6 text-muted-foreground">
                 {c.evidenceLimit}
             </p>
+            <div className="space-y-2 border-t pt-4">
+                <Button
+                    variant="outline"
+                    onClick={regenerate}
+                    disabled={requesting}
+                >
+                    <Sparkles className="size-4" />
+                    {s.regenerate}
+                </Button>
+                <p className="text-xs leading-6 text-muted-foreground">
+                    {s.regenerateHint}
+                </p>
+            </div>
         </div>
     );
 }

@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\ProductRecommendation;
 use App\Services\Ai\Ai;
 use App\Services\Analytics\ClassificationRefresh;
+use App\Services\Catalog\RecommendationProgress;
 use App\Services\Catalog\StagnantProducts;
 use App\Support\CurrentStore;
 use Illuminate\Http\RedirectResponse;
@@ -47,15 +48,17 @@ class StagnantProductController extends Controller
         $store = $this->current->require();
         abort_unless($product->store_id === $store->id, 404);
         abort_unless($product->performance === Product::STAGNANT, 422);
+        $request->validate(['replace_recommendation_id' => 'sometimes|integer|min:1']);
 
         $run = DB::transaction(function () use ($product, $request) {
             $locked = Product::query()->lockForUpdate()->findOrFail($product->id);
             $latest = $locked->recovery;
-            if ($latest && ! $latest->expired() && $latest->status !== 'failed') {
-                return null;
+            if ($latest) {
+                app(RecommendationProgress::class)->refresh($latest);
             }
-            if ($latest?->expired()) {
-                $latest->update(['status' => 'failed', 'error' => 'timed_out']);
+            $replaceCompleted = $latest?->status === 'completed' && $request->integer('replace_recommendation_id') === $latest->id;
+            if ($latest && $latest->status !== 'failed' && ! $replaceCompleted) {
+                return null;
             }
 
             return ProductRecommendation::query()->create([
@@ -66,6 +69,11 @@ class StagnantProductController extends Controller
         if ($run) {
             if (! $ai->isLive() || $store->aiBudgetExceeded()) {
                 $run->update(['status' => 'failed', 'error' => $ai->isLive() ? 'budget_exceeded' : 'not_configured']);
+
+                return back();
+            }
+            if (! in_array(config('queue.connections.'.config('queue.default').'.driver'), ['database', 'redis', 'sqs', 'beanstalkd'], true)) {
+                $run->update(['status' => 'failed', 'error' => 'queue_unavailable']);
 
                 return back();
             }

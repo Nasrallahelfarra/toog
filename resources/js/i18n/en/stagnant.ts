@@ -39,18 +39,49 @@ export const stagnant: typeof ar = {
     expert: 'Product expert recommendation',
     expertHint:
         'A review of this product using its image, performance and available evidence.',
-    loading: 'The expert is reviewing your product',
-    loadingHint:
-        'Reviewing sales, inventory and the image to suggest practical next steps.',
+    sending: 'Sending your request',
+    sendingHint: 'Checking the request status before starting the review.',
+    checkStatus: 'Check request status',
+    refreshStatus: 'Refresh request status',
+    phases: {
+        queued: 'Your request is waiting to start',
+        context: 'Reading product performance',
+        image: 'Preparing the product image',
+        model: 'The expert is reviewing the image and drafting recommendations',
+        saving: 'Saving expert recommendations',
+    },
+    phaseHints: {
+        queued: 'Your request is saved. AI analysis has not started yet.',
+        context:
+            'Gathering sales, stock and available evidence for this product.',
+        image: 'Preparing the original image so suggestions refer to this exact product.',
+        model: 'The request has been sent to Gemini. Response time varies with the image and requested detail.',
+        saving: 'Checking and saving the analysis for you to review.',
+    },
+    elapsed: 'Processing for {minutes}m {seconds}s',
+    queueElapsed: 'Waiting for {minutes}m {seconds}s',
+    queueAhead: '{count} ready tasks are ahead in the processing queue.',
+    queueWaiting: 'Waiting for processing capacity.',
+    queueBusy: 'Other tasks are currently running.',
+    queueSlow:
+        'Analysis has not started yet; your request will start when processing is available. If this persists, the processing service needs checking.',
+    network:
+        'Could not refresh the status due to a connection issue. Processing may continue; refresh the status to check.',
     waiting:
         'You can close this window and return. The result is saved and appears automatically when ready.',
-    steps: [
-        'Reading product performance',
-        'Reviewing design and context',
-        'Preparing recommendations',
-    ],
     saved: 'Saved recommendation',
-    apply: 'Apply recommendation in studio',
+    regenerate: 'Request new suggestions',
+    regenerateHint:
+        'Requests a new expert analysis and counts toward your AI usage.',
+    visualOptions: 'Suggested directions for improving the image',
+    chooseHint:
+        'Compare each direction’s visual impact and benefit for the shopper, then choose one to apply. These are independent alternatives, not edits to combine.',
+    visualImpact: 'Observation and visual impact',
+    persuasion: 'How it may persuade the shopper',
+    choose: 'Choose this suggestion',
+    selected: 'Selected suggestion',
+    chooseFirst: 'Choose a visual suggestion first',
+    apply: 'Apply selected suggestion in studio',
     applyHint:
         'Opens the product image and editing instructions for you to review and generate an improved version.',
     businessStep: 'Suggested next step',
@@ -67,9 +98,13 @@ export const stagnant: typeof ar = {
         review_failed:
             'The expert review could not be completed. Please try again.',
         queue_failed: 'The request could not be queued. Please try again.',
+        queue_unavailable:
+            'The processing service is not configured for recommendations. Background processing needs to be enabled.',
+        job_lost:
+            'The request was interrupted before analysis started. You can request the recommendation again.',
         timed_out:
             'The request timed out. Check that background jobs are running and try again.',
         request_failed:
-            'The request could not be sent. Refresh the page and try again.',
+            'Could not confirm receipt. Refresh the status first; the request may have been saved and started.',
     },
 };

@@ -18,6 +18,12 @@ class GeminiProvider implements AiProvider
      */
     public function __construct(private readonly array $config) {}
 
+    /** Bound this call without changing the shared provider used by other jobs. */
+    public function withTimeout(int $seconds): self
+    {
+        return new self([...$this->config, 'timeout' => max(1, min($this->config['timeout'], $seconds))]);
+    }
+
     public function name(): string
     {
         return 'gemini';
@@ -132,6 +138,7 @@ class GeminiProvider implements AiProvider
     {
         return Http::baseUrl($this->config['base_url'])
             ->withHeaders(['x-goog-api-key' => $this->config['api_key']])
+            ->connectTimeout(min(10, $this->config['timeout']))
             ->timeout($this->config['timeout'])
             ->retry(2, 1500, fn ($e) => $e instanceof RequestException && in_array($e->response->status(), [429, 500, 503], true), throw: false)
             ->acceptJson();
