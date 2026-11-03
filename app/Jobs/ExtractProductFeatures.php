@@ -27,7 +27,10 @@ class ExtractProductFeatures implements ShouldQueue
 
     public function __construct(public Product $product, public ?int $userId = null) {}
 
-    public function handle(Ai $ai): void
+    /**
+     * @return bool whether the model (or demo mode) answered; false when the AI call failed
+     */
+    public function handle(Ai $ai): bool
     {
         $product = $this->product;
         $result = $ai->json(
@@ -42,15 +45,24 @@ class ExtractProductFeatures implements ShouldQueue
         );
 
         $features = $this->clean($result->data);
+        $answered = $result->fromModel || ! $ai->isLive();
 
-        if ($features === []) {
-            return;
+        if ($features !== []) {
+            $features['extracted_by'] = $result->fromModel ? 'ai' : 'name';
         }
 
-        $product->features = array_merge($product->features ?? [], $features, [
-            'extracted_by' => $result->fromModel ? 'ai' : 'name',
-        ]);
-        $product->save();
+        // Mark the product as read so the next run moves on even when the
+        // image shows no pattern; a failed AI call leaves it for a retry.
+        if ($answered) {
+            $features['extracted_at'] = now()->toIso8601String();
+        }
+
+        if ($features !== []) {
+            $product->features = array_merge($product->features ?? [], $features);
+            $product->save();
+        }
+
+        return $answered;
     }
 
     /**
