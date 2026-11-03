@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $store_id
  * @property int|null $user_id
  * @property int|null $evaluation_id
+ * @property int|null $product_recommendation_id
  * @property string $type
  * @property string|null $title
  * @property string $prompt
@@ -27,7 +28,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 #[Fillable([
     'store_id', 'user_id', 'evaluation_id', 'type', 'title', 'prompt', 'category', 'output_type',
-    'aspect_ratio', 'variants_count', 'source_image_path', 'status', 'error',
+    'aspect_ratio', 'variants_count', 'source_image_path', 'status', 'error', 'product_recommendation_id',
 ])]
 class DesignRequest extends Model
 {
@@ -47,6 +48,12 @@ class DesignRequest extends Model
     public function evaluation(): BelongsTo
     {
         return $this->belongsTo(Evaluation::class);
+    }
+
+    /** @return BelongsTo<ProductRecommendation, $this> */
+    public function productRecommendation(): BelongsTo
+    {
+        return $this->belongsTo(ProductRecommendation::class);
     }
 
     /**

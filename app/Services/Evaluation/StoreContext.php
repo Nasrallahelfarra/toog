@@ -48,9 +48,9 @@ class StoreContext
 
     public int $rejectThreshold;
 
-    public function __construct(public readonly Store $store)
+    public function __construct(public readonly Store $store, ?int $excludeProductId = null)
     {
-        $products = Product::query()->where('store_id', $store->id)->get();
+        $products = Product::query()->where('store_id', $store->id)->when($excludeProductId, fn ($q) => $q->where('id', '!=', $excludeProductId))->get();
 
         $this->allProducts = $products->map(fn (Product $p) => ['name' => $p->name, 'candidate' => Candidate::fromProduct($p)]);
         $this->winners = $products->where('performance', Product::WINNER)

@@ -45,7 +45,9 @@ type RequestType = 'modification' | 'new_idea' | 'mockup';
 type OutputType = 'product_photo' | 'print_file' | 'mockup_white' | 'mockup_model' | 'lifestyle' | 'social';
 
 type Source = {
-    id: number;
+    id: number | null;
+    recovery_id?: number;
+    action?: string;
     name: string;
     category: string | null;
     score: number | null;
@@ -130,10 +132,12 @@ export default function Studio({ source, prefillPrompt, brand, trends, categorie
         title: source?.name ?? '',
         prompt: source?.prompt ?? prefillPrompt ?? '',
         category: source?.category ?? '',
-        output_type: (source ? 'mockup_model' : 'product_photo') as OutputType,
-        aspect_ratio: source ? '4:5' : '1:1',
-        variants_count: 3,
+        output_type: (source && !source.recovery_id ? 'mockup_model' : 'product_photo') as OutputType,
+        aspect_ratio: source && !source.recovery_id ? '4:5' : '1:1',
+        variants_count: source?.recovery_id ? 1 : 3,
         evaluation_id: source?.id ?? (null as number | null),
+        product_recommendation_id: source?.recovery_id ?? (null as number | null),
+        recommendation_key: source?.action ?? '',
         source_image: null as File | null,
     });
 
@@ -160,6 +164,8 @@ export default function Studio({ source, prefillPrompt, brand, trends, categorie
             ...data,
             type: 'new_idea',
             evaluation_id: null,
+            product_recommendation_id: null,
+            recommendation_key: '',
             title: field(idea, 'title'),
             category: idea.category ?? data.category,
             prompt: `${field(idea, 'title')}. ${field(idea, 'description')} ${idea.prompt}`.trim(),
@@ -212,8 +218,8 @@ export default function Studio({ source, prefillPrompt, brand, trends, categorie
                                     <button
                                         key={type}
                                         type="button"
-                                        disabled={type === 'modification' && !source}
-                                        onClick={() => form.setData('type', type)}
+                                        disabled={type === 'modification' && !form.data.evaluation_id && !form.data.product_recommendation_id}
+                                        onClick={() => form.setData((data) => ({ ...data, type, ...(type !== 'modification' ? { product_recommendation_id: null, recommendation_key: '' } : {}) }))}
                                         className={cn(
                                             'flex cursor-pointer flex-col gap-1 rounded-xl border p-3 text-start transition-all disabled:cursor-not-allowed disabled:opacity-40',
                                             form.data.type === type ? 'border-primary bg-primary/5 ring-primary/15 ring-2' : 'hover:border-primary/30',
@@ -226,7 +232,7 @@ export default function Studio({ source, prefillPrompt, brand, trends, categorie
                             </div>
 
                             <AnimatePresence>
-                                {source && form.data.evaluation_id && (
+                                {source && (form.data.evaluation_id || form.data.product_recommendation_id) && (
                                     <motion.div
                                         initial={{ opacity: 0, height: 0 }}
                                         animate={{ opacity: 1, height: 'auto' }}
@@ -235,13 +241,13 @@ export default function Studio({ source, prefillPrompt, brand, trends, categorie
                                     >
                                         {source.image_url && <img src={source.image_url} alt="" className="size-12 rounded-lg object-cover" />}
                                         <div className="min-w-0 flex-1 text-xs leading-relaxed">
-                                            {tr(s.form.fromEvaluation, { name: source.name, score: source.score ?? '—', expected: source.expected_score ?? '—' })}
+                                            {source.recovery_id ? tr(t.stagnant.fromRecovery, { name: source.name }) : tr(s.form.fromEvaluation, { name: source.name, score: source.score ?? '—', expected: source.expected_score ?? '—' })}
                                         </div>
                                         <Button
                                             type="button"
                                             variant="ghost"
                                             size="icon"
-                                            onClick={() => form.setData((d) => ({ ...d, evaluation_id: null, type: d.type === 'modification' ? 'new_idea' : d.type }))}
+                                            onClick={() => form.setData((d) => ({ ...d, evaluation_id: null, product_recommendation_id: null, recommendation_key: '', type: d.type === 'modification' ? 'new_idea' : d.type }))}
                                             aria-label={s.form.clearSource}
                                         >
                                             <Link2Off className="size-4" />
@@ -352,7 +358,7 @@ export default function Studio({ source, prefillPrompt, brand, trends, categorie
                                     <ImageDrop compact file={form.data.source_image} onChange={(f) => form.setData('source_image', f)} className="w-24 shrink-0" />
                                     <p className="text-muted-foreground text-xs leading-relaxed">
                                         {s.form.sourceHint}
-                                        {form.data.evaluation_id && source?.image_url && !form.data.source_image && <span className="mt-1 block">{s.form.sourceFromEvaluation}</span>}
+                                        {(form.data.evaluation_id || form.data.product_recommendation_id) && source?.image_url && !form.data.source_image && <span className="mt-1 block">{source.recovery_id ? t.stagnant.applyHint : s.form.sourceFromEvaluation}</span>}
                                     </p>
                                 </div>
                                 <InputError message={form.errors.source_image} />

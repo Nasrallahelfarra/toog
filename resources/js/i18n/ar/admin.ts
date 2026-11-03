@@ -251,6 +251,7 @@ export const admin = {
     },
 
     operations: {
+        product_recovery: 'توصيات المنتجات الراكدة',
         evaluation: 'تقييم المنتجات',
         attributes: 'استخلاص السمات',
         sentiment: 'تحليل آراء العملاء',

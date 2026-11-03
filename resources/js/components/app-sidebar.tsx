@@ -16,6 +16,7 @@ import {
     Settings,
     Settings2,
     Store,
+    Turtle,
     Swords,
     Users,
     WandSparkles,
@@ -67,6 +68,7 @@ export function AppSidebar() {
             items: [
                 { title: t.nav.dashboard, href: '/store', icon: LayoutDashboard, exact: true },
                 { title: t.nav.performance, href: '/store/performance', icon: LineChart },
+                { title: t.nav.stagnant, href: '/store/stagnant', icon: Turtle },
                 { title: t.nav.connection, href: '/store/settings/integration', icon: PlugZap, dot: connectionDot },
             ],
         },

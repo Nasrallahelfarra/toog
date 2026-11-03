@@ -16,6 +16,7 @@ import { settings as arSettings } from './ar/settings';
 import { studio as arStudio } from './ar/studio';
 import { productReview as arProductReview } from './ar/product-review';
 import { zidSync as arZidSync } from './ar/zid-sync';
+import { stagnant as arStagnant } from './ar/stagnant';
 import { account as enAccount } from './en/account';
 import { activity as enActivity } from './en/activity';
 import { admin as enAdmin } from './en/admin';
@@ -34,6 +35,7 @@ import { settings as enSettings } from './en/settings';
 import { studio as enStudio } from './en/studio';
 import { productReview as enProductReview } from './en/product-review';
 import { zidSync as enZidSync } from './en/zid-sync';
+import { stagnant as enStagnant } from './en/stagnant';
 
 /**
  * One namespace per module, so modules can be translated independently.
@@ -52,6 +54,7 @@ export const ar = {
     studio: arStudio,
     productReview: arProductReview,
     zidSync: arZidSync,
+    stagnant: arStagnant,
     market: arMarket,
     balance: arBalance,
     calendar: arCalendar,
@@ -75,6 +78,7 @@ export const en: Dictionary = {
     studio: enStudio,
     productReview: enProductReview,
     zidSync: enZidSync,
+    stagnant: enStagnant,
     market: enMarket,
     balance: enBalance,
     calendar: enCalendar,

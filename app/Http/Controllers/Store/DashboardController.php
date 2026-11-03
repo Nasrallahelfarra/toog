@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\Analytics\StorePerformance;
 use App\Services\Catalog\BalanceService;
 use App\Services\Catalog\DemoCatalogCleanup;
+use App\Services\Catalog\StagnantProducts;
 use App\Services\Zid\ConnectionCheck;
 use App\Services\Zid\ZidClient;
 use App\Services\Zid\ZidSyncState;
@@ -112,6 +113,7 @@ class DashboardController extends Controller
                     'palette' => $e->palette ?? [],
                 ]),
             'atRisk' => $performance->atRisk($store, 5),
+            'stagnant' => fn () => app(StagnantProducts::class)->dashboard($store),
             'recentEvaluations' => Evaluation::query()
                 ->where('store_id', $store->id)
                 ->latest()

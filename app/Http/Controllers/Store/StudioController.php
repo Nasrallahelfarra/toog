@@ -8,6 +8,7 @@ use App\Models\Design;
 use App\Models\DesignRequest;
 use App\Models\Evaluation;
 use App\Models\Product;
+use App\Models\ProductRecommendation;
 use App\Models\Trend;
 use App\Services\Design\DesignService;
 use App\Services\Design\IdeaService;
@@ -17,6 +18,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -33,7 +35,22 @@ class StudioController extends Controller
         $store = $this->current->require();
         $source = null;
 
-        if ($request->integer('evaluation')) {
+        if ($request->integer('recovery')) {
+            $recovery = ProductRecommendation::query()->where('store_id', $store->id)->where('status', 'completed')->findOrFail($request->integer('recovery'));
+            $selected = $recovery->visualRecommendation($request->string('action')->toString());
+            abort_unless($selected && $recovery->source_image_path, 404);
+            $snapshot = $recovery->snapshot;
+            $features = $snapshot['features'] ?? [];
+            $source = [
+                'id' => null, 'recovery_id' => $recovery->id, 'action' => $selected['id'],
+                'name' => $snapshot['name'], 'category' => $snapshot['category'] ?? null,
+                'score' => null, 'expected_score' => null, 'recommendation' => null,
+                'colors' => $features['colors'] ?? [], 'pattern' => $features['pattern'] ?? null,
+                'material' => $features['material'] ?? null, 'style' => $features['style'] ?? null, 'modifications' => [],
+                'image_url' => Storage::disk('public')->url($recovery->source_image_path),
+                'prompt' => $selected['instruction'][app()->getLocale()] ?? $selected['instruction']['ar'],
+            ];
+        } elseif ($request->integer('evaluation')) {
             $evaluation = Evaluation::query()->where('store_id', $store->id)->find($request->integer('evaluation'));
 
             if ($evaluation) {
@@ -91,23 +108,36 @@ class StudioController extends Controller
             'aspect_ratio' => ['required', Rule::in(['1:1', '4:5', '9:16', '16:9', '3:4'])],
             'variants_count' => ['required', 'integer', 'min:1', 'max:4'],
             'evaluation_id' => ['nullable', 'integer'],
+            'product_recommendation_id' => ['nullable', 'integer', 'prohibits:evaluation_id'],
+            'recommendation_key' => ['required_with:product_recommendation_id', 'nullable', 'string', 'max:30'],
             'source_image' => ['nullable', 'image', 'max:8192'],
         ]);
 
         $evaluation = ! empty($data['evaluation_id'])
-            ? Evaluation::query()->where('store_id', $store->id)->find($data['evaluation_id'])
+            ? Evaluation::query()->where('store_id', $store->id)->whereKey($request->integer('evaluation_id'))->first()
             : null;
+
+        $recovery = null;
+        if (! empty($data['product_recommendation_id'])) {
+            $recovery = ProductRecommendation::query()->where('store_id', $store->id)->where('status', 'completed')->whereKey($request->integer('product_recommendation_id'))->firstOrFail();
+            $selected = $recovery->visualRecommendation($request->string('recommendation_key')->toString());
+            abort_unless($selected && $data['type'] === 'modification', 422);
+            if (! $request->hasFile('source_image') && (! $recovery->source_image_path || ! Storage::disk('public')->exists($recovery->source_image_path))) {
+                throw ValidationException::withMessages(['source_image' => __('stagnant.source_missing')]);
+            }
+        }
 
         // A modification keeps the original product's shape: reuse its photo
         // as the reference unless a new one was uploaded (FR-4.2).
         $sourcePath = $request->hasFile('source_image')
             ? $request->file('source_image')->store("design-sources/{$store->id}", 'public')
-            : $evaluation?->image_path;
+            : ($recovery->source_image_path ?? $evaluation?->image_path);
 
         $designRequest = DesignRequest::query()->create([
             'store_id' => $store->id,
             'user_id' => $request->user()->id,
             'evaluation_id' => $evaluation?->id,
+            'product_recommendation_id' => $recovery?->id,
             'type' => $data['type'],
             'title' => $data['title'] ?: $evaluation?->name,
             'prompt' => $data['prompt'],

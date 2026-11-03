@@ -6,6 +6,7 @@ use App\Http\Controllers\Store\ImportController;
 use App\Http\Controllers\Store\IntegrationController;
 use App\Http\Controllers\Store\PerformanceController;
 use App\Http\Controllers\Store\SettingsController;
+use App\Http\Controllers\Store\StagnantProductController;
 use App\Support\CurrentStore;
 use Illuminate\Support\Facades\Route;
 
@@ -18,6 +19,8 @@ Route::post('catalog/clear-demo', [DemoCatalogController::class, 'destroy'])->na
 
 // Module 1 — store data & sales analysis
 Route::get('performance', [PerformanceController::class, 'index'])->name('performance');
+Route::get('stagnant', [StagnantProductController::class, 'index'])->name('stagnant.index');
+Route::post('stagnant/{product}/recommendation', [StagnantProductController::class, 'recommend'])->middleware('throttle:20,1')->name('stagnant.recommend');
 Route::post('performance/reclassify', [PerformanceController::class, 'reclassify'])->name('performance.reclassify');
 Route::post('performance/extract-features', [PerformanceController::class, 'extract'])->name('performance.extract');
 

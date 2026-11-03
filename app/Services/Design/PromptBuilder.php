@@ -29,6 +29,15 @@ class PromptBuilder
      */
     public function build(DesignRequest $request, Store $store, array $variant, array $product, bool $hasSource): string
     {
+        if ($request->product_recommendation_id) {
+            return implode("\n", [
+                'Edit the supplied reference image to create '.(self::FRAMING[$request->output_type] ?? self::FRAMING['product_photo']).'.',
+                'The reference is the exact catalog product. Preserve its identity, geometry, construction, brand marks and every detail not explicitly selected for editing.',
+                'Apply only the following expert recommendation, as reviewed by the merchant:',
+                trim($request->prompt),
+                'Do not add unrelated trends, motifs, palette changes, text or watermarks. Produce a high-quality commercial product image.',
+            ]);
+        }
         $brand = $store->brand_guide ?? [];
         $palette = collect($variant['colors'])
             ->map(fn ($key) => sprintf('%s %s', Vocabulary::label('colors', $key, 'en'), Vocabulary::colors()[$key]['hex'] ?? ''))

@@ -22,6 +22,8 @@ import { SetupHero } from '@/components/store/setup-hero';
 import { DemoCatalogCleanup } from '@/components/store/demo-catalog-cleanup';
 import type { DemoCatalogPreview } from '@/components/store/demo-catalog-cleanup';
 import { ZidSyncProgress } from '@/components/store/zid-sync-progress';
+import { StagnantDashboardCard } from '@/components/store/stagnant-products';
+import type { StagnantDashboard } from '@/components/store/stagnant-products';
 import type { ZidSyncProgressData } from '@/components/store/zid-sync-progress';
 import type { SetupState } from '@/components/store/setup-hero';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -95,6 +97,7 @@ type RecentEvaluation = {
 };
 
 type Props = {
+    stagnant: StagnantDashboard;
     demoCatalog: DemoCatalogPreview | null;
     sync: ZidSyncProgressData | null;
     kpis: {
@@ -160,7 +163,7 @@ export default function StoreDashboard(props: Props) {
             />
 
             {props.demoCatalog && <DemoCatalogCleanup key={currentStore?.id} data={props.demoCatalog} />}
-            {props.sync && <ZidSyncProgress key={`${currentStore?.id}-${props.sync.id}`} sync={props.sync} refresh={['sync', 'setup', 'demoCatalog', 'kpis', 'revenueTrend', 'decisions', 'atRisk']} />}
+            {props.sync && <ZidSyncProgress key={`${currentStore?.id}-${props.sync.id}`} sync={props.sync} refresh={['sync', 'setup', 'demoCatalog', 'kpis', 'revenueTrend', 'decisions', 'atRisk', 'stagnant']} />}
 
             {props.setup ? (
                 <SetupHero setup={props.setup} />
@@ -212,6 +215,8 @@ export default function StoreDashboard(props: Props) {
                             />
                         </StaggerItem>
                     </Stagger>
+
+                    <StagnantDashboardCard data={props.stagnant} />
 
                     <div className="grid gap-6 lg:grid-cols-3">
                         <FadeIn delay={0.1} className="lg:col-span-2">

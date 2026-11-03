@@ -11,6 +11,7 @@ export const nav = {
     dashboard: 'لوحة التحكم',
     connection: 'ربط متجر زد',
     performance: 'أداء المتجر',
+    stagnant: 'المنتجات الراكدة',
     intelligence: 'ذكاء السوق',
     market: 'توجهات السوق',
     competitors: 'المنافسون',

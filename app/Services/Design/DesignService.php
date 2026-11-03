@@ -94,6 +94,15 @@ class DesignService
      */
     public function product(DesignRequest $request, ?Evaluation $source): array
     {
+        if ($recovery = $request->productRecommendation) {
+            $snapshot = $recovery->snapshot;
+            $features = $snapshot['features'] ?? [];
+
+            return ['name' => $snapshot['name'], 'category' => $request->category ?: ($snapshot['category'] ?? null),
+                'price' => isset($snapshot['price']) ? (float) $snapshot['price'] : null,
+                'colors' => $features['colors'] ?? [], 'pattern' => $features['pattern'] ?? null,
+                'material' => $features['material'] ?? null, 'style' => $features['style'] ?? null, 'season' => $features['season'] ?? null];
+        }
         if ($source) {
             $candidate = Candidate::fromEvaluation($source);
 

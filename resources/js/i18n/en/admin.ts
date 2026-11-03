@@ -252,6 +252,7 @@ export const admin: typeof ar = {
     },
 
     operations: {
+        product_recovery: 'Slow-mover recommendations',
         evaluation: 'Product evaluation',
         attributes: 'Attribute extraction',
         sentiment: 'Review sentiment',

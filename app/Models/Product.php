@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -72,5 +73,11 @@ class Product extends Model
     public function sales(): HasMany
     {
         return $this->hasMany(ProductSale::class);
+    }
+
+    /** @return HasOne<ProductRecommendation, $this> */
+    public function recovery(): HasOne
+    {
+        return $this->hasOne(ProductRecommendation::class)->latestOfMany();
     }
 }
