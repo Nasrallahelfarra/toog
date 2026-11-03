@@ -65,13 +65,14 @@ class PerformanceClassificationTest extends TestCase
         }
         app(PerformanceClassifier::class)->classify($this->store);
 
-        $this->assertSame(Product::STAGNANT, $slow->fresh()->performance);
+        $this->assertSame(Product::AT_RISK, $slow->fresh()->performance);
+        $this->assertSame('low_performance', $slow->fresh()->performanceReason());
         $this->assertSame($score, $slow->fresh()->performance_score);
         $this->assertSame(Product::WINNER, $fast->fresh()->performance);
         $this->assertSame(25, $this->store->products()->whereNull('performance')->count());
     }
 
-    public function test_slow_stock_turnover_takes_priority_over_a_high_sales_score(): void
+    public function test_high_selling_overstock_is_at_risk_not_confirmed_stagnant(): void
     {
         $overstocked = $this->product(['stock' => 1000]);
         $other = $this->product(['stock' => 1]);
@@ -81,7 +82,8 @@ class PerformanceClassificationTest extends TestCase
 
         $this->assertGreaterThanOrEqual(67, $overstocked->fresh()->performance_score);
         $this->assertSame(300, $overstocked->fresh()->turnover_days);
-        $this->assertSame(Product::STAGNANT, $overstocked->fresh()->performance);
+        $this->assertSame(Product::AT_RISK, $overstocked->fresh()->performance);
+        $this->assertSame('slow_turnover', $overstocked->fresh()->performanceReason());
     }
 
     public function test_equal_signals_are_neutral_instead_of_rewarding_or_penalizing_ties(): void
@@ -141,7 +143,7 @@ class PerformanceClassificationTest extends TestCase
         $this->assertEqualsWithDelta(5, $metrics[$product->id]['velocity'], 0.05);
         $this->assertSame(365, $metrics[$product->id]['turnover']);
         app(PerformanceClassifier::class)->classify($this->store);
-        $this->assertSame(Product::STAGNANT, $product->fresh()->performance);
+        $this->assertSame(Product::AT_RISK, $product->fresh()->performance);
     }
 
     public function test_explicit_zero_sales_months_count_and_old_or_future_rows_are_excluded(): void
@@ -154,6 +156,73 @@ class PerformanceClassificationTest extends TestCase
         $metric = app(PerformanceClassifier::class)->metrics($this->store, collect([$product]))[$product->id];
         $this->assertSame(10, $metric['units']);
         $this->assertEquals(5, $metric['velocity']);
+    }
+
+    public function test_confirmed_stagnation_needs_ninety_days_and_is_cleared_when_sales_resume(): void
+    {
+        $ninety = $this->product(['launched_at' => now()->subDays(90)]);
+        $eightyNine = $this->product(['launched_at' => now()->subDays(89)]);
+        $this->sync();
+        $classifier = app(PerformanceClassifier::class);
+        $classifier->classify($this->store);
+        $this->assertSame(Product::STAGNANT, $ninety->fresh()->performance);
+        $this->assertNull($eightyNine->fresh()->performance);
+        $this->sale($ninety, 2);
+        $classifier->classify($this->store);
+        $this->assertNotSame(Product::STAGNANT, $ninety->fresh()->performance);
+    }
+
+    public function test_monthly_sales_do_not_overstate_the_days_since_the_last_sale(): void
+    {
+        $stopped = $this->product(['stock' => 100]);
+        $recent = $this->product(['stock' => 100]);
+        $this->sale($stopped, 10, ['period' => '2026-07-01']);
+        $this->sale($recent, 10, ['period' => '2026-08-01']);
+        $this->sync();
+        $classifier = app(PerformanceClassifier::class);
+        $metrics = $classifier->metrics($this->store, collect([$stopped, $recent]));
+        $this->assertSame(94, $metrics[$stopped->id]['no_sales_days']);
+        $this->assertSame(63, $metrics[$recent->id]['no_sales_days']);
+        $classifier->classify($this->store);
+        $this->assertSame(Product::STAGNANT, $stopped->fresh()->performance);
+        $this->assertSame(Product::AT_RISK, $recent->fresh()->performance);
+    }
+
+    public function test_explicit_months_prove_inactivity_but_missing_or_partial_months_do_not(): void
+    {
+        $continuous = $this->product();
+        $gap = $this->product();
+        $partial = $this->product();
+        foreach (['2026-08-01', '2026-09-01', '2026-10-01'] as $month) {
+            $this->sale($continuous, 0, ['period' => $month]);
+            if ($month !== '2026-09-01') {
+                $this->sale($gap, 0, ['period' => $month]);
+            }
+        }
+        $this->sale($partial, 0);
+        app(PerformanceClassifier::class)->classify($this->store);
+        $this->assertSame(Product::STAGNANT, $continuous->fresh()->performance);
+        $this->assertSame(Product::AT_RISK, $gap->fresh()->performance);
+        $this->assertSame(Product::AT_RISK, $partial->fresh()->performance);
+        $this->assertSame('early_no_sales', $partial->fresh()->performanceReason());
+    }
+
+    public function test_products_without_stock_are_not_marked_as_inventory_at_risk_or_stagnant(): void
+    {
+        $product = $this->product(['stock' => 0]);
+        foreach (['2026-08-01', '2026-09-01', '2026-10-01'] as $month) {
+            $this->sale($product, 0, ['period' => $month]);
+        }
+        app(PerformanceClassifier::class)->classify($this->store);
+        $this->assertSame(Product::AVERAGE, $product->fresh()->performance);
+    }
+
+    public function test_classification_version_is_updated_without_overwriting_store_settings(): void
+    {
+        $this->store->update(['settings' => ['custom_preference' => 'keep-me']]);
+        app(PerformanceClassifier::class)->classify($this->store);
+        $this->assertSame('keep-me', $this->store->fresh()->settings['custom_preference']);
+        $this->assertSame(PerformanceClassifier::VERSION, $this->store->fresh()->settings['performance_classification_version']);
     }
 
     public function test_reclassifying_from_stagnant_page_updates_dashboard_and_list_without_extracting_images(): void

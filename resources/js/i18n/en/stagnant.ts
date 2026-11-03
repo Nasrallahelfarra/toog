@@ -1,12 +1,27 @@
 import type { stagnant as ar } from '../ar/stagnant';
 
 export const stagnant: typeof ar = {
-    title: 'Slow-moving products',
+    title: 'Stagnant and at-risk products',
     subtitle:
-        'Find slow movers and request a tailored recommendation to help each product recover.',
-    dashboardHint: '{count} products need attention · Highest stock first',
+        'Separate products with sustained inactivity from those needing early action, and request tailored advice.',
+    dashboardHint: '{stagnant} stagnant · {atRisk} at risk',
     all: 'View all products',
-    total: 'Slow-moving products',
+    total: 'Stagnant products',
+    atRisk: 'At risk of stagnation',
+    allStatuses: 'All products needing attention',
+    statusFilter: 'Filter by stagnation status',
+    refreshNeeded:
+        'These counts use the previous classification. Refresh classification to separate stagnant inventory from at-risk products using the new rules.',
+    reasons: {
+        no_sales_90:
+            'Stock remains with no sales for at least 90 consecutive days covered by reliable data.',
+        slow_turnover:
+            'The product sells, but clearing its stock would take about 240 days or more at the recorded rate.',
+        low_performance:
+            'Sales performance is low relative to store products; an early warning, not confirmed stagnation.',
+        early_no_sales:
+            'Available records show no sales, but coverage does not establish 90 consecutive days of inactivity.',
+    },
     stock: 'Units in stock',
     stockValue: 'Stock value at selling price',
     stockValueHint: 'An estimate at selling price, not inventory cost',
@@ -15,7 +30,7 @@ export const stagnant: typeof ar = {
     turnover: 'Days to clear stock',
     price: 'Product price',
     classification:
-        'Based on store performance: a low score (33 or below) or slow stock turnover (240+ days). Includes stocked products with no sales for at least 90 days after launch covered by a completed sync.',
+        'Stagnant: stock with no sales for at least 90 consecutive days covered by sufficient data. At risk: stock with a score of 33 or below, or 240+ days to clear, without confirmed stagnation. Stock and value figures include both groups.',
     reclassify: 'Refresh classification',
     reclassifying: 'Refreshing classification',
     reclassifyHint:
@@ -26,7 +41,7 @@ export const stagnant: typeof ar = {
     search: 'Search by product name or SKU',
     searchButton: 'Search',
     categories: 'All categories',
-    empty: 'No products classified as slow movers',
+    empty: 'No stagnant or at-risk products',
     emptyHint:
         'Refresh classification on this page. If the list stays empty, check that sales sync or import is complete.',
     noResults: 'No products match your search',
@@ -89,7 +104,7 @@ export const stagnant: typeof ar = {
         'The expert suggested no additional actions with the available data.',
     failed: 'Recommendation incomplete',
     fromRecovery:
-        'Improve “{name}” using its slow-mover recommendation. The original image and editing instructions are ready.',
+        'Improve “{name}” using its product performance recommendation. The original image and editing instructions are ready.',
     errors: {
         not_configured:
             'The specialist review requires a Gemini connection in platform settings.',

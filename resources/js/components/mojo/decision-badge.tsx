@@ -48,7 +48,7 @@ export function DecisionBadge({ value, size = 'sm', className }: { value: string
 }
 
 /**
- * Winner / average / stagnant classification pill (FR-1.3).
+ * Consistent performance classes across catalog, dashboard and reports.
  */
 export function PerformanceBadge({ value, className }: { value: string | null | undefined; className?: string }) {
     const { t } = useI18n();
@@ -57,12 +57,12 @@ export function PerformanceBadge({ value, className }: { value: string | null | 
         return <span className="text-muted-foreground text-xs">—</span>;
     }
 
-    const tone = toneClasses[value === 'winner' ? 'success' : value === 'stagnant' ? 'danger' : 'info'];
+    const tone = toneClasses[value === 'winner' ? 'success' : value === 'stagnant' ? 'danger' : value === 'at_risk' ? 'warning' : 'info'];
 
     return (
         <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium', tone.soft, tone.text, className)}>
             <span className={cn('size-1.5 rounded-full', tone.bg)} />
-            {t.common.performanceClass[value as 'winner' | 'average' | 'stagnant'] ?? value}
+            {t.common.performanceClass[value as keyof typeof t.common.performanceClass] ?? value}
         </span>
     );
 }

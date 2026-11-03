@@ -153,10 +153,10 @@ export const performance: typeof ar = {
             how: 'Current stock ÷ average daily sales, capped at 365 days; a product with no sales gets 365.',
             why: 'Idle stock is frozen capital; this signal warns you before a product piles up.',
             source: 'Stock quantity from Zid, together with monthly sales.',
-            rule: 'Extra rule: a product that needs 240 days or more to sell out is a slow mover, whatever its score.',
+            rule: 'Stock needing 240+ days to clear signals risk. Confirmed stagnation requires 90 consecutive days without sales, covered by sufficient data.',
         },
     },
-    thresholds: 'Best seller: {winner}+ with returns under 25% · Slow mover: {stagnant} or below, or stock needing 240+ days to clear · Average: in between',
+    thresholds: 'Stagnant: stock with 90+ consecutive days without sales covered by sufficient data · At risk: stock with a score of {stagnant} or below, or 240+ days to clear · Best seller: {winner}+ and returns below 25%, without stagnation or risk · Otherwise average',
 
     trendTitle: 'Sales over 12 months',
     trendHint: 'monthly revenue and units sold',

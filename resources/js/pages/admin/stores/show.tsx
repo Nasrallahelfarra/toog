@@ -241,7 +241,7 @@ function OverviewTab({ store, overview }: { store: StoreDetail; overview: Props[
     const d = t.admin.detail;
     const axes = useChartAxes();
 
-    const perf = ['winner', 'average', 'stagnant', 'unclassified'].map((key) => ({
+    const perf = ['winner', 'average', 'at_risk', 'stagnant', 'unclassified'].map((key) => ({
         key,
         value: overview.performance[key] ?? 0,
     }));

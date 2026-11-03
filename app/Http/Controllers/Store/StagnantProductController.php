@@ -25,8 +25,9 @@ class StagnantProductController extends Controller
     public function index(Request $request, StagnantProducts $catalog): Response|RedirectResponse
     {
         $store = $this->current->require();
-        $filters = $request->validate(['search' => 'nullable|string|max:150', 'category' => 'nullable|string|max:80']);
+        $filters = $request->validate(['search' => 'nullable|string|max:150', 'category' => 'nullable|string|max:80', 'class' => 'nullable|in:stagnant,at_risk']);
         $products = $catalog->query($store)->with('recovery')
+            ->when($filters['class'] ?? null, fn ($q, $class) => $q->where('performance', $class))
             ->when($filters['search'] ?? null, fn ($q, $search) => $q->where(fn ($q) => $q->where('name', 'like', "%{$search}%")->orWhere('sku', 'like', "%{$search}%")))
             ->when($filters['category'] ?? null, fn ($q, $category) => $q->where('category', $category))
             ->orderByDesc('stock')->orderBy('performance_score')->orderBy('id')->paginate(12)->withQueryString()
@@ -47,7 +48,7 @@ class StagnantProductController extends Controller
     {
         $store = $this->current->require();
         abort_unless($product->store_id === $store->id, 404);
-        abort_unless($product->performance === Product::STAGNANT, 422);
+        abort_unless(in_array($product->performance, [Product::STAGNANT, Product::AT_RISK], true), 422);
         $request->validate(['replace_recommendation_id' => 'sometimes|integer|min:1']);
 
         $run = DB::transaction(function () use ($product, $request) {
@@ -63,7 +64,7 @@ class StagnantProductController extends Controller
 
             return ProductRecommendation::query()->create([
                 'store_id' => $product->store_id, 'product_id' => $product->id, 'user_id' => $request->user()->id,
-                'status' => 'pending', 'snapshot' => $locked->only(['name', 'category', 'price', 'image_url', 'features', 'stock', 'units_sold', 'revenue', 'views', 'add_to_cart_rate', 'return_rate', 'turnover_days', 'performance_score']),
+                'status' => 'pending', 'snapshot' => [...$locked->only(['name', 'category', 'price', 'image_url', 'features', 'stock', 'units_sold', 'revenue', 'views', 'add_to_cart_rate', 'return_rate', 'turnover_days', 'performance_score', 'performance']), 'classification_reason' => $locked->performanceReason()],
             ]);
         });
         if ($run) {

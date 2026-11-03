@@ -36,6 +36,7 @@ class ProductRecovery
             $evaluation = new Evaluation(['store_id' => $store->id, 'name' => $snapshot['name'], 'category' => $snapshot['category'] ?? null]);
             $context = $this->reviewer->context($evaluation, $ctx, $result);
             $context['product_performance'] = $snapshot;
+            $context['classification_definition'] = 'stagnant means stocked inventory with at least 90 consecutive days without sales covered by sufficient data. at_risk is an early warning from weak relative performance or high stock coverage; it does not prove stagnation. Recommend prevention for at_risk and recovery for stagnant. The class is a computed signal, not a proven cause of customer behavior.';
             $context['history_window'] = 'Classification aggregates use up to 12 months of imported sales. Zero views may mean missing tracking.';
             if (! $progress->advance($run, 'image')) {
                 return;

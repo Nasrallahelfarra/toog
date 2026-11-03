@@ -59,7 +59,7 @@ export const dashboard = {
     noEvents: 'لا توجد مواسم قادمة',
 
     atRiskTitle: 'منتجات معرّضة للتحول إلى مخزون راكد',
-    atRiskHint: 'تراجع في المبيعات أو مخزون يفوق وتيرة البيع الحالية',
+    atRiskHint: 'إنذار مبكر من آخر تصنيف، منفصل عن المنتجات الراكدة فعلًا',
     overstock: 'مخزون زائد',
     decline: 'تراجع {value}%',
     monthsOfStock: 'مخزون {value} شهر',

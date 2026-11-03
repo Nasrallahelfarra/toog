@@ -13,6 +13,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import type { SpecialistReview } from '@/components/evaluation/types';
+import { PerformanceBadge } from '@/components/mojo/decision-badge';
 import { EmptyState } from '@/components/mojo/empty-state';
 import { SectionCard } from '@/components/mojo/section-card';
 import { Button } from '@/components/ui/button';
@@ -48,11 +49,20 @@ export type StagnantProduct = {
     units_sold: number;
     turnover_days: number | null;
     performance_score: number | null;
+    performance: 'stagnant' | 'at_risk';
+    classification_reason:
+        | 'no_sales_90'
+        | 'slow_turnover'
+        | 'low_performance'
+        | 'early_no_sales';
     recovery: Recovery | null;
 };
 
 export type StagnantSummary = {
     total: number;
+    stagnant: number;
+    at_risk: number;
+    needs_reclassification: boolean;
     stock: number;
     stock_value: number;
     unclassified: number;
@@ -120,7 +130,8 @@ export function StagnantDashboardCard({ data }: { data: StagnantDashboard }) {
         <SectionCard
             title={t.stagnant.title}
             description={tr(t.stagnant.dashboardHint, {
-                count: number(data.total),
+                stagnant: number(data.stagnant),
+                atRisk: number(data.at_risk),
             })}
             icon={Turtle}
             action={
@@ -132,6 +143,11 @@ export function StagnantDashboardCard({ data }: { data: StagnantDashboard }) {
                 </Button>
             }
         >
+            {data.needs_reclassification && (
+                <p className="mb-4 rounded-xl bg-warning/10 p-3 text-sm leading-7 text-warning">
+                    {t.stagnant.refreshNeeded}
+                </p>
+            )}
             {data.unclassified > 0 && (
                 <p className="mb-4 rounded-xl bg-muted/50 p-3 text-sm leading-7 text-muted-foreground">
                     {tr(t.stagnant.unclassified, {
@@ -139,7 +155,11 @@ export function StagnantDashboardCard({ data }: { data: StagnantDashboard }) {
                     })}
                 </p>
             )}
-            <StagnantProductGrid products={data.products} dashboard />
+            <StagnantProductGrid
+                products={data.products}
+                dashboard
+                stale={data.needs_reclassification}
+            />
         </SectionCard>
     );
 }
@@ -148,10 +168,12 @@ export function StagnantProductGrid({
     products,
     dashboard = false,
     filtered = false,
+    stale = false,
 }: {
     products: StagnantProduct[];
     dashboard?: boolean;
     filtered?: boolean;
+    stale?: boolean;
 }) {
     const { t, number, money, isRtl } = useI18n();
     const s = t.stagnant;
@@ -256,9 +278,10 @@ export function StagnantProductGrid({
                                                 : 'h-48 w-full'
                                         }
                                     />
-                                    <span className="absolute start-2 top-2 inline-flex items-center gap-1 rounded-full border border-danger/15 bg-background/95 px-2 py-1 text-[11px] font-medium text-danger">
-                                        <Turtle className="size-3" />
-                                        {t.common.performanceClass.stagnant}
+                                    <span className="absolute start-2 top-2 rounded-full bg-background/95">
+                                        <PerformanceBadge
+                                            value={product.performance}
+                                        />
                                     </span>
                                 </div>
                                 <div className="mb-3 flex-1 space-y-1">
@@ -295,6 +318,15 @@ export function StagnantProductGrid({
                                         </dd>
                                     </div>
                                 </dl>
+                                {!stale && (
+                                    <p className="mb-4 text-xs leading-6 text-muted-foreground">
+                                        {
+                                            s.reasons[
+                                                product.classification_reason
+                                            ]
+                                        }
+                                    </p>
+                                )}
                                 <Button
                                     variant={
                                         status === 'completed'
@@ -397,6 +429,11 @@ export function StagnantProductGrid({
                                     </div>
                                 </dl>
                             </div>
+                            {!stale && (
+                                <p className="rounded-xl bg-muted/50 p-3 text-sm leading-7">
+                                    {s.reasons[selected.classification_reason]}
+                                </p>
+                            )}
                             <AnimatePresence mode="wait" initial={false}>
                                 <motion.div
                                     key={

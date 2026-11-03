@@ -224,7 +224,7 @@ export const settings = {
             },
             analysis: {
                 title: 'تحليل الأداء',
-                pass: '{winner} رابح · {average} متوسط · {stagnant} راكد.',
+                pass: '{winner} رابح · {average} متوسط · {at_risk} معرّض للركود · {stagnant} راكد.',
                 warn: 'لم تُصنَّف المنتجات بعد.',
                 fix: 'أعد التصنيف من صفحة «أداء المتجر».',
             },

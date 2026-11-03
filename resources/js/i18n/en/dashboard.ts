@@ -60,7 +60,7 @@ export const dashboard: typeof ar = {
     noEvents: 'No upcoming seasons',
 
     atRiskTitle: 'Products at risk of becoming dead stock',
-    atRiskHint: 'Falling sales or stock that outpaces the current sales rate',
+    atRiskHint: 'Early warnings from the latest classification, separate from confirmed stagnant products',
     overstock: 'Overstock',
     decline: 'down {value}%',
     monthsOfStock: '{value} months of stock',

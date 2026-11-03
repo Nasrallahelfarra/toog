@@ -121,6 +121,7 @@ export const common = {
     performanceClass: {
         winner: 'رابح',
         average: 'متوسط',
+        at_risk: 'معرّض للركود',
         stagnant: 'راكد',
     },
 };

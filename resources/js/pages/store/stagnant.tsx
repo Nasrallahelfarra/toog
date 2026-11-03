@@ -1,5 +1,5 @@
 import { Link, router } from '@inertiajs/react';
-import { Banknote, Package, Search, Turtle } from 'lucide-react';
+import { AlertTriangle, Banknote, Package, Search, Turtle } from 'lucide-react';
 import { useState } from 'react';
 import { PageBody, PageHeader } from '@/components/mojo/page-header';
 import { Pagination } from '@/components/mojo/pagination';
@@ -22,7 +22,7 @@ import { useI18n } from '@/hooks/use-i18n';
 type Props = {
     products: Paginated<StagnantProduct>;
     summary: StagnantSummary;
-    filters: { search?: string; category?: string };
+    filters: { search?: string; category?: string; class?: string };
     categories: string[];
     classification: ClassificationRun | null;
 };
@@ -56,12 +56,26 @@ export default function Stagnant({
                 }
             />
             <ClassificationProgress run={classification} />
-            <div className="grid gap-4 sm:grid-cols-3">
+            {summary.needs_reclassification && (
+                <p
+                    role="status"
+                    className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm leading-7"
+                >
+                    {s.refreshNeeded}
+                </p>
+            )}
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard
                     label={s.total}
-                    value={summary.total}
+                    value={summary.stagnant}
                     icon={Turtle}
                     tone="danger"
+                />
+                <StatCard
+                    label={s.atRisk}
+                    value={summary.at_risk}
+                    icon={AlertTriangle}
+                    tone="warning"
                 />
                 <StatCard
                     label={s.stock}
@@ -82,6 +96,49 @@ export default function Stagnant({
                 <p>{s.period}</p>
                 <p>{s.reclassifyHint}</p>
             </div>
+            <nav aria-label={s.statusFilter} className="flex flex-wrap gap-2">
+                {[
+                    { value: '', label: s.allStatuses, count: summary.total },
+                    {
+                        value: 'at_risk',
+                        label: s.atRisk,
+                        count: summary.at_risk,
+                    },
+                    {
+                        value: 'stagnant',
+                        label: s.total,
+                        count: summary.stagnant,
+                    },
+                ].map((tab) => (
+                    <Button
+                        key={tab.value}
+                        asChild
+                        variant={
+                            (filters.class ?? '') === tab.value
+                                ? 'default'
+                                : 'outline'
+                        }
+                    >
+                        <Link
+                            href="/store/stagnant"
+                            data={{
+                                search: filters.search ?? '',
+                                category: filters.category ?? '',
+                                class: tab.value,
+                            }}
+                            preserveScroll
+                            aria-current={
+                                (filters.class ?? '') === tab.value
+                                    ? 'page'
+                                    : undefined
+                            }
+                        >
+                            {tab.label}{' '}
+                            <span className="ms-1">{number(tab.count)}</span>
+                        </Link>
+                    </Button>
+                ))}
+            </nav>
             {summary.unclassified > 0 && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/40 p-4 text-sm leading-7">
                     <p className="flex-1 text-muted-foreground">
@@ -102,7 +159,7 @@ export default function Stagnant({
                     event.preventDefault();
                     router.get(
                         '/store/stagnant',
-                        { search, category },
+                        { search, category, class: filters.class ?? '' },
                         { preserveScroll: true },
                     );
                 }}
@@ -131,7 +188,7 @@ export default function Stagnant({
                     <Search className="size-4" />
                     {s.searchButton}
                 </Button>
-                {(filters.search || filters.category) && (
+                {(filters.search || filters.category || filters.class) && (
                     <Button asChild variant="ghost">
                         <Link href="/store/stagnant">{s.reset}</Link>
                     </Button>
@@ -139,7 +196,10 @@ export default function Stagnant({
             </form>
             <StagnantProductGrid
                 products={products.data}
-                filtered={!!(filters.search || filters.category)}
+                filtered={
+                    !!(filters.search || filters.category || filters.class)
+                }
+                stale={summary.needs_reclassification}
             />
             <Pagination meta={products} />
         </PageBody>

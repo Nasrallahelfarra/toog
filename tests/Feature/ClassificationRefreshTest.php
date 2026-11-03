@@ -57,11 +57,12 @@ class ClassificationRefreshTest extends TestCase
         $run = app(ClassificationRefresh::class)->start($this->store, $this->store->owner_id);
         $this->assertNull($product->fresh()->performance);
         app()->call([new ReclassifyProducts($run->id, $this->store->owner_id), 'handle']);
-        $this->assertSame(Product::STAGNANT, $product->fresh()->performance);
+        $this->assertSame(Product::AT_RISK, $product->fresh()->performance);
         $this->assertSame(['colors' => ['black']], $product->fresh()->features);
         $this->get('/store/stagnant')->assertInertia(fn (Assert $page) => $page
             ->where('classification.status', 'completed')->where('classification.total', 1)
-            ->where('summary.total', 1)->reloadOnly('classification', fn (Assert $poll) => $poll
+            ->where('summary.total', 1)->where('summary.at_risk', 1)->where('summary.stagnant', 0)
+            ->where('summary.needs_reclassification', false)->reloadOnly('classification', fn (Assert $poll) => $poll
             ->where('classification.status', 'completed')->missing('products')));
         $this->assertDatabaseHas('activity_logs', ['action' => 'data.reclassified', 'user_id' => $this->store->owner_id]);
         $this->mock(PerformanceClassifier::class)->shouldNotReceive('classify');

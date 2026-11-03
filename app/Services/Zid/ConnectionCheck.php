@@ -146,6 +146,7 @@ class ConnectionCheck
         $add('analysis', $classes->isNotEmpty() ? self::PASS : ($products ? self::WARN : self::SKIP), [
             'winner' => (int) ($classes['winner'] ?? 0),
             'average' => (int) ($classes['average'] ?? 0),
+            'at_risk' => (int) ($classes['at_risk'] ?? 0),
             'stagnant' => (int) ($classes['stagnant'] ?? 0),
         ]);
 

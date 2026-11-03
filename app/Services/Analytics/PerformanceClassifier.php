@@ -11,7 +11,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Classifies every catalog product as winner / average / stagnant (FR-1.3).
+ * Separates confirmed stagnant inventory from products at risk of stagnation.
  *
  * Each product gets a 0-100 performance score from its percentile rank in
  * the store on five signals; the weights below are shown to the user so
@@ -19,6 +19,8 @@ use Illuminate\Support\Facades\DB;
  */
 class PerformanceClassifier
 {
+    public const VERSION = 2;
+
     private const WRITE_BATCH = 100;
 
     private const RESULT_COLUMNS = ['performance', 'performance_score', 'units_sold', 'revenue', 'views', 'add_to_cart_rate', 'return_rate', 'turnover_days'];
@@ -71,7 +73,8 @@ class PerformanceClassifier
             $score = (int) round($score);
 
             $class = match (true) {
-                $score <= self::STAGNANT_UNTIL || $m['turnover'] >= 240 => Product::STAGNANT,
+                $product->stock > 0 && $m['no_sales_days'] >= self::UNSOLD_AFTER_DAYS => Product::STAGNANT,
+                $product->stock > 0 && ($score <= self::STAGNANT_UNTIL || $m['turnover'] >= 240) => Product::AT_RISK,
                 $score >= self::WINNER_FROM && $m['returns'] < 25 => Product::WINNER,
                 default => Product::AVERAGE,
             };
@@ -94,9 +97,14 @@ class PerformanceClassifier
         // Save only derived metrics, in bounded statements. Product names,
         // images and features are never overwritten or reinserted.
         DB::transaction(function () use ($store, $updates): void {
+            $locked = Store::query()->lockForUpdate()->findOrFail($store->id);
             foreach (array_chunk($updates, self::WRITE_BATCH, true) as $batch) {
                 $this->saveBatch($store->id, $batch);
             }
+            if (($locked->settings['performance_classification_version'] ?? null) !== self::VERSION) {
+                $locked->update(['settings' => [...($locked->settings ?? []), 'performance_classification_version' => self::VERSION]]);
+            }
+            $store->settings = $locked->settings;
         });
     }
 
@@ -133,7 +141,7 @@ class PerformanceClassifier
      * Each product's raw value on every signal over the last $months.
      *
      * @param  Collection<int, Product>  $products
-     * @return Collection<int, array{units: int, revenue: float, views: int, velocity: float|int, add_to_cart: float|int, returns: float|int, turnover: int, has_data: bool}>
+     * @return Collection<int, array{units: int, revenue: float, views: int, velocity: float|int, add_to_cart: float|int, returns: float|int, turnover: int, has_data: bool, no_sales_days: int}>
      */
     public function metrics(Store $store, Collection $products, int $months = 12): Collection
     {
@@ -144,7 +152,7 @@ class PerformanceClassifier
             ->where('store_id', $store->id)
             ->where('period', '>=', $since)
             ->where('period', '<=', now())
-            ->selectRaw('product_id, COUNT(*) AS observed_months, SUM(units) AS units, SUM(revenue) AS revenue, SUM(views) AS views, SUM(add_to_cart) AS add_to_cart, SUM(returns) AS returns')
+            ->selectRaw('product_id, COUNT(*) AS observed_months, MIN(period) AS first_period, MAX(period) AS last_period, MAX(CASE WHEN units > 0 THEN period END) AS last_sale_period, SUM(units) AS units, SUM(revenue) AS revenue, SUM(views) AS views, SUM(add_to_cart) AS add_to_cart, SUM(returns) AS returns')
             ->groupBy('product_id')->get()->keyBy('product_id');
 
         return $products->mapWithKeys(function (Product $p) use ($sales, $coverage) {
@@ -154,10 +162,32 @@ class PerformanceClassifier
             // An absent order row is only evidence of zero sales after a
             // complete Zid import, for a product old enough to be observed.
             $observedDays = null;
+            $observedStart = null;
+            $observedUntil = null;
             if ($coverage && filled($p->external_id) && $p->created_at?->lte($coverage['until'])) {
                 $launched = $p->launched_at ?? $p->created_at;
                 $start = $launched->gt($coverage['since']) ? $launched : $coverage['since'];
                 $observedDays = max(0, (int) $start->diffInDays($coverage['until'], false));
+                $observedStart = $start;
+                $observedUntil = $coverage['until'];
+            } elseif ($row) {
+                // Explicit, consecutive monthly rows can establish coverage.
+                // A missing month is unknown, never an implied zero-sales month.
+                $first = Carbon::parse($row->getAttribute('first_period'))->startOfMonth();
+                $last = Carbon::parse($row->getAttribute('last_period'))->startOfMonth();
+                if ((int) $row->getAttribute('observed_months') === (int) $first->diffInMonths($last) + 1) {
+                    $observedStart = $p->launched_at && $p->launched_at->gt($first) ? $p->launched_at : $first;
+                    // Only completed CSV months prove a full period without sales.
+                    $observedUntil = $last->copy()->addMonth()->min(now()->startOfMonth());
+                }
+            }
+            $noSalesDays = 0;
+            if ($observedStart && $observedUntil) {
+                $lastSale = $row?->getAttribute('last_sale_period');
+                // Monthly totals do not reveal the day of the last sale. Assume
+                // it happened at month end, so we never overstate the quiet period.
+                $quietStart = $lastSale ? Carbon::parse($lastSale)->startOfMonth()->addMonth()->max($observedStart) : $observedStart;
+                $noSalesDays = max(0, (int) $quietStart->diffInDays($observedUntil, false));
             }
             $observedMonths = max(1, $observedDays !== null ? $observedDays / 30 : (int) ($row?->getAttribute('observed_months') ?? 0));
             $dailyUnits = $units / ($observedMonths * 30);
@@ -171,6 +201,7 @@ class PerformanceClassifier
                 'returns' => $units > 0 ? ($row->returns ?? 0) / $units * 100 : 0,
                 'turnover' => $p->stock <= 0 ? 0 : ($dailyUnits > 0 ? min(365, (int) round($p->stock / $dailyUnits)) : 365),
                 'has_data' => $row !== null || ($p->stock > 0 && $observedDays !== null && $observedDays >= self::UNSOLD_AFTER_DAYS),
+                'no_sales_days' => $noSalesDays,
             ]];
         });
     }

@@ -14,6 +14,7 @@ export const semanticChart = {
     winner: 'var(--success)',
     average: 'var(--info)',
     stagnant: 'var(--danger)',
+    at_risk: 'var(--warning)',
 };
 
 /**

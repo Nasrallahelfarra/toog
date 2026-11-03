@@ -94,7 +94,8 @@ class ReportBuilder
             $this->metric('عدد المنتجات', 'Products', $products->count()),
             $this->metric('المنتجات الرابحة', 'Best sellers', $products->where('performance', Product::WINNER)->count()),
             $this->metric('متوسطة الأداء', 'Average', $products->where('performance', Product::AVERAGE)->count()),
-            $this->metric('الراكدة', 'Slow movers', $products->where('performance', Product::STAGNANT)->count()),
+            $this->metric('معرّضة للركود', 'At risk of stagnation', $products->where('performance', Product::AT_RISK)->count()),
+            $this->metric('الراكدة', 'Stagnant', $products->where('performance', Product::STAGNANT)->count()),
             $this->metric('الإيرادات', 'Revenue', $revenue, 'money'),
             $this->metric('القطع المباعة', 'Units sold', $units),
         ];
@@ -126,6 +127,7 @@ class ReportBuilder
             'products' => $items->count(),
             'revenue' => (float) $items->sum(fn (Product $p) => $byProduct->get($p->id, collect())->sum('revenue')),
             'winners' => $items->where('performance', Product::WINNER)->count(),
+            'at_risk' => $items->where('performance', Product::AT_RISK)->count(),
             'stagnant' => $items->where('performance', Product::STAGNANT)->count(),
         ])->sortByDesc('revenue')->values();
 
@@ -148,7 +150,8 @@ class ReportBuilder
             $this->section('categories', 'الأداء حسب الفئة', 'Performance by category', [
                 ['category', 'الفئة', 'Category'], ['products', 'المنتجات', 'Products', 'number'],
                 ['revenue', 'الإيرادات', 'Revenue', 'money'], ['winners', 'الرابحة', 'Best sellers', 'number'],
-                ['stagnant', 'الراكدة', 'Slow movers', 'number'],
+                ['at_risk', 'معرّضة للركود', 'At risk of stagnation', 'number'],
+                ['stagnant', 'الراكدة', 'Stagnant', 'number'],
             ], $categories),
             $this->section('monthly', 'المبيعات الشهرية', 'Monthly sales', [
                 ['month', 'الشهر', 'Month'], ['orders', 'الطلبات', 'Orders', 'number'],
@@ -327,7 +330,7 @@ class ReportBuilder
                 ['category', 'الفئة', 'Category'], ['products', 'المنتجات', 'Products', 'number'],
                 ['diversity', 'مؤشر التنوع', 'Diversity', 'number'], ['top_look', 'أكثر شكل يتكرر', 'Most repeated look'],
                 ['novel_ratio', 'نسبة المبتكر', 'Innovative share', 'percent'], ['winners', 'الرابحة', 'Best sellers', 'number'],
-                ['stagnant', 'الراكدة', 'Slow movers', 'number'], ['recent_launches', 'طروحات حديثة', 'Recent launches', 'number'],
+                ['stagnant', 'الراكدة', 'Stagnant', 'number'], ['recent_launches', 'طروحات حديثة', 'Recent launches', 'number'],
                 ['recommended', 'الطرح المقترح شهريًا', 'Suggested per month', 'number'], ['status', 'الحالة', 'Status'],
             ], collect($analysis['categories'])->map(fn ($c) => [
                 'category' => $c['category'],
@@ -405,7 +408,8 @@ class ReportBuilder
         return match ($value) {
             Product::WINNER => $this->ar() ? 'رابح' : 'Best seller',
             Product::AVERAGE => $this->ar() ? 'متوسط' : 'Average',
-            Product::STAGNANT => $this->ar() ? 'راكد' : 'Slow mover',
+            Product::AT_RISK => $this->ar() ? 'معرّض للركود' : 'At risk of stagnation',
+            Product::STAGNANT => $this->ar() ? 'راكد' : 'Stagnant',
             default => '—',
         };
     }

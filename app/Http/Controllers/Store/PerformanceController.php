@@ -99,7 +99,7 @@ class PerformanceController extends Controller
     }
 
     /**
-     * Re-run the winner / average / stagnant classification on current data.
+     * Refresh all performance classes, including separate at-risk inventory.
      */
     public function reclassify(Request $request, ClassificationRefresh $refresh): RedirectResponse
     {

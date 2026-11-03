@@ -64,6 +64,8 @@ class DemoCatalogDashboardTest extends TestCase
 
     public function test_owner_can_preview_confirm_and_repeat_without_losing_real_products_or_credentials(): void
     {
+        // A synced catalog already carries the current classification metadata.
+        app(PerformanceClassifier::class)->classify($this->store);
         $before = $this->store->fresh()->getRawOriginal();
         $realSales = $this->real->sales()->firstOrFail()->getRawOriginal();
         $token = $this->token();

@@ -225,7 +225,7 @@ export const settings: typeof ar = {
             },
             analysis: {
                 title: 'Performance analysis',
-                pass: '{winner} best sellers · {average} average · {stagnant} slow movers.',
+                pass: '{winner} best sellers · {average} average · {at_risk} at risk · {stagnant} stagnant.',
                 warn: 'Products have not been classified yet.',
                 fix: 'Re-run the classification from “Store performance”.',
             },

@@ -29,7 +29,7 @@ class StorePerformance
         $products = Product::query()->where('store_id', $store->id)->get(['id', 'performance', 'revenue']);
         $totalRevenue = max(1, (float) $products->sum('revenue'));
 
-        $classes = collect([Product::WINNER, Product::AVERAGE, Product::STAGNANT])->mapWithKeys(fn ($class) => [
+        $classes = collect([Product::WINNER, Product::AVERAGE, Product::AT_RISK, Product::STAGNANT])->mapWithKeys(fn ($class) => [
             $class => [
                 'count' => $products->where('performance', $class)->count(),
                 'revenue_share' => (int) round($products->where('performance', $class)->sum('revenue') / $totalRevenue * 100),
@@ -42,6 +42,7 @@ class StorePerformance
             'total' => $products->count(),
             'weights' => PerformanceClassifier::WEIGHTS,
             'thresholds' => ['winner' => PerformanceClassifier::WINNER_FROM, 'stagnant' => PerformanceClassifier::STAGNANT_UNTIL],
+            'needs_reclassification' => ($store->settings['performance_classification_version'] ?? 0) < PerformanceClassifier::VERSION && $products->whereNotNull('performance')->isNotEmpty(),
         ];
     }
 
@@ -120,6 +121,7 @@ class StorePerformance
                 'units' => (int) $items->sum('units_sold'),
                 'winners' => $items->where('performance', Product::WINNER)->count(),
                 'average' => $items->where('performance', Product::AVERAGE)->count(),
+                'at_risk' => $items->where('performance', Product::AT_RISK)->count(),
                 'stagnant' => $items->where('performance', Product::STAGNANT)->count(),
             ])
             ->sortByDesc('revenue')
@@ -204,74 +206,33 @@ class StorePerformance
     }
 
     /**
-     * Products selling now but likely to become slow movers, either because
-     * - sales are falling: units in the last three months dropped 20%+
-     *   versus the three before, with 3+ months of stock left; or
-     * - stock is piling up: at the current pace the stock lasts 4.5+ months.
-     * Launches younger than 90 days are skipped (too little history).
+     * Use the saved classification everywhere; a separate warning algorithm
+     * would disagree with the catalog filters, counts and recommendation cards.
      *
      * @return list<array<string, mixed>>
      */
     public function atRisk(Store $store, int $limit = 6): array
     {
-        $recentStart = now()->startOfMonth()->subMonths(2)->toDateString();
-        $priorStart = now()->startOfMonth()->subMonths(5)->toDateString();
-
-        $sales = ProductSale::query()
-            ->where('store_id', $store->id)
-            ->where('period', '>=', $priorStart)
-            ->get(['product_id', 'period', 'units'])
-            ->groupBy('product_id');
-
         return Product::query()
             ->where('store_id', $store->id)
-            ->whereIn('performance', [Product::WINNER, Product::AVERAGE])
-            ->where('stock', '>', 0)
-            ->get()
-            ->map(function (Product $p) use ($sales, $recentStart) {
-                $rows = $sales->get($p->id, collect());
-                $recent = (int) $rows->filter(fn ($r) => $r->period->toDateString() >= $recentStart)->sum('units');
-                $prior = (int) $rows->filter(fn ($r) => $r->period->toDateString() < $recentStart)->sum('units');
-
-                if ($prior < 6 || $p->launched_at?->greaterThan(now()->subDays(90))) {
-                    return null;
-                }
-
-                $decline = ($prior - $recent) / $prior * 100;
-                $monthly = max(0.5, $recent / 3);
-                $monthsOfStock = $p->stock / $monthly;
-
-                $falling = $decline >= 20 && $monthsOfStock >= 3;
-                $overstock = $monthsOfStock >= 4.5;
-
-                if (! $falling && ! $overstock) {
-                    return null;
-                }
-
-                return [
-                    'reason' => $falling ? 'falling' : 'overstock',
-                    'id' => $p->id,
-                    'name' => $p->name,
-                    'category' => $p->category,
-                    'performance' => $p->performance,
-                    'stock' => $p->stock,
-                    'decline' => (int) round($decline),
-                    'months_of_stock' => round($monthsOfStock, 1),
-                    'recent_units' => $recent,
-                    'prior_units' => $prior,
-                    'colors' => $p->features['colors'] ?? [],
-                ];
-            })
-            ->filter()
-            ->sortByDesc(fn ($r) => max(0, $r['decline']) + $r['months_of_stock'] * 10)
-            ->values()
-            ->take($limit)
+            ->where('performance', Product::AT_RISK)
+            ->orderByDesc('stock')->orderBy('performance_score')->orderBy('id')->limit($limit)->get()
+            ->map(fn (Product $p) => [
+                'reason' => $p->performanceReason(),
+                'id' => $p->id,
+                'name' => $p->name,
+                'category' => $p->category,
+                'performance' => $p->performance,
+                'stock' => $p->stock,
+                'months_of_stock' => $p->units_sold > 0 && $p->turnover_days !== null ? round($p->turnover_days / 30, 1) : null,
+                'colors' => $p->features['colors'] ?? [],
+            ])
             ->all();
     }
 
     public function atRiskCount(Store $store): int
     {
-        return count($this->atRisk($store, 1000));
+        return Product::query()->where('store_id', $store->id)->where('performance', Product::AT_RISK)->count();
     }
 
     /**

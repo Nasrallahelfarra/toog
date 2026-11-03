@@ -13,7 +13,7 @@ export const nav: typeof ar = {
     dashboard: 'Dashboard',
     connection: 'Zid connection',
     performance: 'Store performance',
-    stagnant: 'Slow-moving products',
+    stagnant: 'Stagnation and risk',
     intelligence: 'Market intelligence',
     market: 'Market trends',
     competitors: 'Competitors',

@@ -11,6 +11,7 @@ use App\Models\ProductRecommendation;
 use App\Models\User;
 use App\Services\Ai\Ai;
 use App\Services\Ai\AiJsonResult;
+use App\Services\Analytics\StorePerformance;
 use App\Services\Catalog\RecommendationProgress;
 use App\Services\Design\DesignService;
 use App\Services\Design\PromptBuilder;
@@ -130,6 +131,46 @@ class StagnantProductsTest extends TestCase
         $this->assertDatabaseCount('product_recommendations', 1);
         $this->assertSame('pending', $run->status);
         $this->assertSame($product->name, $run->snapshot['name']);
+    }
+
+    public function test_stagnant_and_at_risk_counts_filters_and_dashboard_use_the_same_classes(): void
+    {
+        $stagnant = $this->product();
+        $risk = $stagnant->store->products()->create(['name' => 'Overstock seller', 'sku' => 'RISK', 'stock' => 100,
+            'units_sold' => 10, 'performance' => Product::AT_RISK, 'turnover_days' => 300]);
+        $this->product(['performance' => Product::AT_RISK, 'name' => 'Other store risk']);
+        $this->actingAs($stagnant->store->owner)->get('/store/stagnant')->assertInertia(fn (Assert $page) => $page
+            ->where('summary.total', 2)->where('summary.stagnant', 1)->where('summary.at_risk', 1)
+            ->where('summary.needs_reclassification', true)->has('products.data', 2));
+        $this->get('/store/stagnant?class=at_risk&search=RISK')->assertInertia(fn (Assert $page) => $page
+            ->has('products.data', 1)->where('products.data.0.id', $risk->id)
+            ->where('products.data.0.performance', 'at_risk')->where('products.data.0.classification_reason', 'slow_turnover')
+            ->where('summary.stagnant', 1)->where('summary.at_risk', 1));
+        $this->get('/store/stagnant?class=stagnant')->assertInertia(fn (Assert $page) => $page
+            ->has('products.data', 1)->where('products.data.0.id', $stagnant->id));
+        $this->get('/store/performance?class=at_risk')->assertInertia(fn (Assert $page) => $page
+            ->where('summary.classes.at_risk.count', 1)->where('summary.classes.stagnant.count', 1)
+            ->has('products.data', 1)->where('products.data.0.id', $risk->id));
+        $this->get('/store')->assertInertia(fn (Assert $page) => $page
+            ->where('stagnant.stagnant', 1)->where('stagnant.at_risk', 1)->has('atRisk', 1)->where('atRisk.0.id', $risk->id));
+    }
+
+    public function test_at_risk_products_can_request_the_same_expert_workflow(): void
+    {
+        $run = $this->complete($this->product(['performance' => Product::AT_RISK]));
+        $this->assertSame('completed', $run->status);
+        $this->assertSame(Product::AT_RISK, $run->snapshot['performance']);
+    }
+
+    public function test_risk_total_is_not_capped_by_the_dashboard_preview_limit(): void
+    {
+        $product = $this->product();
+        foreach (array_chunk(array_fill(0, 1001, ['store_id' => $product->store_id, 'name' => 'Risk', 'stock' => 1, 'performance' => Product::AT_RISK]), 100) as $rows) {
+            DB::table('products')->insert($rows);
+        }
+        $performance = app(StorePerformance::class);
+        $this->assertSame(1001, $performance->atRiskCount($product->store));
+        $this->assertCount(6, $performance->atRisk($product->store));
     }
 
     public function test_ai_recommendation_is_saved_with_the_actual_reference_and_reused(): void

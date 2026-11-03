@@ -123,6 +123,7 @@ export const common: typeof ar = {
     performanceClass: {
         winner: 'Best seller',
         average: 'Average',
-        stagnant: 'Slow mover',
+        at_risk: 'At risk of stagnation',
+        stagnant: 'Stagnant',
     },
 };

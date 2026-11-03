@@ -50,7 +50,7 @@ import { useVocabulary } from '@/hooks/use-vocabulary';
 import type { VocabularyGroup } from '@/hooks/use-vocabulary';
 import { cn } from '@/lib/utils';
 
-type ClassKey = 'winner' | 'average' | 'stagnant';
+type ClassKey = 'winner' | 'average' | 'at_risk' | 'stagnant';
 type ProfileGroup = 'colors' | 'patterns' | 'materials' | 'styles' | 'price_tiers';
 type ProfileRow = { key: string; winners: number; stagnant: number; lift: number; products: number };
 type IssueKey =
@@ -92,11 +92,12 @@ type Props = {
         classes: Record<ClassKey, { count: number; revenue_share: number }>;
         unclassified: number;
         total: number;
+        needs_reclassification: boolean;
         weights: Record<string, number>;
         thresholds: { winner: number; stagnant: number };
     };
     trend: { period: string; revenue: number; units: number; orders: number; returns: number }[];
-    categories: { category: string | null; products: number; revenue: number; units: number; winners: number; average: number; stagnant: number }[];
+    categories: { category: string | null; products: number; revenue: number; units: number; winners: number; average: number; at_risk: number; stagnant: number }[];
     profile: Record<ProfileGroup, ProfileRow[]>;
     quality: { key: IssueKey; severity: 'danger' | 'warning' | 'info'; count: number; samples: string[] }[];
     products: Paginated<Product>;
@@ -131,6 +132,7 @@ function ExtractionPrompt({ pending, disabled, onStart }: { pending: number; dis
 const classMeta: Record<ClassKey, { tone: Tone; icon: typeof Trophy }> = {
     winner: { tone: 'success', icon: Trophy },
     average: { tone: 'info', icon: BarChart3 },
+    at_risk: { tone: 'warning', icon: AlertTriangle },
     stagnant: { tone: 'danger', icon: Turtle },
 };
 
@@ -255,8 +257,9 @@ function ClassificationSection({ summary, signals }: { summary: Props['summary']
                 stats={signal ? signals?.[signal] : undefined}
                 onClose={() => setSignal(null)}
             />
-            <Stagger className="grid gap-4 sm:grid-cols-3 lg:col-span-3">
-                {(['winner', 'average', 'stagnant'] as ClassKey[]).map((key) => {
+            <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 lg:col-span-3">
+                {summary.needs_reclassification && <p className="rounded-xl bg-warning/10 p-4 text-sm leading-7 sm:col-span-2 xl:col-span-4">{t.stagnant.refreshNeeded}</p>}
+                {(['winner', 'average', 'at_risk', 'stagnant'] as ClassKey[]).map((key) => {
                     const meta = classMeta[key];
                     const cls = summary.classes[key];
                     const share = (cls.count / total) * 100;
@@ -265,7 +268,7 @@ function ClassificationSection({ summary, signals }: { summary: Props['summary']
                         <StaggerItem key={key}>
                             <div className="bg-card relative h-full overflow-hidden rounded-2xl border border-border/70 p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
                                 <div className={cn('absolute inset-x-0 top-0 h-1', toneClasses[meta.tone].bg)} />
-                                <div className="flex items-start justify-between gap-3">
+                                <div className="flex flex-wrap items-start justify-between gap-3">
                                     <PerformanceBadge value={key} />
                                     <span className={cn('flex size-9 items-center justify-center rounded-xl', toneClasses[meta.tone].soft, toneClasses[meta.tone].text)}>
                                         <meta.icon className="size-[18px]" />
@@ -415,16 +418,17 @@ function CategoryBreakdown({ categories }: { categories: Props['categories'] }) 
                             </span>
                         </div>
                         <div className="bg-muted flex h-2.5 overflow-hidden rounded-full" style={{ width: `${Math.max(12, (c.revenue / maxRevenue) * 100)}%` }}>
-                            {(['winners', 'average', 'stagnant'] as const).map((k) => {
-                                const tone = k === 'winners' ? 'bg-success' : k === 'average' ? 'bg-info' : 'bg-danger';
+                            {(['winners', 'average', 'at_risk', 'stagnant'] as const).map((k) => {
+                                const tone = k === 'winners' ? 'bg-success' : k === 'average' ? 'bg-info' : k === 'at_risk' ? 'bg-warning' : 'bg-danger';
                                 const width = c.products ? (c[k] / c.products) * 100 : 0;
 
                                 return <div key={k} className={cn('h-full transition-all duration-700', tone)} style={{ width: `${width}%` }} />;
                             })}
                         </div>
-                        <div className="text-muted-foreground flex gap-3 text-[11px]">
+                        <div className="text-muted-foreground flex flex-wrap gap-3 text-[11px]">
                             <span className="text-success">{t.common.performanceClass.winner} {number(c.winners)}</span>
                             <span className="text-info">{t.common.performanceClass.average} {number(c.average)}</span>
+                            <span className="text-warning">{t.common.performanceClass.at_risk} {number(c.at_risk)}</span>
                             <span className="text-danger">{t.common.performanceClass.stagnant} {number(c.stagnant)}</span>
                         </div>
                     </StaggerItem>
@@ -661,6 +665,7 @@ function ProductsSection({ products, filters, categoryNames }: Pick<Props, 'prod
                         <SelectItem value="winner">{t.common.performanceClass.winner}</SelectItem>
                         <SelectItem value="average">{t.common.performanceClass.average}</SelectItem>
                         <SelectItem value="stagnant">{t.common.performanceClass.stagnant}</SelectItem>
+                        <SelectItem value="at_risk">{t.common.performanceClass.at_risk}</SelectItem>
                         <SelectItem value="unclassified">{p.unclassified}</SelectItem>
                     </SelectContent>
                 </Select>

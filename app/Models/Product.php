@@ -44,7 +44,21 @@ class Product extends Model
 
     public const AVERAGE = 'average';
 
+    public const AT_RISK = 'at_risk';
+
     public const STAGNANT = 'stagnant';
+
+    public function performanceReason(): ?string
+    {
+        if ($this->performance === self::STAGNANT) {
+            return 'no_sales_90';
+        }
+        if ($this->performance !== self::AT_RISK) {
+            return null;
+        }
+
+        return $this->units_sold === 0 ? 'early_no_sales' : ($this->turnover_days >= 240 ? 'slow_turnover' : 'low_performance');
+    }
 
     protected function casts(): array
     {

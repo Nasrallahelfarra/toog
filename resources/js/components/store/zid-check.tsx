@@ -70,6 +70,7 @@ export function ZidCheck({ check, connected, canConfigure }: { check: ZidCheckRe
             winner: number(p.winner ?? 0),
             average: number(p.average ?? 0),
             stagnant: number(p.stagnant ?? 0),
+            at_risk: number(p.at_risk ?? 0),
         } as Record<string, string | number>;
 
         let key = item.status as string;
