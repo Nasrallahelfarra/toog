@@ -92,4 +92,15 @@ class ExtractStoreFeatures implements ShouldQueue
             $extraction->fail($run, 'queue_failed');
         }
     }
+
+    /**
+     * Close the run when the worker gives up on this job (an exception or a
+     * timeout), so the panel shows the reason instead of waiting forever.
+     */
+    public function failed(?Throwable $e): void
+    {
+        if ($run = SyncRun::query()->find($this->runId)) {
+            app(FeatureExtraction::class)->fail($run, 'job_failed', $e?->getMessage());
+        }
+    }
 }

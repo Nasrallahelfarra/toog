@@ -26,6 +26,15 @@ export type FeatureExtractionRun = {
     extracted: number;
     current: string | null;
     error: string | null;
+    error_detail: string | null;
+    /** Where the job waits on a database queue; null on other drivers. */
+    queue: {
+        found: boolean;
+        reserved: boolean;
+        ahead: number;
+        busy: string | null;
+        busy_since: string | null;
+    } | null;
     recent: boolean;
     queued_at: string | null;
     started_at: string | null;
@@ -119,6 +128,13 @@ export function FeatureExtractionProgress({
             : Loader2;
     const error =
         e.errors[run.error as keyof typeof e.errors] ?? e.errors.timed_out;
+    const waiting = run.status === 'queued' || stale;
+    // No job is being worked on while ours waits: nothing will pick it up.
+    const idle =
+        run.queue?.found &&
+        !run.queue.reserved &&
+        !run.queue.busy &&
+        now - Date.parse(run.updated_at ?? '') > 60_000;
 
     const duration = (seconds: number) => {
         if (!Number.isFinite(seconds)) return '—';
@@ -255,13 +271,43 @@ export function FeatureExtractionProgress({
                         )}
                     >
                         {failed
-                            ? error
+                            ? run.error_detail
+                                ? `${error} ${tr(e.detail, { detail: run.error_detail })}`
+                                : error
                             : networkError
                               ? e.network
                               : run.status === 'queued'
                                 ? e.waiting
                                 : e.slow}
                     </p>
+                )}
+                {active && waiting && run.queue && (
+                    <ul className="space-y-1.5 rounded-xl border p-3 text-sm leading-relaxed text-muted-foreground">
+                        {run.queue.ahead > 0 && (
+                            <li>
+                                {tr(e.queue.ahead, {
+                                    n: number(run.queue.ahead),
+                                })}
+                            </li>
+                        )}
+                        {run.queue.busy && (
+                            <li>
+                                {tr(e.queue.busy, {
+                                    task:
+                                        e.tasks[
+                                            run.queue
+                                                .busy as keyof typeof e.tasks
+                                        ] ?? run.queue.busy,
+                                    time: relative(run.queue.busy_since),
+                                })}
+                            </li>
+                        )}
+                        {idle && (
+                            <li role="alert" className="text-danger">
+                                {e.queue.idle}
+                            </li>
+                        )}
+                    </ul>
                 )}
                 {!active && pending > 0 && (
                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3">

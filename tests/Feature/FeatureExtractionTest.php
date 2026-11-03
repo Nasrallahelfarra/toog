@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Actions\Stores\CreateStore;
+use App\Jobs\ExtractProductFeatures;
 use App\Jobs\ExtractStoreFeatures;
 use App\Models\Store;
 use App\Models\SyncRun;
@@ -10,7 +11,9 @@ use App\Models\User;
 use App\Services\Ai\Ai;
 use App\Services\Ai\AiJsonResult;
 use App\Services\Catalog\FeatureExtraction;
+use Illuminate\Contracts\Queue\Job;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -113,18 +116,59 @@ class FeatureExtractionTest extends TestCase
         $this->assertSame(2, app(FeatureExtraction::class)->pending($this->store->id)->count());
     }
 
-    public function test_a_stalled_run_expires_so_extraction_can_start_again(): void
+    public function test_a_run_whose_job_left_the_queue_fails_with_the_worker_error_and_can_restart(): void
     {
-        Queue::fake();
         $this->products(2);
         $stale = app(FeatureExtraction::class)->start($this->store, null);
-        SyncRun::query()->whereKey($stale->id)->update(['updated_at' => now()->subMinutes(20)]);
+        $job = DB::table('jobs')->sole();
+        DB::table('failed_jobs')->insert(['uuid' => 'x', 'connection' => 'database', 'queue' => 'default',
+            'payload' => $job->payload, 'exception' => "RuntimeException: Gemini key rejected\n#0 trace", 'failed_at' => now()]);
+        DB::table('jobs')->delete();
 
+        // Within the grace period the run is still waiting for its job to be saved.
+        $this->assertSame('queued', app(FeatureExtraction::class)->latest($this->store)['status']);
+        SyncRun::query()->whereKey($stale->id)->update(['updated_at' => now()->subMinutes(3)]);
+        $progress = app(FeatureExtraction::class)->latest($this->store);
+
+        $this->assertSame('failed', $progress['status']);
+        $this->assertSame('job_failed', $progress['error']);
+        $this->assertSame('RuntimeException: Gemini key rejected', $progress['error_detail']);
         $retry = app(FeatureExtraction::class)->start($this->store, null);
-
-        $this->assertSame('timed_out', $stale->fresh()->error);
         $this->assertNotSame($stale->id, $retry->id);
         $this->assertSame('queued', $retry->status);
+    }
+
+    public function test_a_run_waiting_behind_other_jobs_reports_its_place_and_is_not_expired(): void
+    {
+        $this->products(2);
+        DB::table('jobs')->insert(['queue' => 'default', 'payload' => json_encode(['displayName' => 'App\Jobs\SyncStoreData']),
+            'attempts' => 1, 'reserved_at' => now()->subMinutes(5)->timestamp, 'available_at' => now()->timestamp, 'created_at' => now()->timestamp]);
+        DB::table('jobs')->insert(['queue' => 'default', 'payload' => json_encode(['displayName' => 'App\Jobs\RunEvaluation']),
+            'attempts' => 0, 'reserved_at' => null, 'available_at' => now()->timestamp, 'created_at' => now()->timestamp]);
+        $run = app(FeatureExtraction::class)->start($this->store, null);
+        SyncRun::query()->whereKey($run->id)->update(['updated_at' => now()->subMinutes(30)]);
+
+        $progress = app(FeatureExtraction::class)->latest($this->store);
+
+        $this->assertSame('queued', $progress['status']);
+        $this->assertSame(['found' => true, 'reserved' => false, 'ahead' => 1, 'busy' => 'SyncStoreData'],
+            array_diff_key($progress['queue'], ['busy_since' => true]));
+    }
+
+    public function test_worker_failure_closes_the_run_and_old_queued_batches_skip_their_products(): void
+    {
+        Queue::fake();
+        $this->products(1);
+        $run = app(FeatureExtraction::class)->start($this->store, null);
+        (new ExtractStoreFeatures($run->id))->failed(new \RuntimeException('Job timed out'));
+        $this->assertSame('job_failed', $run->fresh()->error);
+        $this->assertSame('Job timed out', $run->fresh()->stats['error_detail']);
+
+        $this->mock(Ai::class)->shouldNotReceive('json');
+        $legacy = new ExtractProductFeatures($this->store->products()->first());
+        $legacy->setJob(\Mockery::mock(Job::class));
+        $this->assertFalse(app()->call([$legacy, 'handle']));
+        $this->assertNull($this->store->products()->first()->features);
     }
 
     public function test_progress_names_the_product_being_read_and_the_panel_hides_a_day_after(): void
