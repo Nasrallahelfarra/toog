@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Store;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\ExtractProductFeatures;
 use App\Models\Product;
 use App\Services\Analytics\PerformanceClassifier;
 use App\Services\Analytics\StorePerformance;
+use App\Services\Catalog\FeatureExtraction;
 use App\Services\Zid\ZidClient;
 use App\Support\Activity;
 use App\Support\CurrentStore;
@@ -24,7 +24,7 @@ class PerformanceController extends Controller
 {
     public function __construct(private readonly CurrentStore $current) {}
 
-    public function index(Request $request, StorePerformance $performance): Response
+    public function index(Request $request, StorePerformance $performance, FeatureExtraction $extraction): Response
     {
         $store = $this->current->require();
         $filters = $request->only(['class', 'category', 'search', 'sort']);
@@ -76,20 +76,22 @@ class PerformanceController extends Controller
         ]);
 
         return Inertia::render('store/performance', [
-            'summary' => $performance->summary($store),
-            'trend' => $performance->monthlyTrend($store),
-            'categories' => $performance->categories($store),
-            'profile' => $performance->successProfile($store),
-            'quality' => $performance->dataQuality($store),
+            // Closures, so the extraction progress poll does not recompute the whole catalog.
+            'summary' => fn () => $performance->summary($store),
+            'trend' => fn () => $performance->monthlyTrend($store),
+            'categories' => fn () => $performance->categories($store),
+            'profile' => fn () => $performance->successProfile($store),
+            'quality' => fn () => $performance->dataQuality($store),
             'products' => $products,
             'filters' => $filters,
-            'categoryNames' => $performance->categoryNames($store),
+            'categoryNames' => fn () => $performance->categoryNames($store),
             'sync' => [
                 'status' => $store->connection_status,
                 'last_synced_at' => $store->last_synced_at?->toIso8601String(),
                 'can_sync' => $store->isConnected() && filled($store->zid_access_token) && ZidClient::configured(),
-                'missing_features' => $this->missingFeatures($store->id)->count(),
+                'missing_features' => $extraction->pending($store->id)->count(),
             ],
+            'extraction' => $extraction->latest($store),
         ]);
     }
 
@@ -108,37 +110,29 @@ class PerformanceController extends Controller
     }
 
     /**
-     * Queue attribute extraction (FR-1.4) for products missing attributes.
+     * Queue attribute extraction (FR-1.4) over every product missing attributes.
      */
-    public function extract(Request $request): RedirectResponse
+    public function extract(Request $request, FeatureExtraction $extraction): RedirectResponse
     {
         $store = $this->current->require();
-        $products = $this->missingFeatures($store->id)->limit(50)->get();
+        $run = $extraction->start($store, $request->user()->id);
 
-        if ($products->isEmpty()) {
+        if (! $run) {
             Inertia::flash('toast', ['type' => 'info', 'message' => __('store.nothing_to_extract')]);
 
             return back();
         }
 
-        $products->each(fn (Product $p) => ExtractProductFeatures::dispatch($p, $request->user()->id));
+        if ($run->wasRecentlyCreated) {
+            Activity::log('data.features_extraction', $store, ['products' => $run->stats['total'] ?? 0]);
+        }
 
-        Activity::log('data.features_extraction', $store, ['products' => $products->count()]);
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('store.extraction_started', ['count' => $products->count()])]);
+        Inertia::flash('toast', match (true) {
+            $run->status === 'failed' => ['type' => 'error', 'message' => __('store.extraction_failed')],
+            $run->wasRecentlyCreated => ['type' => 'success', 'message' => __('store.extraction_started', ['count' => $run->stats['total'] ?? 0])],
+            default => ['type' => 'info', 'message' => __('store.extraction_running')],
+        });
 
         return back();
-    }
-
-    /**
-     * @return Builder<Product>
-     */
-    private function missingFeatures(int $storeId): Builder
-    {
-        return Product::query()
-            ->where('store_id', $storeId)
-            ->where(fn (Builder $q) => $q->whereNull('features')
-                ->orWhereNull('features->pattern')
-                ->orWhereNull('features->colors')
-                ->orWhereJsonLength('features->colors', 0));
     }
 }

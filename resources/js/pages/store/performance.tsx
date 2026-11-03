@@ -32,6 +32,8 @@ import { SectionCard } from '@/components/mojo/section-card';
 import { Sparkline } from '@/components/mojo/stat-card';
 import { toneClasses } from '@/components/mojo/tone';
 import type { Tone } from '@/components/mojo/tone';
+import { FeatureExtractionProgress } from '@/components/store/feature-extraction-progress';
+import type { FeatureExtractionRun } from '@/components/store/feature-extraction-progress';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -97,7 +99,27 @@ type Props = {
     filters: { class?: string; category?: string; search?: string; sort?: string };
     categoryNames: string[];
     sync: { status: string; last_synced_at: string | null; can_sync: boolean; missing_features: number };
+    extraction: FeatureExtractionRun | null;
 };
+
+/** Prompt to read the products still missing attributes. */
+function ExtractionPrompt({ pending, disabled, onStart }: { pending: number; disabled: boolean; onStart: () => void }) {
+    const { t, tr, number } = useI18n();
+    const p = t.performance;
+
+    return (
+        <FadeIn className="bg-gold-soft flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm">
+            <span className="text-gold-foreground dark:text-gold flex items-center gap-2">
+                <Sparkles className="size-4 shrink-0" />
+                {tr(p.extractHint, { count: number(pending) })}
+            </span>
+            <Button size="sm" variant="gold" onClick={onStart} disabled={disabled}>
+                <Sparkles className="size-4" />
+                {p.extractFeatures}
+            </Button>
+        </FadeIn>
+    );
+}
 
 const classMeta: Record<ClassKey, { tone: Tone; icon: typeof Trophy }> = {
     winner: { tone: 'success', icon: Trophy },
@@ -143,17 +165,23 @@ export default function Performance(props: Props) {
                 }
             />
 
-            {props.sync.missing_features > 0 && (
-                <FadeIn className="bg-gold-soft flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm">
-                    <span className="text-gold-foreground dark:text-gold flex items-center gap-2">
-                        <Sparkles className="size-4" />
-                        {tr(p.extractHint, { count: props.sync.missing_features })}
-                    </span>
-                    <Button size="sm" variant="gold" onClick={() => post('/store/performance/extract-features', 'extract')} disabled={busy !== null}>
-                        <Sparkles className="size-4" />
-                        {p.extractFeatures}
-                    </Button>
+            {props.extraction?.recent ? (
+                <FadeIn>
+                    <FeatureExtractionProgress
+                        run={props.extraction}
+                        pending={props.sync.missing_features}
+                        disabled={busy !== null}
+                        onStart={() => post('/store/performance/extract-features', 'extract')}
+                    />
                 </FadeIn>
+            ) : (
+                props.sync.missing_features > 0 && (
+                    <ExtractionPrompt
+                        pending={props.sync.missing_features}
+                        disabled={busy !== null}
+                        onStart={() => post('/store/performance/extract-features', 'extract')}
+                    />
+                )
             )}
 
             {props.summary.total === 0 ? (
