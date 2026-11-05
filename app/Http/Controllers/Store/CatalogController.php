@@ -23,15 +23,20 @@ class CatalogController extends Controller
         $months = in_array($request->integer('months'), CatalogBrowser::RANGES, true) ? $request->integer('months') : 12;
         $category = $request->filled('category') ? (string) $request->input('category') : null;
         $filters = $request->only(['search', 'class', 'sort']);
+        $available = $catalog->availableMonths($store);
+        // A chosen month replaces the 3/6/12-month range; only months with sales can be picked.
+        $month = in_array($request->string('month')->toString(), $available, true) ? $request->string('month')->toString() : null;
 
         return Inertia::render('store/catalog', [
             'months' => $months,
+            'month' => $month,
+            'availableMonths' => $available,
             'category' => $category,
             'filters' => $filters,
-            'summary' => fn () => $catalog->summary($store, $category, $months),
-            'trend' => fn () => $catalog->trend($store, $category, $months),
-            'categories' => fn () => $catalog->categories($store, $months),
-            'products' => fn () => $catalog->products($store, $category, $filters),
+            'summary' => fn () => $catalog->summary($store, $category, $months, $month),
+            'trend' => fn () => $catalog->trend($store, $category, $months, $month),
+            'categories' => fn () => $catalog->categories($store, $months, $month),
+            'products' => fn () => $catalog->products($store, $category, $filters, $month),
         ]);
     }
 }
