@@ -1,14 +1,17 @@
 import { Link, router } from '@inertiajs/react';
-import { Check, Download, Expand, Heart, Send, X } from 'lucide-react';
+import { Check, Columns2, Download, Expand, Heart, Send, WandSparkles, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import type { DesignItem } from '@/components/evaluation/types';
 import { scoreTone, toneClasses } from '@/components/mojo/tone';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/hooks/use-i18n';
 import { cn } from '@/lib/utils';
+import { CompareSlider } from './compare-slider';
 import { DesignDialog } from './design-dialog';
+import { DesignEditor } from './design-editor';
 
 export const aspectClass: Record<string, string> = {
     '1:1': 'aspect-square',
@@ -54,11 +57,24 @@ export function updateDesign(id: number, data: Record<string, string | boolean |
  * One generated design with its auto-evaluation score (FR-4.7) and the
  * review actions (FR-4.8).
  */
-export function DesignCard({ design, thresholds, className }: { design: DesignItem; thresholds?: { accept: number; reject: number }; className?: string }) {
+export function DesignCard({
+    design,
+    thresholds,
+    className,
+    before,
+}: {
+    design: DesignItem;
+    thresholds?: { accept: number; reject: number };
+    className?: string;
+    /** The design this one was edited from, for the before/after view. */
+    before?: { image_url: string; title: string } | null;
+}) {
     const { t } = useI18n();
     const d = t.studio.design;
     const { variantOf } = useDesignLabels();
     const [open, setOpen] = useState(false);
+    const [editing, setEditing] = useState(false);
+    const [comparing, setComparing] = useState(false);
     const tone = toneClasses[scoreTone(design.score, thresholds?.accept, thresholds?.reject)];
     const variant = variantOf(design);
 
@@ -68,6 +84,8 @@ export function DesignCard({ design, thresholds, className }: { design: DesignIt
                 <button
                     type="button"
                     onClick={onClick}
+                    aria-label={label}
+                    aria-pressed={active || undefined}
                     className={cn(
                         'text-muted-foreground hover:bg-muted hover:text-foreground flex size-8 cursor-pointer items-center justify-center rounded-lg transition-colors',
                         active && 'bg-primary/10 text-primary',
@@ -124,6 +142,8 @@ export function DesignCard({ design, thresholds, className }: { design: DesignIt
                         {action(d.sendReview, <Send className="size-4 rtl:-scale-x-100" />, () => updateDesign(design.id, { status: 'in_review' }), design.status === 'in_review')}
                     </div>
                     <div className="flex items-center gap-0.5">
+                        {action(d.edit, <WandSparkles className="size-4" />, () => setEditing(true))}
+                        {before && action(d.compare, <Columns2 className="size-4" />, () => setComparing(true))}
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <a
@@ -144,6 +164,18 @@ export function DesignCard({ design, thresholds, className }: { design: DesignIt
                 </div>
             </div>
             <DesignDialog design={design} open={open} onOpenChange={setOpen} />
+            {editing && <DesignEditor design={design} open={editing} onOpenChange={setEditing} />}
+            {before && (
+                <Dialog open={comparing} onOpenChange={setComparing}>
+                    <DialogContent className="sm:max-w-3xl">
+                        <DialogHeader className="text-start sm:text-start">
+                            <DialogTitle>{t.studio.editor.compareTitle}</DialogTitle>
+                            <DialogDescription>{t.studio.editor.compareHint}</DialogDescription>
+                        </DialogHeader>
+                        <CompareSlider before={before.image_url} after={design.image_url} className={cn('mx-auto max-h-[70dvh]', aspectClass[design.aspect_ratio] ?? 'aspect-square')} />
+                    </DialogContent>
+                </Dialog>
+            )}
         </motion.div>
     );
 }

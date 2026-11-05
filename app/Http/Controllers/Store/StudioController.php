@@ -12,11 +12,14 @@ use App\Models\ProductRecommendation;
 use App\Models\Trend;
 use App\Services\Design\DesignService;
 use App\Services\Design\IdeaService;
+use App\Services\Design\Refinements;
 use App\Support\Activity;
 use App\Support\CurrentStore;
+use App\Support\Vocabulary;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -72,6 +75,10 @@ class StudioController extends Controller
             }
         }
 
+        $refine = $request->integer('refine')
+            ? Design::query()->where('store_id', $store->id)->find($request->integer('refine'))
+            : null;
+
         return Inertia::render('store/studio/index', [
             // A prompt handed over from another page, e.g. a market trend.
             'prefillPrompt' => $request->string('prompt')->limit(500)->toString() ?: null,
@@ -82,15 +89,20 @@ class StudioController extends Controller
             'categories' => Product::query()->where('store_id', $store->id)->whereNotNull('category')->distinct()->pluck('category'),
             'requests' => DesignRequest::query()
                 ->where('store_id', $store->id)
-                ->with(['designs' => fn ($q) => $q->orderBy('id')])
+                ->with(['designs' => fn ($q) => $q->orderBy('id'), 'parentDesign'])
                 ->latest()
+                ->orderByDesc('id')
                 ->take(8)
                 ->get()
                 ->map(fn (DesignRequest $r) => [
                     ...$r->only(['id', 'type', 'title', 'prompt', 'category', 'output_type', 'aspect_ratio', 'variants_count', 'status', 'error', 'evaluation_id', 'created_at']),
                     'designs' => $r->designs->map(fn (Design $d) => $this->design($d)),
+                    // The design this edit started from, for the before/after view.
+                    'parent' => $r->parentDesign ? ['id' => $r->parentDesign->id, 'title' => $r->parentDesign->title, 'image_url' => $r->parentDesign->image_url] : null,
                 ]),
             'outputTypes' => DesignRequest::OUTPUT_TYPES,
+            // A design opened for editing from the library.
+            'refine' => $refine ? self::design($refine) : null,
             'ideas' => Inertia::optional(fn () => $ideas->suggest($store)),
         ]);
     }
@@ -152,6 +164,63 @@ class StudioController extends Controller
         GenerateDesigns::dispatch($designRequest->id);
 
         Activity::log('design.requested', $designRequest, ['type' => $designRequest->type, 'variants' => $designRequest->variants_count]);
+        Inertia::flash('toast', ['type' => 'info', 'message' => __('mojo.design_queued')]);
+
+        return to_route('store.studio.index');
+    }
+
+    /**
+     * Edit an existing design: professional presets, a recolour and the
+     * merchant's own words, applied to a copy of the design as reference.
+     */
+    public function refine(Request $request, Design $design, Refinements $refinements): RedirectResponse
+    {
+        $store = $this->current->require();
+        abort_unless($design->store_id === $store->id, 404);
+
+        $data = $request->validate([
+            'presets' => ['nullable', 'array', 'max:'.Refinements::MAX_PRESETS],
+            'presets.*' => ['string', Rule::in(array_keys(Refinements::PRESETS))],
+            'color' => ['nullable', 'string', Rule::in(array_keys(Vocabulary::colors()))],
+            'instruction' => ['nullable', 'string', 'max:1000'],
+            'output_type' => ['nullable', Rule::in(DesignRequest::OUTPUT_TYPES)],
+            'aspect_ratio' => ['nullable', Rule::in(['1:1', '4:5', '9:16', '16:9', '3:4'])],
+            'variants_count' => ['nullable', 'integer', 'min:1', 'max:2'],
+        ]);
+
+        $lines = $refinements->lines($data['presets'] ?? [], $data['color'] ?? null, $data['instruction'] ?? null);
+        if ($lines === []) {
+            throw ValidationException::withMessages(['instruction' => __('mojo.refine_needs_edit')]);
+        }
+
+        // Work from a copy, so deleting the original later cannot break this edit.
+        $disk = Storage::disk('public');
+        if (! $design->image_path || ! $disk->exists($design->image_path)) {
+            throw ValidationException::withMessages(['instruction' => __('mojo.refine_source_missing')]);
+        }
+        $source = "design-sources/{$store->id}/".Str::uuid().'.'.(pathinfo($design->image_path, PATHINFO_EXTENSION) ?: 'png');
+        $disk->copy($design->image_path, $source);
+
+        $parentRequest = $design->request;
+        $designRequest = DesignRequest::query()->create([
+            'store_id' => $store->id,
+            'user_id' => $request->user()->id,
+            'evaluation_id' => $design->evaluation_id ?? $parentRequest?->evaluation_id,
+            'parent_design_id' => $design->id,
+            'type' => DesignRequest::REFINEMENT,
+            'title' => $design->title,
+            'prompt' => implode("\n", $lines),
+            'category' => $parentRequest?->category,
+            'output_type' => $data['output_type'] ?? $design->output_type,
+            'aspect_ratio' => $data['aspect_ratio'] ?? $design->aspect_ratio,
+            'variants_count' => $data['variants_count'] ?? 1,
+            'source_image_path' => $source,
+            'status' => 'pending',
+        ]);
+
+        GenerateDesigns::dispatch($designRequest->id);
+
+        Activity::log('design.refined', $designRequest, ['parent' => $design->id, 'presets' => $data['presets'] ?? [], 'color' => $data['color'] ?? null]);
         Inertia::flash('toast', ['type' => 'info', 'message' => __('mojo.design_queued')]);
 
         return to_route('store.studio.index');

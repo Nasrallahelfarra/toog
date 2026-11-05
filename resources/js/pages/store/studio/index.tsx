@@ -31,6 +31,7 @@ import { PageBody, PageHeader } from '@/components/mojo/page-header';
 import { ScoreRing } from '@/components/mojo/score-ring';
 import { SectionCard } from '@/components/mojo/section-card';
 import { aspectClass, DesignCard } from '@/components/studio/design-card';
+import { DesignEditor } from '@/components/studio/design-editor';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,7 +42,7 @@ import { useI18n } from '@/hooks/use-i18n';
 import { useVocabulary } from '@/hooks/use-vocabulary';
 import { cn } from '@/lib/utils';
 
-type RequestType = 'modification' | 'new_idea' | 'mockup';
+type RequestType = 'modification' | 'new_idea' | 'mockup' | 'refinement';
 type OutputType = 'product_photo' | 'print_file' | 'mockup_white' | 'mockup_model' | 'lifestyle' | 'social';
 
 type Source = {
@@ -76,6 +77,7 @@ type DesignRequestRow = {
     evaluation_id: number | null;
     created_at: string;
     designs: DesignItem[];
+    parent: { id: number; title: string; image_url: string } | null;
 };
 
 type Trend = { id: number; type: string; value: string | null; name_ar: string; name_en: string; momentum: number; saturation: number; in_catalog: boolean };
@@ -107,6 +109,8 @@ type Props = {
     requests: DesignRequestRow[];
     outputTypes: OutputType[];
     ideas?: Idea[];
+    /** A design opened for editing from the library. */
+    refine: DesignItem | null;
 };
 
 const outputIcons: Record<OutputType, LucideIcon> = {
@@ -120,11 +124,12 @@ const outputIcons: Record<OutputType, LucideIcon> = {
 
 const ratios = ['1:1', '4:5', '9:16', '16:9'];
 
-export default function Studio({ source, prefillPrompt, brand, trends, categories, requests, outputTypes, ideas }: Props) {
+export default function Studio({ source, prefillPrompt, brand, trends, categories, requests, outputTypes, ideas, refine }: Props) {
     const { t, tr, field, relative, locale } = useI18n();
     const { label } = useVocabulary();
     const s = t.studio;
     const [loadingIdeas, setLoadingIdeas] = useState(false);
+    const [refining, setRefining] = useState(refine !== null);
     const running = requests.some((r) => r.status === 'pending' || r.status === 'processing');
 
     const form = useForm({
@@ -441,6 +446,7 @@ export default function Studio({ source, prefillPrompt, brand, trends, categorie
                     </div>
                 </div>
             </div>
+            {refine && <DesignEditor design={refine} open={refining} onOpenChange={setRefining} />}
         </PageBody>
     );
 }
@@ -479,6 +485,16 @@ function RequestCard({ request, relative }: { request: DesignRequestRow; relativ
                 </Badge>
             </header>
 
+            {request.parent && (
+                <div className="bg-muted/50 mb-3 flex items-center gap-3 rounded-xl p-2">
+                    <img src={request.parent.image_url} alt="" className="size-10 shrink-0 rounded-lg object-cover" />
+                    <span className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs">
+                        <WandSparkles className="text-primary size-3.5 shrink-0" />
+                        <span className="truncate">{tr(s.editor.fromParent, { title: request.parent.title })}</span>
+                    </span>
+                </div>
+            )}
+
             {request.status === 'failed' && (
                 <div className="bg-danger-soft text-danger mb-3 flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-xs">
                     <span className="flex items-center gap-2">
@@ -494,7 +510,7 @@ function RequestCard({ request, relative }: { request: DesignRequestRow; relativ
 
             <div className={cn('grid gap-3', cols)}>
                 {request.designs.map((design) => (
-                    <DesignCard key={design.id} design={design} />
+                    <DesignCard key={design.id} design={design} before={request.parent} />
                 ))}
                 {generating &&
                     Array.from({ length: Math.max(0, request.variants_count - request.designs.length) }).map((_, i) => (
