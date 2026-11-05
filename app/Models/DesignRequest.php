@@ -28,11 +28,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 #[Fillable([
     'store_id', 'user_id', 'evaluation_id', 'type', 'title', 'prompt', 'category', 'output_type',
-    'aspect_ratio', 'variants_count', 'source_image_path', 'status', 'error', 'product_recommendation_id',
+    'aspect_ratio', 'variants_count', 'source_image_path', 'status', 'error', 'product_recommendation_id', 'parent_design_id',
 ])]
 class DesignRequest extends Model
 {
     public const OUTPUT_TYPES = ['product_photo', 'print_file', 'mockup_white', 'mockup_model', 'lifestyle', 'social'];
+
+    /** A request that edits an earlier design (parent_design_id). */
+    public const REFINEMENT = 'refinement';
 
     /**
      * @return HasMany<Design, $this>
@@ -48,6 +51,12 @@ class DesignRequest extends Model
     public function evaluation(): BelongsTo
     {
         return $this->belongsTo(Evaluation::class);
+    }
+
+    /** @return BelongsTo<Design, $this> */
+    public function parentDesign(): BelongsTo
+    {
+        return $this->belongsTo(Design::class, 'parent_design_id');
     }
 
     /** @return BelongsTo<ProductRecommendation, $this> */

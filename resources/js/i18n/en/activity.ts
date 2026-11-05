@@ -72,6 +72,7 @@ export const activity: typeof ar = {
         'admin.user_created': 'Created a user',
         'admin.user_updated': 'Edited a user',
         'admin.user_deleted': 'Deleted a user',
+        'admin.store_deleted': 'Deleted a store',
         'admin.user_disabled': 'Disabled a user',
         'admin.user_enabled': 'Enabled a user',
         'admin.user_password_reset': 'Reset a password',

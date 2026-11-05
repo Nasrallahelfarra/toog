@@ -16,6 +16,7 @@ import type { SpecialistReview } from '@/components/evaluation/types';
 import { PerformanceBadge } from '@/components/mojo/decision-badge';
 import { EmptyState } from '@/components/mojo/empty-state';
 import { SectionCard } from '@/components/mojo/section-card';
+import { MarketingPlanCard } from '@/components/store/marketing-plan';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -707,6 +708,9 @@ function RecoveryResult({
                     {review.summary?.[locale]}
                 </p>
             </div>
+            {review.marketing_plan && (
+                <MarketingPlanCard plan={review.marketing_plan} />
+            )}
             {visualOptions.length > 0 && (
                 <div className="rounded-xl border border-primary/25 bg-primary/5 p-4">
                     <h3 className="flex items-center gap-2 font-semibold">

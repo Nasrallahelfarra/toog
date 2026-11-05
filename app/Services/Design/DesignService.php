@@ -41,7 +41,11 @@ class DesignService
         $source = $request->evaluation_id ? Evaluation::query()->find($request->evaluation_id) : null;
         $ctx = new StoreContext($store);
         $product = $this->product($request, $source);
-        $variants = array_slice($this->variants($product, $ctx), 0, max(1, min(4, $request->variants_count)));
+        $variants = $request->type === DesignRequest::REFINEMENT
+            // An edit is the same change each time; the model's own variation tells the options apart.
+            ? array_fill(0, max(1, min(4, $request->variants_count)), ['key' => 'refined', 'colors' => $product['colors'], 'pattern' => $product['pattern'],
+                'material' => $product['material'], 'style' => $product['style'], 'placement' => 'as in the reference'])
+            : array_slice($this->variants($product, $ctx), 0, max(1, min(4, $request->variants_count)));
         $title = $request->title ?: ($source?->name ?? 'Design');
         $created = 0;
 
@@ -122,6 +126,12 @@ class DesignService
                 'style' => $candidate->style,
                 'season' => $candidate->season,
             ];
+        }
+
+        if ($request->type === DesignRequest::REFINEMENT && ($parent = $request->parentDesign)) {
+            return ['name' => $request->title, 'category' => $request->category, 'price' => null,
+                'colors' => collect($parent->palette ?? [])->map(fn ($hex) => $this->nearestColor((string) $hex))->unique()->values()->all(),
+                'pattern' => null, 'material' => null, 'style' => null, 'season' => null];
         }
 
         $store = $request->store;

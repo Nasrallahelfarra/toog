@@ -4,6 +4,7 @@ import { admin as arAdmin } from './ar/admin';
 import { auth as arAuth } from './ar/auth';
 import { balance as arBalance } from './ar/balance';
 import { calendar as arCalendar } from './ar/calendar';
+import { catalog as arCatalog } from './ar/catalog';
 import { common as arCommon } from './ar/common';
 import { dashboard as arDashboard } from './ar/dashboard';
 import { evaluation as arEvaluation } from './ar/evaluation';
@@ -23,6 +24,7 @@ import { admin as enAdmin } from './en/admin';
 import { auth as enAuth } from './en/auth';
 import { balance as enBalance } from './en/balance';
 import { calendar as enCalendar } from './en/calendar';
+import { catalog as enCatalog } from './en/catalog';
 import { common as enCommon } from './en/common';
 import { dashboard as enDashboard } from './en/dashboard';
 import { evaluation as enEvaluation } from './en/evaluation';
@@ -58,6 +60,7 @@ export const ar = {
     market: arMarket,
     balance: arBalance,
     calendar: arCalendar,
+    catalog: arCatalog,
     reports: arReports,
     notifications: arNotifications,
     activity: arActivity,
@@ -82,6 +85,7 @@ export const en: Dictionary = {
     market: enMarket,
     balance: enBalance,
     calendar: enCalendar,
+    catalog: enCatalog,
     reports: enReports,
     notifications: enNotifications,
     activity: enActivity,

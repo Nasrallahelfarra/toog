@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Initials, RoleBadge, UserStatusBadge } from '@/components/admin/badges';
 import { FilterSelect } from '@/components/admin/filter-select';
+import { DeleteUserDialog } from '@/components/admin/delete-dialogs';
 import { ReasonDialog } from '@/components/admin/reason-dialog';
 import { ConfirmModal } from '@/components/admin/store-actions';
 import { useDebouncedSearch, useFilters } from '@/components/admin/use-filters';
@@ -252,17 +253,7 @@ export default function AdminUsers({ users, filters: initial, counts, stores, me
                 confirmLabel={u.enable}
                 onConfirm={(done) => post(`/admin/users/${target?.id}/enable`, {}, done)}
             />
-            <ConfirmModal
-                open={dialog?.kind === 'delete'}
-                onOpenChange={(open) => !open && close()}
-                title={tr(u.deleteTitle, { name: target?.name ?? '' })}
-                description={u.deleteDescription}
-                confirmLabel={u.delete}
-                destructive
-                onConfirm={(done) =>
-                    router.delete(`/admin/users/${target?.id}`, { preserveScroll: true, onSuccess: close, onError: showErrors, onFinish: done })
-                }
-            />
+            <DeleteUserDialog user={dialog?.kind === 'delete' ? target : null} open={dialog?.kind === 'delete'} onOpenChange={(open) => !open && close()} />
         </PageBody>
     );
 }

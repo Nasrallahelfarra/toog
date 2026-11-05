@@ -71,6 +71,7 @@ export const activity = {
         'admin.user_created': 'أنشأ مستخدمًا',
         'admin.user_updated': 'عدّل مستخدمًا',
         'admin.user_deleted': 'حذف مستخدمًا',
+        'admin.store_deleted': 'حذف متجرًا',
         'admin.user_disabled': 'عطّل مستخدمًا',
         'admin.user_enabled': 'فعّل مستخدمًا',
         'admin.user_password_reset': 'أعاد تعيين كلمة مرور',

@@ -152,6 +152,24 @@ export type ReviewRecommendation = {
     instruction: ReviewText;
     source_ids: string[];
 };
+/** Ready-to-run marketing plan attached to a slow-mover recommendation. */
+export type MarketingPlan = {
+    angle: ReviewText;
+    copy: { headline: ReviewText; body: ReviewText; cta: ReviewText };
+    hashtags: string[];
+    offer: {
+        type: 'discount' | 'bundle' | 'free_shipping' | 'gift' | 'installments' | 'price_reset' | 'none';
+        value: ReviewText;
+        duration_days: number;
+        rationale: ReviewText;
+    };
+    channels: {
+        channel: 'snapchat' | 'tiktok' | 'instagram' | 'whatsapp' | 'x' | 'influencer' | 'store_banner' | 'email';
+        idea: ReviewText;
+    }[];
+    timing: { occasion: ReviewText; when: ReviewText };
+    kpi: ReviewText;
+};
 export type SpecialistReview = {
     version: string;
     status: 'available' | 'unavailable';
@@ -169,6 +187,7 @@ export type SpecialistReview = {
         }
     >;
     recommendations: ReviewRecommendation[];
+    marketing_plan?: MarketingPlan | null;
     sources: {
         id: string;
         kind: 'store' | 'trend' | 'competitor';

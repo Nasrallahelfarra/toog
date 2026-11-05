@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Actions\Stores\CreateStore;
+use App\Actions\Stores\DeleteStore;
 use App\Http\Controllers\Admin\Concerns\AdminData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreCreateRequest;
@@ -23,6 +24,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -36,7 +38,7 @@ class StoreController extends Controller
         $monthStart = now()->startOfMonth();
 
         $stores = Store::query()
-            ->with('owner:id,name,email,status')
+            ->with('owner:id,name,email,phone,role,status')
             ->withCount(['products', 'evaluations'])
             ->withSum(['aiUsages as month_cost' => fn ($q) => $q->where('created_at', '>=', $monthStart)], 'cost')
             ->when($filters['search'] ?? null, function (Builder $q, string $search) {
@@ -114,7 +116,7 @@ class StoreController extends Controller
 
     public function show(Request $request, Store $store): Response
     {
-        $store->load('owner:id,name,email,status,last_login_at');
+        $store->load('owner:id,name,email,phone,role,status,last_login_at');
         $monthStart = now()->startOfMonth();
         $since = now()->subMonths(11)->startOfMonth();
 
@@ -226,6 +228,24 @@ class StoreController extends Controller
         return to_route('admin.stores.show', [$store, 'tab' => 'settings']);
     }
 
+    /**
+     * Permanently delete a store and all of its data. The admin retypes the
+     * store name to confirm, since nothing can be restored afterwards.
+     */
+    public function destroy(Request $request, Store $store, DeleteStore $delete): RedirectResponse
+    {
+        if (trim((string) $request->input('confirm')) !== trim($store->name)) {
+            throw ValidationException::withMessages(['confirm' => __('mojo.confirm_name_mismatch')]);
+        }
+
+        Activity::log('admin.store_deleted', null, ['store' => $store->name, 'owner' => $store->owner?->email]);
+        $delete->handle($store);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('mojo.store_deleted', ['name' => $store->name])]);
+
+        return to_route('admin.stores.index');
+    }
+
     public function suspend(Request $request, Store $store): RedirectResponse
     {
         $data = $request->validate(['reason' => ['required', 'string', 'max:255']]);
@@ -283,7 +303,7 @@ class StoreController extends Controller
             'platform' => $s->platform,
             'status' => $s->status,
             'connection_status' => $s->connection_status,
-            'owner' => $s->owner ? ['id' => $s->owner->id, 'name' => $s->owner->name, 'email' => $s->owner->email, 'status' => $s->owner->status] : null,
+            'owner' => $s->owner ? ['id' => $s->owner->id, 'name' => $s->owner->name, 'email' => $s->owner->email, 'phone' => $s->owner->phone, 'role' => $s->owner->role, 'status' => $s->owner->status] : null,
             'products_count' => $s->products_count ?? 0,
             'evaluations_count' => $s->evaluations_count ?? 0,
             'month_cost' => $cost,

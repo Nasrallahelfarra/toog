@@ -29,6 +29,15 @@ class PromptBuilder
      */
     public function build(DesignRequest $request, Store $store, array $variant, array $product, bool $hasSource): string
     {
+        if ($request->type === DesignRequest::REFINEMENT) {
+            return implode("\n", [
+                'Retouch the supplied image, an existing design from this store, into '.(self::FRAMING[$request->output_type] ?? self::FRAMING['product_photo']).'.',
+                'Work like a professional retoucher and apply ONLY these edits:',
+                ...array_map(fn (string $line) => '- '.$line, array_filter(array_map('trim', explode("\n", $request->prompt)))),
+                'Keep the product identity, silhouette, proportions, construction, pattern placement, brand marks and every detail not mentioned above exactly as they are.',
+                'Saudi market: elegant, modest and culturally respectful. No added text, logos or watermarks. Photorealistic commercial e-commerce quality.',
+            ]);
+        }
         if ($request->product_recommendation_id) {
             return implode("\n", [
                 'Edit the supplied reference image to create '.(self::FRAMING[$request->output_type] ?? self::FRAMING['product_photo']).'.',

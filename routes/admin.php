@@ -20,6 +20,7 @@ Route::get('stores/create', [StoreController::class, 'create'])->name('stores.cr
 Route::post('stores', [StoreController::class, 'store'])->name('stores.store');
 Route::get('stores/{store}', [StoreController::class, 'show'])->name('stores.show');
 Route::put('stores/{store}', [StoreController::class, 'update'])->name('stores.update');
+Route::delete('stores/{store}', [StoreController::class, 'destroy'])->name('stores.destroy');
 Route::post('stores/{store}/suspend', [StoreController::class, 'suspend'])->name('stores.suspend');
 Route::post('stores/{store}/activate', [StoreController::class, 'activate'])->name('stores.activate');
 

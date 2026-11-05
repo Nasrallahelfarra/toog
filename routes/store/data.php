@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Store\CatalogController;
 use App\Http\Controllers\Store\DashboardController;
 use App\Http\Controllers\Store\DemoCatalogController;
 use App\Http\Controllers\Store\ImportController;
@@ -18,6 +19,9 @@ Route::get('/', DashboardController::class)->name('dashboard');
 Route::post('catalog/clear-demo', [DemoCatalogController::class, 'destroy'])->name('catalog.clear-demo');
 
 // Module 1 — store data & sales analysis
+// Catalog browser — categories, their products and sales
+Route::get('catalog', [CatalogController::class, 'index'])->name('catalog');
+
 Route::get('performance', [PerformanceController::class, 'index'])->name('performance');
 Route::get('stagnant', [StagnantProductController::class, 'index'])->name('stagnant.index');
 Route::post('stagnant/{product}/recommendation', [StagnantProductController::class, 'recommend'])->middleware('throttle:20,1')->name('stagnant.recommend');

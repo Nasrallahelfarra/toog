@@ -8,6 +8,7 @@ use App\Jobs\RecommendStagnantProduct;
 use App\Models\DesignRequest;
 use App\Models\Product;
 use App\Models\ProductRecommendation;
+use App\Models\SeasonalEvent;
 use App\Models\User;
 use App\Services\Ai\Ai;
 use App\Services\Ai\AiJsonResult;
@@ -401,5 +402,61 @@ class StagnantProductsTest extends TestCase
         $product = $this->product(['performance' => Product::WINNER]);
         $this->actingAs($product->store->owner)->post("/store/stagnant/{$product->id}/recommendation")->assertUnprocessable();
         Queue::assertNotPushed(RecommendStagnantProduct::class);
+    }
+
+    public function test_marketing_plan_is_grounded_in_market_facts_and_saved_clean(): void
+    {
+        $product = $this->product();
+        $store = $product->store;
+        Product::query()->create(['store_id' => $store->id, 'name' => 'Best bag', 'category' => 'Bags', 'performance' => Product::WINNER, 'price' => 80, 'features' => ['colors' => ['beige'], 'pattern' => 'solid']]);
+        Product::query()->create(['store_id' => $store->id, 'name' => 'Other bag', 'category' => 'Bags', 'performance' => Product::AVERAGE, 'price' => 140]);
+        SeasonalEvent::query()->create(['store_id' => $store->id, 'season_key' => 'national_day', 'name_ar' => 'اليوم الوطني', 'name_en' => 'National Day',
+            'starts_on' => now()->addDays(30), 'ends_on' => now()->addDays(31), 'prep_weeks' => 3, 'is_active' => true]);
+        $text = fn ($value) => ['ar' => $value, 'en' => $value];
+        $plan = [
+            'angle' => $text('A ready gift for the occasion'),
+            'copy' => ['headline' => $text('شنطة تكمّل إطلالتك'), 'body' => $text('خامة تدوم وتفاصيل ناعمة تناسب يومك.'), 'cta' => $text('اطلبيها الحين')],
+            'hashtags' => ['#شنط نسائية', 'اليوم_الوطني', '#شنط نسائية'],
+            'offer' => ['type' => 'bundle', 'value' => $text('قطعتين بـ 180 ر.س'), 'duration_days' => 90, 'rationale' => $text('Stock lasts a year at the current pace')],
+            'channels' => [['channel' => 'snapchat', 'idea' => $text('A 6-second hook on the clasp')], ['channel' => 'whatsapp', 'idea' => $text('Broadcast to past buyers')]],
+            'timing' => ['occasion' => $text('اليوم الوطني'), 'when' => $text('Start three weeks before')],
+            'kpi' => $text('Units sold in 14 days against the last 90'),
+        ];
+
+        $run = $this->requestRecommendation($product);
+        $ai = Mockery::mock(Ai::class);
+        $ai->shouldReceive('isLive')->andReturn(true);
+        $ai->shouldReceive('json')->once()->withArgs(function ($operation, $store, $system, $prompt, $schema) {
+            $context = json_decode(explode("\nImage available:", $prompt)[0], true)['market_context'];
+            $this->assertStringContainsString('marketer for the Saudi market', $system);
+            $this->assertEquals(100, $context['pricing']['price']);
+            $this->assertEquals(100, $context['pricing']['category_median']);
+            $this->assertSame(33, $context['pricing']['cheaper_peers_share']);
+            $this->assertSame(['beige' => 1], $context['category_best_sellers']['colors']);
+            $this->assertEquals(5000, $context['inventory']['stock_value']);
+            $this->assertSame('اليوم الوطني', $context['occasions'][0]['name_ar']);
+            $this->assertContains('marketing_plan', $schema['required']);
+
+            return true;
+        })->andReturn(new AiJsonResult([...$this->review(), 'marketing_plan' => $plan], true, 0.01));
+        $this->app->instance(Ai::class, $ai);
+        app()->call([new RecommendStagnantProduct($run->id), 'handle']);
+
+        $saved = $run->fresh();
+        $this->assertSame('completed', $saved->status);
+        $this->assertSame(60, $saved->review['marketing_plan']['offer']['duration_days']);
+        $this->assertSame(['#شنط_نسائية', '#اليوم_الوطني'], $saved->review['marketing_plan']['hashtags']);
+        $this->assertSame('snapchat', $saved->review['marketing_plan']['channels'][0]['channel']);
+        $this->get('/store/stagnant')->assertInertia(fn (Assert $page) => $page->where('products.data.0.recovery.review.marketing_plan.offer.type', 'bundle'));
+    }
+
+    public function test_an_invalid_marketing_plan_is_dropped_without_losing_the_review(): void
+    {
+        $product = $this->product();
+        $run = $this->complete($product, [...$this->review(), 'marketing_plan' => ['offer' => ['type' => 'lottery']]]);
+
+        $this->assertSame('completed', $run->status);
+        $this->assertNull($run->review['marketing_plan']);
+        $this->assertCount(2, $run->review['recommendations']);
     }
 }

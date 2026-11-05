@@ -13,6 +13,9 @@ import {
     ShieldCheck,
     Store,
     Users,
+    KeyRound,
+    Trash2,
+    UserCog,
 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -40,6 +43,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/components/ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DeleteStoreDialog } from '@/components/admin/delete-dialogs';
+import { PasswordDialog } from '@/components/admin/user-dialogs';
 import { useI18n } from '@/hooks/use-i18n';
 import type { AdminStoreRow } from '@/components/admin/types';
 
@@ -642,87 +647,151 @@ function SettingsTab({ store }: { store: StoreDetail }) {
     };
 
     return (
-        <form onSubmit={submit} className="space-y-6">
-            <p className="text-muted-foreground text-sm">{d.settingsHint}</p>
-            <div className="grid gap-6 lg:grid-cols-2">
-                <SectionCard title={d.basics} icon={Store}>
-                    <div className="grid gap-5">
-                        <Field label={t.admin.create.storeName} error={form.errors.name}>
-                            <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} required />
-                        </Field>
-                        <Field label={t.admin.create.domain} error={form.errors.domain}>
-                            <Input dir="ltr" value={form.data.domain} onChange={(e) => form.setData('domain', e.target.value)} />
-                        </Field>
-                        <Field label={t.admin.create.category} error={form.errors.category}>
-                            <Input value={form.data.category} onChange={(e) => form.setData('category', e.target.value)} />
-                        </Field>
-                        <div className="grid gap-5 sm:grid-cols-2">
-                            <Field label={d.syncFrequency} error={form.errors.sync_frequency}>
-                                <Select value={form.data.sync_frequency} onValueChange={(v) => form.setData('sync_frequency', v as 'daily' | 'weekly')}>
-                                    <SelectTrigger className="w-full">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="daily">{t.admin.settings.daily}</SelectItem>
-                                        <SelectItem value="weekly">{t.admin.settings.weekly}</SelectItem>
-                                    </SelectContent>
-                                </Select>
+        <div className="space-y-6">
+            <form onSubmit={submit} className="space-y-6">
+                <p className="text-muted-foreground text-sm">{d.settingsHint}</p>
+                <div className="grid gap-6 lg:grid-cols-2">
+                    <SectionCard title={d.basics} icon={Store}>
+                        <div className="grid gap-5">
+                            <Field label={t.admin.create.storeName} error={form.errors.name}>
+                                <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} required />
                             </Field>
-                            <Field label={t.admin.create.budget} error={form.errors.ai_monthly_budget}>
-                                <Input
-                                    type="number"
-                                    min={0}
-                                    step="0.01"
-                                    dir="ltr"
-                                    value={form.data.ai_monthly_budget}
-                                    onChange={(e) => form.setData('ai_monthly_budget', e.target.value)}
-                                    placeholder={t.admin.overview.noBudget}
-                                />
+                            <Field label={t.admin.create.domain} error={form.errors.domain}>
+                                <Input dir="ltr" value={form.data.domain} onChange={(e) => form.setData('domain', e.target.value)} />
                             </Field>
+                            <Field label={t.admin.create.category} error={form.errors.category}>
+                                <Input value={form.data.category} onChange={(e) => form.setData('category', e.target.value)} />
+                            </Field>
+                            <div className="grid gap-5 sm:grid-cols-2">
+                                <Field label={d.syncFrequency} error={form.errors.sync_frequency}>
+                                    <Select value={form.data.sync_frequency} onValueChange={(v) => form.setData('sync_frequency', v as 'daily' | 'weekly')}>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="daily">{t.admin.settings.daily}</SelectItem>
+                                            <SelectItem value="weekly">{t.admin.settings.weekly}</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </Field>
+                                <Field label={t.admin.create.budget} error={form.errors.ai_monthly_budget}>
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        step="0.01"
+                                        dir="ltr"
+                                        value={form.data.ai_monthly_budget}
+                                        onChange={(e) => form.setData('ai_monthly_budget', e.target.value)}
+                                        placeholder={t.admin.overview.noBudget}
+                                    />
+                                </Field>
+                            </div>
                         </div>
-                    </div>
-                </SectionCard>
+                    </SectionCard>
 
-                <SectionCard title={d.decision} icon={ScanSearch}>
-                    <div className="space-y-7">
-                        <SliderField
-                            label={d.acceptThreshold}
-                            value={form.data.accept_threshold}
-                            min={50}
-                            max={100}
-                            onChange={(v) => form.setData('accept_threshold', v)}
-                            error={form.errors.accept_threshold}
-                            tone="text-success"
-                        />
-                        <SliderField
-                            label={d.rejectThreshold}
-                            value={form.data.reject_threshold}
-                            min={0}
-                            max={90}
-                            onChange={(v) => form.setData('reject_threshold', v)}
-                            error={form.errors.reject_threshold}
-                            tone="text-danger"
-                        />
-                        <SliderField
-                            label={d.provenRatio}
-                            value={form.data.proven_ratio}
-                            min={50}
-                            max={95}
-                            onChange={(v) => form.setData('proven_ratio', v)}
-                            error={form.errors.proven_ratio}
-                            suffix="%"
-                            hint={tr(d.provenRatioHint, { proven: form.data.proven_ratio, novel: 100 - form.data.proven_ratio })}
-                        />
-                    </div>
-                </SectionCard>
-            </div>
+                    <SectionCard title={d.decision} icon={ScanSearch}>
+                        <div className="space-y-7">
+                            <SliderField
+                                label={d.acceptThreshold}
+                                value={form.data.accept_threshold}
+                                min={50}
+                                max={100}
+                                onChange={(v) => form.setData('accept_threshold', v)}
+                                error={form.errors.accept_threshold}
+                                tone="text-success"
+                            />
+                            <SliderField
+                                label={d.rejectThreshold}
+                                value={form.data.reject_threshold}
+                                min={0}
+                                max={90}
+                                onChange={(v) => form.setData('reject_threshold', v)}
+                                error={form.errors.reject_threshold}
+                                tone="text-danger"
+                            />
+                            <SliderField
+                                label={d.provenRatio}
+                                value={form.data.proven_ratio}
+                                min={50}
+                                max={95}
+                                onChange={(v) => form.setData('proven_ratio', v)}
+                                error={form.errors.proven_ratio}
+                                suffix="%"
+                                hint={tr(d.provenRatioHint, { proven: form.data.proven_ratio, novel: 100 - form.data.proven_ratio })}
+                            />
+                        </div>
+                    </SectionCard>
+                </div>
 
-            <div className="flex justify-end">
-                <Button type="submit" disabled={form.processing || !form.isDirty}>
-                    {form.processing && <Spinner />}
-                    {t.common.saveChanges}
-                </Button>
+                <div className="flex justify-end">
+                    <Button type="submit" disabled={form.processing || !form.isDirty}>
+                        {form.processing && <Spinner />}
+                        {t.common.saveChanges}
+                    </Button>
+                </div>
+            </form>
+
+            {store.owner && <OwnerAccountCard owner={store.owner} />}
+            <DangerZone store={store} />
+        </div>
+    );
+}
+
+/** The owner's login details, editable without leaving the store page. */
+function OwnerAccountCard({ owner }: { owner: NonNullable<StoreDetail['owner']> }) {
+    const { t } = useI18n();
+    const a = t.admin.deletion;
+    const [password, setPassword] = useState(false);
+    const form = useForm({ name: owner.name, email: owner.email, phone: owner.phone ?? '', role: owner.role });
+
+    const submit = (e: FormEvent) => {
+        e.preventDefault();
+        form.put(`/admin/users/${owner.id}`, { preserveScroll: true });
+    };
+
+    return (
+        <SectionCard title={a.ownerTitle} description={a.ownerHint} icon={UserCog}>
+            <form onSubmit={submit} className="space-y-5">
+                <div className="grid gap-5 sm:grid-cols-2">
+                    <Field label={t.common.name} error={form.errors.name}>
+                        <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} required />
+                    </Field>
+                    <Field label={t.common.email} error={form.errors.email}>
+                        <Input type="email" dir="ltr" value={form.data.email} onChange={(e) => form.setData('email', e.target.value)} required />
+                    </Field>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <Button type="button" variant="outline" onClick={() => setPassword(true)}>
+                        <KeyRound className="size-4" />
+                        {a.changePassword}
+                    </Button>
+                    <Button type="submit" disabled={form.processing || !form.isDirty}>
+                        {form.processing && <Spinner />}
+                        {t.common.saveChanges}
+                    </Button>
+                </div>
+            </form>
+            <PasswordDialog open={password} onOpenChange={setPassword} user={owner} />
+        </SectionCard>
+    );
+}
+
+function DangerZone({ store }: { store: StoreDetail }) {
+    const { t } = useI18n();
+    const a = t.admin.deletion;
+    const [open, setOpen] = useState(false);
+
+    return (
+        <section className="border-danger/30 flex flex-col gap-4 rounded-2xl border p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+                <h3 className="text-danger font-semibold">{a.dangerTitle}</h3>
+                <p className="text-muted-foreground text-sm leading-6">{a.dangerHint}</p>
             </div>
-        </form>
+            <Button variant="destructive" className="shrink-0" onClick={() => setOpen(true)}>
+                <Trash2 className="size-4" />
+                {a.storeAction}
+            </Button>
+            <DeleteStoreDialog store={store} open={open} onOpenChange={setOpen} />
+        </section>
     );
 }

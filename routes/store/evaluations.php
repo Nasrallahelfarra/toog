@@ -34,5 +34,6 @@ Route::post('studio/{designRequest}/retry', [StudioController::class, 'retry'])-
 
 Route::get('library', [DesignController::class, 'index'])->name('library.index');
 Route::patch('designs/{design}', [DesignController::class, 'update'])->name('designs.update');
+Route::post('designs/{design}/refine', [StudioController::class, 'refine'])->name('designs.refine');
 Route::get('designs/{design}/download', [DesignController::class, 'download'])->name('designs.download');
 Route::delete('designs/{design}', [DesignController::class, 'destroy'])->name('designs.destroy');
