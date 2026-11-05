@@ -6,6 +6,7 @@ use App\Http\Controllers\Store\DemoCatalogController;
 use App\Http\Controllers\Store\ImportController;
 use App\Http\Controllers\Store\IntegrationController;
 use App\Http\Controllers\Store\PerformanceController;
+use App\Http\Controllers\Store\ProductController;
 use App\Http\Controllers\Store\SettingsController;
 use App\Http\Controllers\Store\StagnantProductController;
 use App\Support\CurrentStore;
@@ -21,6 +22,7 @@ Route::post('catalog/clear-demo', [DemoCatalogController::class, 'destroy'])->na
 // Module 1 — store data & sales analysis
 // Catalog browser — categories, their products and sales
 Route::get('catalog', [CatalogController::class, 'index'])->name('catalog');
+Route::get('products/{product}', [ProductController::class, 'show'])->whereNumber('product')->name('products.show');
 
 Route::get('performance', [PerformanceController::class, 'index'])->name('performance');
 Route::get('stagnant', [StagnantProductController::class, 'index'])->name('stagnant.index');

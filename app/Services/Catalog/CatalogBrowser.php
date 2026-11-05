@@ -228,6 +228,52 @@ class CatalogBrowser
     }
 
     /**
+     * Everything the product page shows beyond the product row: 12 months of
+     * sales, how it compares with its category, and best sellers beside it.
+     *
+     * @return array{history: list<array<string, mixed>>, category: array<string, mixed>, similar: list<array<string, mixed>>}
+     */
+    public function productDetail(Store $store, Product $product): array
+    {
+        $months = $this->months($store, self::HISTORY);
+        $rows = ProductSale::query()->where('product_id', $product->id)->where('period', '>=', $months[0].'-01')
+            ->get(['period', 'units', 'revenue', 'orders', 'returns'])
+            ->groupBy(fn (ProductSale $s) => $this->month($s));
+
+        $peers = $this->inCategory($store, $product->category ?? self::UNCATEGORIZED)
+            ->get(['id', 'name', 'image_url', 'price', 'performance', 'units_sold', 'revenue', 'return_rate', 'turnover_days']);
+        $median = fn (string $field) => ($values = $peers->pluck($field)->filter(fn ($v) => $v !== null)->map(fn ($v) => (float) $v))->isEmpty()
+            ? null : round((float) $values->median(), 2);
+
+        return [
+            'history' => array_map(fn (string $m) => [
+                'period' => $m.'-01',
+                'units' => (int) $rows->get($m, collect())->sum('units'),
+                'revenue' => round((float) $rows->get($m, collect())->sum('revenue'), 2),
+                'orders' => (int) $rows->get($m, collect())->sum('orders'),
+                'returns' => (int) $rows->get($m, collect())->sum('returns'),
+            ], $months),
+            'category' => [
+                'key' => $product->category ?? self::UNCATEGORIZED,
+                'name' => $product->category,
+                'products' => $peers->count(),
+                // 1 = highest revenue in the category.
+                'rank' => $peers->sortByDesc('revenue')->values()->search(fn (Product $p) => $p->id === $product->id) + 1,
+                'median' => [
+                    'price' => $median('price'),
+                    'units_sold' => $median('units_sold'),
+                    'revenue' => $median('revenue'),
+                    'return_rate' => $median('return_rate'),
+                    'turnover_days' => $median('turnover_days'),
+                ],
+            ],
+            'similar' => array_values($peers->where('id', '!=', $product->id)->sortByDesc('revenue')->take(4)
+                ->map(fn (Product $p) => [...$p->only(['id', 'name', 'image_url', 'performance', 'units_sold']), 'price' => $p->price !== null ? (float) $p->price : null])
+                ->all()),
+        ];
+    }
+
+    /**
      * @return Builder<ProductSale>
      */
     private function sales(Store $store, ?string $category): Builder

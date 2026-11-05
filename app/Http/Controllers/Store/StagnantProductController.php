@@ -48,7 +48,6 @@ class StagnantProductController extends Controller
     {
         $store = $this->current->require();
         abort_unless($product->store_id === $store->id, 404);
-        abort_unless(in_array($product->performance, [Product::STAGNANT, Product::AT_RISK], true), 422);
         $request->validate(['replace_recommendation_id' => 'sometimes|integer|min:1']);
 
         $run = DB::transaction(function () use ($product, $request) {

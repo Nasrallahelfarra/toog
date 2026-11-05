@@ -28,7 +28,7 @@ import {
 import { useI18n } from '@/hooks/use-i18n';
 import { cn } from '@/lib/utils';
 
-type Recovery = {
+export type Recovery = {
     id: number;
     status: 'pending' | 'processing' | 'completed' | 'failed';
     review: SpecialistReview | null;
@@ -394,6 +394,15 @@ export function StagnantProductGrid({
                             {selected?.name}
                         </DialogTitle>
                         <DialogDescription>{s.expertHint}</DialogDescription>
+                        {selected && (
+                            <Link
+                                href={`/store/products/${selected.id}`}
+                                className="inline-flex w-fit items-center gap-1 text-xs font-medium text-primary hover:underline"
+                            >
+                                {t.catalog.product.open}
+                                <ArrowUpRight className="size-3.5 rtl:-scale-x-100" />
+                            </Link>
+                        )}
                     </DialogHeader>
                     {selected && (
                         <div className="space-y-5 p-6 pt-0">
@@ -435,97 +444,115 @@ export function StagnantProductGrid({
                                     {s.reasons[selected.classification_reason]}
                                 </p>
                             )}
-                            <AnimatePresence mode="wait" initial={false}>
-                                <motion.div
-                                    key={
-                                        requestError
-                                            ? 'error'
-                                            : (selected.recovery?.status ??
-                                              'pending')
-                                    }
-                                    initial={
-                                        reduced ? false : { opacity: 0, y: 8 }
-                                    }
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0 }}
-                                    transition={{
-                                        duration: reduced ? 0 : 0.25,
-                                    }}
-                                >
-                                    {requestError ||
-                                    selected.recovery?.status === 'failed' ? (
-                                        <div
-                                            role="alert"
-                                            className="space-y-3 rounded-xl border border-danger/20 bg-danger/5 p-5"
-                                        >
-                                            <h3 className="flex items-center gap-2 font-semibold">
-                                                <AlertCircle className="size-5 text-danger" />
-                                                {s.failed}
-                                            </h3>
-                                            <p className="text-sm leading-7 text-muted-foreground">
-                                                {s.errors[
-                                                    (requestError
-                                                        ? 'request_failed'
-                                                        : (selected.recovery
-                                                              ?.error ??
-                                                          'review_failed')) as keyof typeof s.errors
-                                                ] ?? s.errors.review_failed}
-                                            </p>
-                                            <Button
-                                                variant="outline"
-                                                onClick={() =>
-                                                    requestError
-                                                        ? refresh()
-                                                        : recommend(selected)
-                                                }
-                                                disabled={request.processing}
-                                            >
-                                                {requestError
-                                                    ? s.refreshStatus
-                                                    : s.retry}
-                                            </Button>
-                                        </div>
-                                    ) : selected.recovery?.status ===
-                                          'completed' &&
-                                      selected.recovery.review?.status ===
-                                          'available' ? (
-                                        <RecoveryResult
-                                            key={selected.recovery.id}
-                                            recovery={selected.recovery}
-                                            regenerate={() =>
-                                                recommend(selected, true)
-                                            }
-                                            requesting={request.processing}
-                                        />
-                                    ) : (
-                                        <>
-                                            <ReviewLoading
-                                                recovery={selected.recovery}
-                                                networkError={networkError}
-                                                refresh={refresh}
-                                                sending={request.processing}
-                                            />
-                                            {!selected.recovery &&
-                                                !request.processing &&
-                                                !networkError && (
-                                                    <Button
-                                                        className="w-full"
-                                                        onClick={() =>
-                                                            recommend(selected)
-                                                        }
-                                                    >
-                                                        {s.request}
-                                                    </Button>
-                                                )}
-                                        </>
-                                    )}
-                                </motion.div>
-                            </AnimatePresence>
+                            <RecommendationBody
+                                recovery={selected.recovery}
+                                requestError={requestError}
+                                networkError={networkError}
+                                sending={request.processing}
+                                onRequest={() => recommend(selected)}
+                                onRegenerate={() => recommend(selected, true)}
+                                onRefresh={refresh}
+                            />
                         </div>
                     )}
                 </DialogContent>
             </Dialog>
         </>
+    );
+}
+
+/**
+ * The expert recommendation for one product in every state: the request
+ * button, queued/working progress, failure with retry, and the result.
+ * Shared by the slow-mover dialog and the product page.
+ */
+export function RecommendationBody({
+    recovery,
+    requestError,
+    networkError,
+    sending,
+    onRequest,
+    onRegenerate,
+    onRefresh,
+}: {
+    recovery: Recovery | null;
+    requestError: boolean;
+    networkError: boolean;
+    sending: boolean;
+    onRequest: () => void;
+    onRegenerate: () => void;
+    onRefresh: () => void;
+}) {
+    const { t } = useI18n();
+    const s = t.stagnant;
+    const reduced = useReducedMotion();
+
+    return (
+        <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+                key={requestError ? 'error' : (recovery?.status ?? 'pending')}
+                initial={reduced ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{
+                    duration: reduced ? 0 : 0.25,
+                }}
+            >
+                {requestError || recovery?.status === 'failed' ? (
+                    <div
+                        role="alert"
+                        className="space-y-3 rounded-xl border border-danger/20 bg-danger/5 p-5"
+                    >
+                        <h3 className="flex items-center gap-2 font-semibold">
+                            <AlertCircle className="size-5 text-danger" />
+                            {s.failed}
+                        </h3>
+                        <p className="text-sm leading-7 text-muted-foreground">
+                            {s.errors[
+                                (requestError
+                                    ? 'request_failed'
+                                    : (recovery?.error ??
+                                      'review_failed')) as keyof typeof s.errors
+                            ] ?? s.errors.review_failed}
+                        </p>
+                        <Button
+                            variant="outline"
+                            onClick={() =>
+                                requestError ? onRefresh() : onRequest()
+                            }
+                            disabled={sending}
+                        >
+                            {requestError ? s.refreshStatus : s.retry}
+                        </Button>
+                    </div>
+                ) : recovery?.status === 'completed' &&
+                  recovery.review?.status === 'available' ? (
+                    <RecoveryResult
+                        key={recovery.id}
+                        recovery={recovery}
+                        regenerate={() => onRegenerate()}
+                        requesting={sending}
+                    />
+                ) : (
+                    <>
+                        <ReviewLoading
+                            recovery={recovery}
+                            networkError={networkError}
+                            refresh={onRefresh}
+                            sending={sending}
+                        />
+                        {!recovery && !sending && !networkError && (
+                            <Button
+                                className="w-full"
+                                onClick={() => onRequest()}
+                            >
+                                {s.request}
+                            </Button>
+                        )}
+                    </>
+                )}
+            </motion.div>
+        </AnimatePresence>
     );
 }
 
