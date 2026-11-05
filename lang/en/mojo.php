@@ -21,6 +21,8 @@ return [
     'cannot_change_own_role' => 'You cannot change your own role.',
     'cannot_disable_self' => 'You cannot disable your own account.',
     'cannot_delete_self' => 'You cannot delete your own account.',
-    'user_owns_stores' => 'This user owns stores; transfer or delete them first.',
+    'confirm_name_mismatch' => 'The typed name does not match the store name.',
+    'store_deleted' => 'Store “:name” and all its data were deleted.',
+    'user_owns_stores' => 'This user owns stores; confirm deleting them too, or transfer them first.',
     'weights_required' => 'The weights must add up to more than zero.',
 ];

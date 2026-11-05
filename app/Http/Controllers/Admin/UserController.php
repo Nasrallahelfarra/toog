@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Actions\Stores\DeleteStore;
 use App\Http\Controllers\Controller;
 use App\Models\Store;
 use App\Models\User;
@@ -22,7 +23,7 @@ class UserController extends Controller
         $filters = $request->only(['search', 'role', 'status']);
 
         $users = User::query()
-            ->with('stores:stores.id,stores.name,stores.status')
+            ->with('stores:stores.id,stores.name,stores.status,stores.owner_id')
             ->when($filters['search'] ?? null, fn (Builder $q, string $s) => $q->where(fn (Builder $q) => $q
                 ->where('name', 'like', "%{$s}%")
                 ->orWhere('email', 'like', "%{$s}%")
@@ -44,7 +45,7 @@ class UserController extends Controller
                 'disabled_at' => $u->disabled_at?->toIso8601String(),
                 'last_login_at' => $u->last_login_at?->toIso8601String(),
                 'created_at' => $u->created_at?->toIso8601String(),
-                'stores' => $u->stores->map(fn (Store $s) => ['id' => $s->id, 'name' => $s->name, 'status' => $s->status])->values(),
+                'stores' => $u->stores->map(fn (Store $s) => ['id' => $s->id, 'name' => $s->name, 'status' => $s->status, 'owned' => $s->owner_id === $u->id])->values(),
             ]);
 
         return Inertia::render('admin/users/index', [
@@ -176,17 +177,23 @@ class UserController extends Controller
         return back();
     }
 
-    public function destroy(Request $request, User $user): RedirectResponse
+    public function destroy(Request $request, User $user, DeleteStore $deleteStore): RedirectResponse
     {
         $this->guardSelf($request, $user, 'cannot_delete_self');
 
-        // Deleting an owner would cascade-delete their stores; make the
-        // admin reassign or remove those stores first.
-        if ($user->ownedStores()->exists()) {
+        // Deleting an owner removes their stores too, so the admin has to
+        // confirm that explicitly; the dialog lists the stores first.
+        $owned = $user->ownedStores()->get();
+        if ($owned->isNotEmpty() && ! $request->boolean('delete_stores')) {
             throw ValidationException::withMessages(['user' => __('mojo.user_owns_stores')]);
         }
 
-        Activity::log('admin.user_deleted', null, ['email' => $user->email, 'name' => $user->name]);
+        foreach ($owned as $store) {
+            Activity::log('admin.store_deleted', null, ['store' => $store->name, 'owner' => $user->email]);
+            $deleteStore->handle($store);
+        }
+
+        Activity::log('admin.user_deleted', null, ['email' => $user->email, 'name' => $user->name, 'stores' => $owned->pluck('name')->all()]);
         $user->delete();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('mojo.deleted')]);

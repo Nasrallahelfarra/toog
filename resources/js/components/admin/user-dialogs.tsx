@@ -27,7 +27,7 @@ export type AdminUserRow = {
     disabled_at: string | null;
     last_login_at: string | null;
     created_at: string | null;
-    stores: { id: number; name: string; status: string }[];
+    stores: { id: number; name: string; status: string; owned: boolean }[];
 };
 
 const NO_STORE = '__none__';
@@ -148,7 +148,7 @@ function UserForm({ user, stores, onDone }: { user: AdminUserRow | null; stores:
 /**
  * Admin sets a new password for a user.
  */
-export function PasswordDialog({ open, onOpenChange, user }: { open: boolean; onOpenChange: (open: boolean) => void; user: AdminUserRow | null }) {
+export function PasswordDialog({ open, onOpenChange, user }: { open: boolean; onOpenChange: (open: boolean) => void; user: Pick<AdminUserRow, 'id' | 'name'> | null }) {
     const { t, tr } = useI18n();
     const u = t.admin.users;
     const form = useForm({ password: '', password_confirmation: '' });

@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { Eye, LogIn, MoreHorizontal, PauseCircle, PlayCircle, Plus, Search, Store } from 'lucide-react';
+import { Eye, LogIn, MoreHorizontal, PauseCircle, PlayCircle, Plus, Search, Store, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { ConnectionBadge, Initials, StoreStatusBadge } from '@/components/admin/badges';
 import { FilterSelect } from '@/components/admin/filter-select';
@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DeleteStoreDialog } from '@/components/admin/delete-dialogs';
 import { useI18n } from '@/hooks/use-i18n';
 import { cn } from '@/lib/utils';
 
@@ -182,7 +183,7 @@ export default function AdminStores({ stores, filters: initial, counts }: Props)
 
 function RowActions({ store }: { store: AdminStoreRow }) {
     const { t } = useI18n();
-    const [dialog, setDialog] = useState<'suspend' | 'activate' | null>(null);
+    const [dialog, setDialog] = useState<'suspend' | 'activate' | 'delete' | null>(null);
 
     return (
         <>
@@ -215,9 +216,14 @@ function RowActions({ store }: { store: AdminStoreRow }) {
                             {t.admin.stores.suspend}
                         </DropdownMenuItem>
                     )}
+                    <DropdownMenuItem onSelect={() => setDialog('delete')} className="text-danger focus:text-danger">
+                        <Trash2 className="size-4" />
+                        {t.admin.deletion.storeAction}
+                    </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
-            <StoreStatusDialogs store={store} dialog={dialog} onClose={() => setDialog(null)} />
+            <StoreStatusDialogs store={store} dialog={dialog === 'delete' ? null : dialog} onClose={() => setDialog(null)} />
+            <DeleteStoreDialog store={store} open={dialog === 'delete'} onOpenChange={(open) => !open && setDialog(null)} />
         </>
     );
 }

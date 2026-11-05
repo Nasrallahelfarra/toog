@@ -7,7 +7,7 @@ export type AdminStoreRow = {
     platform: string;
     status: 'active' | 'suspended';
     connection_status: string;
-    owner: { id: number; name: string; email: string; status: string } | null;
+    owner: { id: number; name: string; email: string; phone: string | null; role: 'admin' | 'store_owner'; status: string } | null;
     products_count: number;
     evaluations_count: number;
     month_cost: number;
