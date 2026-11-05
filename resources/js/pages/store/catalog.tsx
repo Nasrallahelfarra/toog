@@ -1,7 +1,7 @@
 import { router } from '@inertiajs/react';
-import { ArrowLeft, BarChart3, FolderOpen, ImageOff, LayoutGrid, Package, Search, ShoppingBag, Table2, Trophy, Turtle, Wallet } from 'lucide-react';
+import { ArrowLeft, BarChart3, CalendarDays, FolderOpen, ImageOff, LayoutGrid, Package, Search, ShoppingBag, Table2, Trophy, Turtle, Wallet } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, ReferenceDot, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartTooltip, useChartAxes } from '@/components/mojo/chart';
 import { ColorChips } from '@/components/mojo/color-chips';
 import { PerformanceBadge } from '@/components/mojo/decision-badge';
@@ -20,11 +20,12 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useI18n } from '@/hooks/use-i18n';
+import { cn } from '@/lib/utils';
 
 type Metric = 'revenue' | 'units' | 'orders';
 type Range = 3 | 6 | 12;
 
-type TrendPoint = { period: string; revenue: number; units: number; orders: number; partial: boolean };
+type TrendPoint = { period: string; revenue: number; units: number; orders: number; partial: boolean; selected: boolean };
 
 type Category = {
     key: string;
@@ -50,6 +51,9 @@ type Product = {
     performance_score: number | null;
     units_sold: number;
     revenue: number;
+    /** Sales in the chosen month, when one is picked. */
+    month_units: number | null;
+    month_revenue: number | null;
     stock: number;
     turnover_days: number | null;
     return_rate: number;
@@ -62,6 +66,9 @@ type Filters = { search?: string; class?: string; sort?: string };
 
 type Props = {
     months: Range;
+    /** A chosen month (Y-m) that replaces the range, or null. */
+    month: string | null;
+    availableMonths: string[];
     category: string | null;
     filters: Filters;
     summary: {
@@ -82,25 +89,29 @@ const ALL = '__all__';
 const CLASSES = ['winner', 'average', 'at_risk', 'stagnant', 'unclassified'] as const;
 const SORTS = ['revenue', 'units', 'newest', 'price_low', 'price_high', 'stock'] as const;
 
-type Params = { months: Range; category: string | null } & Filters;
+type Params = { months: Range; month?: string | null; category: string | null } & Filters;
 
 /** Reload only what a change affects, keeping the other params in the URL. */
 function visit(params: Params, only: string[], preserveScroll = true) {
     const query = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ''));
-    router.get('/store/catalog', query, { preserveState: true, preserveScroll, replace: true, only: [...only, 'months', 'category', 'filters'] });
+    router.get('/store/catalog', query, { preserveState: true, preserveScroll, replace: true, only: [...only, 'months', 'month', 'category', 'filters'] });
 }
 
 export default function Catalog(props: Props) {
-    const { t, tr, money, number } = useI18n();
+    const { t, tr, money, number, date } = useI18n();
     const c = t.catalog;
     const [metric, setMetric] = useState<Metric>('revenue');
-    const params: Params = { months: props.months, category: props.category, ...props.filters };
+    const params: Params = { months: props.months, month: props.month, category: props.category, ...props.filters };
+    const monthName = (key: string) => date(`${key}-01`, { month: 'long', year: 'numeric' });
+    const vsPrevious = props.month ? c.kpi.vsPreviousMonth : c.kpi.vsPrevious;
+    // A month changes every number on the page, so everything but the month list reloads.
+    const pickMonth = (key: string | null) => visit({ ...params, month: key }, ['summary', 'trend', 'categories', 'products']);
     const current = props.categories.find((cat) => cat.key === props.category) ?? null;
     const categoryName = (cat: { name: string | null } | null) => cat?.name ?? c.uncategorized;
     const scope = props.category ? categoryName(current ?? { name: props.category === UNCATEGORIZED ? null : props.category }) : c.storeScope;
 
     const openCategory = (key: string | null) =>
-        visit({ months: props.months, category: key }, ['summary', 'trend', 'products'], false);
+        visit({ months: props.months, month: props.month, category: key }, ['summary', 'trend', 'products'], false);
 
     return (
         <PageBody>
@@ -117,15 +128,36 @@ export default function Catalog(props: Props) {
                     ) : undefined
                 }
                 actions={
-                    <Tabs value={String(props.months)} onValueChange={(v) => visit({ ...params, months: Number(v) as Range }, ['summary', 'trend', 'categories'])}>
-                        <TabsList>
-                            {([3, 6, 12] as Range[]).map((range) => (
-                                <TabsTrigger key={range} value={String(range)} className="px-3">
-                                    {c.ranges[range]}
-                                </TabsTrigger>
-                            ))}
-                        </TabsList>
-                    </Tabs>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Tabs
+                            value={props.month ? '' : String(props.months)}
+                            onValueChange={(v) => visit({ ...params, month: null, months: Number(v) as Range }, ['summary', 'trend', 'categories', 'products'])}
+                        >
+                            <TabsList>
+                                {([3, 6, 12] as Range[]).map((range) => (
+                                    <TabsTrigger key={range} value={String(range)} className="px-3">
+                                        {c.ranges[range]}
+                                    </TabsTrigger>
+                                ))}
+                            </TabsList>
+                        </Tabs>
+                        {props.availableMonths.length > 0 && (
+                            <Select value={props.month ?? ALL} onValueChange={(v) => pickMonth(v === ALL ? null : v)}>
+                                <SelectTrigger className={cn('w-44', props.month && 'border-primary text-primary')} aria-label={c.pickMonth}>
+                                    <CalendarDays className="size-4" />
+                                    <SelectValue placeholder={c.pickMonth} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value={ALL}>{c.pickMonth}</SelectItem>
+                                    {props.availableMonths.map((key) => (
+                                        <SelectItem key={key} value={key}>
+                                            {monthName(key)}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                    </div>
                 }
             />
 
@@ -144,7 +176,7 @@ export default function Catalog(props: Props) {
                                 icon={Wallet}
                                 tone="gold"
                                 delta={props.summary.delta.revenue}
-                                deltaLabel={c.kpi.vsPrevious}
+                                deltaLabel={vsPrevious}
                                 spark={props.trend.map((p) => p.revenue)}
                             />
                         </StaggerItem>
@@ -156,7 +188,7 @@ export default function Catalog(props: Props) {
                                 icon={ShoppingBag}
                                 tone="navy"
                                 delta={props.summary.delta.units}
-                                deltaLabel={c.kpi.vsPrevious}
+                                deltaLabel={vsPrevious}
                                 spark={props.trend.map((p) => p.units)}
                             />
                         </StaggerItem>
@@ -168,7 +200,7 @@ export default function Catalog(props: Props) {
                                 icon={BarChart3}
                                 tone="info"
                                 delta={props.summary.delta.orders}
-                                deltaLabel={c.kpi.vsPrevious}
+                                deltaLabel={vsPrevious}
                             />
                         </StaggerItem>
                         <StaggerItem>
@@ -184,7 +216,14 @@ export default function Catalog(props: Props) {
                     </Stagger>
 
                     <FadeIn delay={0.05}>
-                        <SalesChart trend={props.trend} metric={metric} onMetric={setMetric} scope={scope} />
+                        <SalesChart
+                            trend={props.trend}
+                            metric={metric}
+                            onMetric={setMetric}
+                            scope={props.month ? `${scope} · ${monthName(props.month)}` : scope}
+                            pickable={props.availableMonths}
+                            onPick={pickMonth}
+                        />
                     </FadeIn>
 
                     {!props.category && <CategoryGrid categories={props.categories} onOpen={openCategory} />}
@@ -194,6 +233,7 @@ export default function Catalog(props: Props) {
                         products={props.products}
                         params={params}
                         title={props.category ? tr(c.productsIn, { category: scope }) : c.productsTitle}
+                        hint={props.month ? tr(c.productsHintMonth, { month: monthName(props.month) }) : c.productsHint}
                     />
                 </>
             )}
@@ -202,7 +242,21 @@ export default function Catalog(props: Props) {
 }
 
 /** Monthly sales for the store or one category: one measure at a time, one axis. */
-function SalesChart({ trend, metric, onMetric, scope }: { trend: TrendPoint[]; metric: Metric; onMetric: (m: Metric) => void; scope: string }) {
+function SalesChart({
+    trend,
+    metric,
+    onMetric,
+    scope,
+    pickable,
+    onPick,
+}: {
+    trend: TrendPoint[];
+    metric: Metric;
+    onMetric: (m: Metric) => void;
+    scope: string;
+    pickable: string[];
+    onPick: (month: string) => void;
+}) {
     const { t, tr, money, number, compact, date } = useI18n();
     const c = t.catalog;
     const axes = useChartAxes();
@@ -210,6 +264,8 @@ function SalesChart({ trend, metric, onMetric, scope }: { trend: TrendPoint[]; m
     const format = (value: number) => (metric === 'revenue' ? money(value) : number(value));
     const empty = trend.every((p) => p[metric] === 0);
     const peak = useMemo(() => trend.reduce((best, p) => (p[metric] > best[metric] ? p : best), trend[0]), [trend, metric]);
+    const selected = trend.find((p) => p.selected) ?? null;
+    const monthKey = (period: string) => period.slice(0, 7);
     const partial = trend.at(-1)?.partial ?? false;
     const monthLabel = (value: string | number) => date(String(value), { month: 'short', year: '2-digit' });
 
@@ -234,14 +290,27 @@ function SalesChart({ trend, metric, onMetric, scope }: { trend: TrendPoint[]; m
                 <EmptyState icon={BarChart3} title={c.noSales} className="py-10" />
             ) : (
                 <div className="space-y-3">
-                    {peak && (
-                        <p className="text-muted-foreground text-xs">
-                            {tr(c.peak, { month: date(peak.period, { month: 'long', year: 'numeric' }), value: format(peak[metric]) })}
-                        </p>
-                    )}
+                    <div className="text-muted-foreground flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs">
+                        {selected ? (
+                            <span className="text-primary font-medium">
+                                {tr(c.selectedMonth, { month: date(selected.period, { month: 'long', year: 'numeric' }), value: format(selected[metric]) })}
+                            </span>
+                        ) : (
+                            peak && <span>{tr(c.peak, { month: date(peak.period, { month: 'long', year: 'numeric' }), value: format(peak[metric]) })}</span>
+                        )}
+                        <span>{c.chartClickHint}</span>
+                    </div>
                     <div className="h-72" role="img" aria-label={tr(c.chartScope, { metric: c.metrics[metric], scope })}>
                         <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={trend} margin={{ top: 12, right: 8, left: 8, bottom: 0 }}>
+                            <AreaChart
+                                data={trend}
+                                margin={{ top: 12, right: 8, left: 8, bottom: 0 }}
+                                className="cursor-pointer"
+                                onClick={(state) => {
+                                    const point = typeof state.activeTooltipIndex === 'number' ? trend[state.activeTooltipIndex] : undefined;
+                                    if (point && pickable.includes(monthKey(point.period))) onPick(monthKey(point.period));
+                                }}
+                            >
                                 <defs>
                                     <linearGradient id="catalog-fill" x1="0" x2="0" y1="0" y2="1">
                                         <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.28} />
@@ -270,7 +339,14 @@ function SalesChart({ trend, metric, onMetric, scope }: { trend: TrendPoint[]; m
                                     activeDot={{ r: 5, stroke: 'var(--card)', strokeWidth: 2, fill: 'var(--chart-1)' }}
                                     animationDuration={700}
                                 />
-                                {peak && peak[metric] > 0 && <ReferenceDot x={peak.period} y={peak[metric]} r={5} fill="var(--chart-1)" stroke="var(--card)" strokeWidth={2} />}
+                                {selected ? (
+                                    <>
+                                        <ReferenceLine x={selected.period} stroke="var(--chart-1)" strokeDasharray="4 4" strokeOpacity={0.6} />
+                                        <ReferenceDot x={selected.period} y={selected[metric]} r={7} fill="var(--chart-1)" stroke="var(--card)" strokeWidth={3} />
+                                    </>
+                                ) : (
+                                    peak && peak[metric] > 0 && <ReferenceDot x={peak.period} y={peak[metric]} r={5} fill="var(--chart-1)" stroke="var(--card)" strokeWidth={2} />
+                                )}
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
@@ -389,7 +465,7 @@ function ImageStrip({ images }: { images: string[] }) {
     );
 }
 
-function ProductsSection({ products, params, title }: { products: Paginated<Product>; params: Params; title: string }) {
+function ProductsSection({ products, params, title, hint }: { products: Paginated<Product>; params: Params; title: string; hint: string }) {
     const { t } = useI18n();
     const c = t.catalog;
     const [search, setSearch] = useState(params.search ?? '');
@@ -408,7 +484,7 @@ function ProductsSection({ products, params, title }: { products: Paginated<Prod
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                     <h2 className="text-lg font-semibold">{title}</h2>
-                    <p className="text-muted-foreground text-sm">{c.productsHint}</p>
+                    <p className="text-muted-foreground text-sm">{hint}</p>
                 </div>
                 <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                     <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
@@ -496,10 +572,10 @@ function ProductCard({ product, onOpen }: { product: Product; onOpen: () => void
                     <h3 className="line-clamp-2 text-sm leading-6 font-medium">{product.name}</h3>
                     <div className="flex items-baseline justify-between gap-2">
                         <span className="num font-semibold">{product.price !== null ? money(product.price) : '—'}</span>
-                        <span className="text-muted-foreground text-xs">{tr(c.unitsSold, { n: number(product.units_sold) })}</span>
+                        <span className="text-muted-foreground text-xs">{tr(c.unitsSold, { n: number(product.month_units ?? product.units_sold) })}</span>
                     </div>
                     <div className="mt-auto flex items-end justify-between gap-2 pt-1">
-                        <span className="num text-muted-foreground text-xs">{money(product.revenue)}</span>
+                        <span className="num text-muted-foreground text-xs">{money(product.month_revenue ?? product.revenue)}</span>
                         <Sparkline data={product.history.map((h) => h.units)} width={84} height={28} />
                     </div>
                 </div>

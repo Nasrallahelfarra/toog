@@ -78,4 +78,33 @@ class CatalogBrowserTest extends TestCase
         $this->actingAs($this->store->owner)->get('/store/catalog?category=Secret')
             ->assertInertia(fn (Assert $page) => $page->has('products.data', 0)->where('summary.products', 0));
     }
+
+    public function test_a_chosen_month_scopes_totals_chart_categories_and_product_ranking(): void
+    {
+        $latest = now()->startOfMonth()->subMonth();
+        $earlier = $latest->copy()->subMonth()->format('Y-m');
+
+        $this->actingAs($this->store->owner)->get("/store/catalog?month={$earlier}&sort=units")
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('month', $earlier)
+                ->where('availableMonths', [$latest->format('Y-m'), $earlier])
+                ->where('summary.units', 15)
+                ->where('summary.delta.units', null)
+                ->has('trend', 12)
+                ->where('trend.11.period', $earlier.'-01')
+                ->where('trend.11.selected', true)
+                ->where('categories.0.name', 'عبايات')
+                ->where('categories.0.revenue', 3000)
+                ->where('products.data.0.name', 'Abaya')
+                ->where('products.data.0.month_units', 10)
+                ->where('products.data.1.month_revenue', 400)
+                ->where('products.data.2.month_units', 0));
+
+        $this->get('/store/catalog?month='.$latest->format('Y-m'))
+            ->assertInertia(fn (Assert $page) => $page->where('summary.units', 27)->where('summary.delta.units', 80));
+
+        // Months without sales cannot be picked; the page falls back to the range.
+        $this->get('/store/catalog?month=2001-01')
+            ->assertInertia(fn (Assert $page) => $page->where('month', null)->where('products.data.0.month_units', null));
+    }
 }
