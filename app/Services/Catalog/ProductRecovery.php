@@ -17,7 +17,12 @@ use Throwable;
 
 class ProductRecovery
 {
-    public function __construct(private readonly Ai $ai, private readonly ProductReview $reviewer, private readonly PublicWebClient $web) {}
+    public function __construct(
+        private readonly Ai $ai,
+        private readonly ProductReview $reviewer,
+        private readonly PublicWebClient $web,
+        private readonly RecoveryMarketing $marketing,
+    ) {}
 
     public function run(ProductRecommendation $run): void
     {
@@ -38,6 +43,7 @@ class ProductRecovery
             $context['product_performance'] = $snapshot;
             $context['classification_definition'] = 'stagnant means stocked inventory with at least 90 consecutive days without sales covered by sufficient data. at_risk is an early warning from weak relative performance or high stock coverage; it does not prove stagnation. Recommend prevention for at_risk and recovery for stagnant. The class is a computed signal, not a proven cause of customer behavior.';
             $context['history_window'] = 'Classification aggregates use up to 12 months of imported sales. Zero views may mean missing tracking.';
+            $context['market_context'] = $this->marketing->context($store, $snapshot, $ctx);
             if (! $progress->advance($run, 'image')) {
                 return;
             }
@@ -58,15 +64,18 @@ class ProductRecovery
             }
             $answer = $this->ai->json(
                 operation: 'product_recovery', store: $store,
-                system: 'You are a product recovery specialist. Diagnose a slow-moving catalog product using its actual sales, stock, returns, price and store evidence. Recommend practical actions for this particular product. Explain likely causes as hypotheses, not proven causes. Do not assume redesign is necessary. When an observed visual issue warrants redesign and an image is available, provide THREE distinct alternative visual directions: the merchant will choose ONE, not combine them. Each direction must be a complete standalone edit, grounded in the supplied image. Explain its visible change, visual impact and how it may help a shopper understand or trust the product. Consider focal clarity, contrast, visual hierarchy, legibility and honest presentation. Do not promise conversion gains or invent features. Preserve product geometry, construction and brand marks. Business actions should include a concrete next step and how to assess it.'.$this->reviewer->instructions(),
+                system: 'You are a product recovery specialist. Diagnose a slow-moving catalog product using its actual sales, stock, returns, price and store evidence. Recommend practical actions for this particular product. Explain likely causes as hypotheses, not proven causes. Do not assume redesign is necessary. When an observed visual issue warrants redesign and an image is available, provide THREE distinct alternative visual directions: the merchant will choose ONE, not combine them. Each direction must be a complete standalone edit, grounded in the supplied image. Explain its visible change, visual impact and how it may help a shopper understand or trust the product. Consider focal clarity, contrast, visual hierarchy, legibility and honest presentation. Do not promise conversion gains or invent features. Preserve product geometry, construction and brand marks. Business actions should include a concrete next step and how to assess it.'.$this->reviewer->instructions().$this->marketing->instructions(),
                 prompt: json_encode($context, JSON_UNESCAPED_UNICODE)."\nImage available: ".($image ? 'yes' : 'no')."\nFor each visual alternative: reason describes the observed issue and intended visual impact; effect explains the plausible benefit for shopper understanding, trust or purchase consideration, as a hypothesis; instruction contains ONLY the exact standalone image edit. Provide three genuinely distinct directions when visual improvement is warranted, before any business actions. Use concise narrative fields without repeating the same explanation.",
-                schema: $this->reviewer->schema(), fallback: fn () => [],
+                schema: $this->schema(), fallback: fn () => [],
                 images: $image ? [['mime' => $image['mime'], 'data' => base64_encode($image['bytes'])]] : [], userId: $run->user_id, timeoutSeconds: 120,
             );
             if (! $progress->advance($run, 'saving')) {
                 return;
             }
             $review = $this->reviewer->normalize($answer->data, $answer->fromModel, (bool) $image, $context);
+            if ($review['status'] === 'available') {
+                $review['marketing_plan'] = $this->marketing->normalize($answer->data['marketing_plan'] ?? null);
+            }
             ProductRecommendation::query()->whereKey($run->id)->where('status', 'processing')->update([
                 'review' => json_encode([...$review, '_progress' => $run->review['_progress'] ?? []], JSON_THROW_ON_ERROR),
                 'status' => $review['status'] === 'available' ? 'completed' : 'failed',
@@ -75,6 +84,20 @@ class ProductRecovery
             report($e);
             $progress->fail($run->id, 'review_failed');
         }
+    }
+
+    /**
+     * The specialist review schema plus the marketing plan.
+     *
+     * @return array<string, mixed>
+     */
+    private function schema(): array
+    {
+        $schema = $this->reviewer->schema();
+        $schema['properties']['marketing_plan'] = $this->marketing->schema(fn (array $properties) => $this->reviewer->object($properties));
+        $schema['required'][] = 'marketing_plan';
+
+        return $schema;
     }
 
     /** @return array{bytes: string, mime: string, extension: string}|null */

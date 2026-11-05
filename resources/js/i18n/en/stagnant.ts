@@ -105,6 +105,24 @@ export const stagnant: typeof ar = {
     failed: 'Recommendation incomplete',
     fromRecovery:
         'Improve “{name}” using its product performance recommendation. The original image and editing instructions are ready.',
+    marketing: {
+        title: 'Marketing plan',
+        hint: 'A ready-to-run plan based on the product’s price within its category, what sells in that category and upcoming Saudi occasions.',
+        angle: 'Selling angle',
+        ad: 'Ready-to-post ad',
+        copy: 'Copy ad',
+        copied: 'Ad copied',
+        copyFailed: 'Could not copy; copy the text manually.',
+        translation: 'Translation',
+        offer: 'Suggested offer',
+        duration: 'for {n} days',
+        timing: 'Timing',
+        kpi: 'Success check',
+        channels: 'Channels and how to run them',
+        offers: { discount: 'Discount', bundle: 'Bundle', free_shipping: 'Free shipping', gift: 'Gift with order', installments: 'Installments', price_reset: 'New price', none: 'No offer' },
+        channelNames: { snapchat: 'Snapchat', tiktok: 'TikTok', instagram: 'Instagram', whatsapp: 'WhatsApp', x: 'X', influencer: 'Influencers', store_banner: 'Store banner', email: 'Email' },
+        hypothesis: 'An AI-suggested plan, not a guaranteed result. Try it small and check the success measure before scaling up.',
+    },
     errors: {
         not_configured:
             'The specialist review requires a Gemini connection in platform settings.',
