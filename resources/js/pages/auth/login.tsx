@@ -21,7 +21,7 @@ type Props = {
 
 const demoAccounts = [
     { key: 'demoAdmin', email: 'admin@mojo.ai', icon: ShieldCheck },
-    { key: 'demoOwner', email: 'lama@demo.sa', icon: Store },
+    { key: 'demoOwner', email: 'tooog4ai@gmail.com', icon: Store },
 ] as const;
 
 export default function Login({ status, canResetPassword }: Props) {
