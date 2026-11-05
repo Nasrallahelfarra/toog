@@ -1,9 +1,8 @@
-import { router } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import { ArrowLeft, BarChart3, CalendarDays, FolderOpen, ImageOff, LayoutGrid, Package, Search, ShoppingBag, Table2, Trophy, Turtle, Wallet } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, CartesianGrid, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartTooltip, useChartAxes } from '@/components/mojo/chart';
-import { ColorChips } from '@/components/mojo/color-chips';
 import { PerformanceBadge } from '@/components/mojo/decision-badge';
 import { EmptyState } from '@/components/mojo/empty-state';
 import { Meter } from '@/components/mojo/meter';
@@ -16,7 +15,6 @@ import { Sparkline, StatCard } from '@/components/mojo/stat-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useI18n } from '@/hooks/use-i18n';
@@ -469,7 +467,6 @@ function ProductsSection({ products, params, title, hint }: { products: Paginate
     const { t } = useI18n();
     const c = t.catalog;
     const [search, setSearch] = useState(params.search ?? '');
-    const [open, setOpen] = useState<Product | null>(null);
     const apply = (next: Partial<Filters>) => visit({ ...params, ...next }, ['products']);
 
     useEffect(() => {
@@ -527,28 +524,25 @@ function ProductsSection({ products, params, title, hint }: { products: Paginate
                 <Stagger key={`${products.current_page}-${params.sort}-${params.class}-${params.search}`} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                     {products.data.map((product) => (
                         <StaggerItem key={product.id}>
-                            <ProductCard product={product} onOpen={() => setOpen(product)} />
+                            <ProductCard product={product} />
                         </StaggerItem>
                     ))}
                 </Stagger>
             )}
             <Pagination meta={products} />
-            <ProductSheet product={open} onClose={() => setOpen(null)} />
         </section>
     );
 }
 
-function ProductCard({ product, onOpen }: { product: Product; onOpen: () => void }) {
+function ProductCard({ product }: { product: Product }) {
     const { t, tr, money, number } = useI18n();
     const c = t.catalog;
     const [broken, setBroken] = useState(false);
 
     return (
         <HoverLift className="h-full">
-            <button
-                type="button"
-                onClick={onOpen}
-                aria-haspopup="dialog"
+            <Link
+                href={`/store/products/${product.id}`}
                 className="bg-card focus-visible:ring-ring group flex h-full w-full flex-col overflow-hidden rounded-2xl border border-border/70 text-start shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:outline-none"
             >
                 <div className="bg-muted/50 relative aspect-[4/3] overflow-hidden">
@@ -579,104 +573,8 @@ function ProductCard({ product, onOpen }: { product: Product; onOpen: () => void
                         <Sparkline data={product.history.map((h) => h.units)} width={84} height={28} />
                     </div>
                 </div>
-            </button>
+            </Link>
         </HoverLift>
-    );
-}
-
-function ProductSheet({ product, onClose }: { product: Product | null; onClose: () => void }) {
-    const { t, tr, money, number, percent, date, compact, isRtl } = useI18n();
-    const c = t.catalog;
-    const axes = useChartAxes();
-    const [metric, setMetric] = useState<'units' | 'revenue'>('units');
-    const sold = product?.history.some((h) => h.units > 0) ?? false;
-    const facts: [string, string][] = product
-        ? [
-              [c.detail.price, product.price !== null ? money(product.price) : '—'],
-              [c.detail.score, product.performance_score !== null ? `${product.performance_score}/100` : '—'],
-              [c.detail.units, number(product.units_sold)],
-              [c.detail.revenue, money(product.revenue)],
-              [c.detail.stock, number(product.stock)],
-              [c.detail.turnover, product.turnover_days !== null ? tr(t.performance.days, { n: number(product.turnover_days) }) : '—'],
-              [c.detail.returns, percent(product.return_rate, 1)],
-              [c.detail.launched, date(product.launched_at)],
-          ]
-        : [];
-
-    return (
-        <Sheet open={product !== null} onOpenChange={(open) => !open && onClose()}>
-            <SheetContent side={isRtl ? 'left' : 'right'} className="w-full overflow-y-auto sm:max-w-lg">
-                {product && (
-                    <>
-                        {product.image_url && <img src={product.image_url} alt={product.name} className="bg-muted aspect-[4/3] w-full object-cover" />}
-                        <SheetHeader className="space-y-2 border-b pb-4">
-                            <PerformanceBadge value={product.performance} className="w-fit" />
-                            <SheetTitle className="text-start text-lg leading-snug">{product.name}</SheetTitle>
-                            <SheetDescription className="text-start">
-                                {product.category ?? c.uncategorized}
-                                {product.sku && ` · ${product.sku}`}
-                            </SheetDescription>
-                        </SheetHeader>
-                        <div className="space-y-6 px-4 pb-6">
-                            <section className="space-y-3">
-                                <div className="flex items-center justify-between gap-2">
-                                    <h3 className="text-sm font-semibold">{c.detail.monthly}</h3>
-                                    <Tabs value={metric} onValueChange={(v) => setMetric(v as 'units' | 'revenue')}>
-                                        <TabsList className="h-8">
-                                            <TabsTrigger value="units" className="px-2.5 text-xs">
-                                                {c.metrics.units}
-                                            </TabsTrigger>
-                                            <TabsTrigger value="revenue" className="px-2.5 text-xs">
-                                                {c.metrics.revenue}
-                                            </TabsTrigger>
-                                        </TabsList>
-                                    </Tabs>
-                                </div>
-                                {sold ? (
-                                    <div className="h-48">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={product.history} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
-                                                <CartesianGrid {...axes.grid} />
-                                                <XAxis dataKey="period" {...axes.xAxis} tickFormatter={(v: string) => date(v, { month: 'short' })} interval="preserveStartEnd" minTickGap={8} />
-                                                <YAxis {...axes.yAxis} tickFormatter={(v: number) => compact(v)} width={40} />
-                                                <Tooltip
-                                                    cursor={{ fill: 'var(--muted)', opacity: 0.6 }}
-                                                    content={
-                                                        <ChartTooltip
-                                                            labelFormatter={(label) => date(String(label), { month: 'long', year: 'numeric' })}
-                                                            formatter={(value) => (metric === 'revenue' ? money(value) : number(value))}
-                                                        />
-                                                    }
-                                                />
-                                                <Bar dataKey={metric} name={c.metrics[metric]} fill="var(--chart-1)" radius={[4, 4, 0, 0]} maxBarSize={22} animationDuration={600} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                ) : (
-                                    <p className="text-muted-foreground rounded-xl border border-dashed p-4 text-sm">{c.detail.noSales}</p>
-                                )}
-                            </section>
-
-                            <dl className="grid grid-cols-2 gap-2">
-                                {facts.map(([label, value]) => (
-                                    <div key={label} className="rounded-xl border border-border/60 p-3">
-                                        <dt className="text-muted-foreground text-[11px]">{label}</dt>
-                                        <dd className="num mt-0.5 text-sm font-semibold">{value}</dd>
-                                    </div>
-                                ))}
-                            </dl>
-
-                            {(product.features.colors?.length ?? 0) > 0 && (
-                                <section className="space-y-2">
-                                    <h3 className="text-sm font-semibold">{c.detail.attributes}</h3>
-                                    <ColorChips colors={product.features.colors ?? []} />
-                                </section>
-                            )}
-                        </div>
-                    </>
-                )}
-            </SheetContent>
-        </Sheet>
     );
 }
 

@@ -397,11 +397,26 @@ class StagnantProductsTest extends TestCase
         Queue::assertPushed(RecommendStagnantProduct::class, 2);
     }
 
-    public function test_non_stagnant_products_cannot_request_recovery(): void
+    public function test_best_sellers_get_a_growth_recommendation_instead_of_a_recovery(): void
     {
         $product = $this->product(['performance' => Product::WINNER]);
-        $this->actingAs($product->store->owner)->post("/store/stagnant/{$product->id}/recommendation")->assertUnprocessable();
-        Queue::assertNotPushed(RecommendStagnantProduct::class);
+        $run = $this->requestRecommendation($product);
+        Queue::assertPushed(RecommendStagnantProduct::class, 1);
+
+        $ai = Mockery::mock(Ai::class);
+        $ai->shouldReceive('isLive')->andReturn(true);
+        $ai->shouldReceive('json')->once()->withArgs(function ($operation, $store, $system, $prompt) {
+            $context = json_decode(explode("\nImage available:", $prompt)[0], true);
+            $this->assertStringContainsString('product growth specialist', $system);
+            $this->assertStringNotContainsString('slow-moving', $system);
+            $this->assertStringStartsWith('grow and protect', $context['goal']);
+
+            return true;
+        })->andReturn(new AiJsonResult($this->review(), true, 0.01));
+        $this->app->instance(Ai::class, $ai);
+        app()->call([new RecommendStagnantProduct($run->id), 'handle']);
+
+        $this->assertSame('completed', $run->fresh()->status);
     }
 
     public function test_marketing_plan_is_grounded_in_market_facts_and_saved_clean(): void

@@ -809,6 +809,9 @@ function ProductDrawer({ product, onClose }: { product: Product | null; onClose:
                                 </span>
                             </div>
                             <SheetTitle className="text-start text-lg leading-snug">{product.name}</SheetTitle>
+                            <Link href={`/store/products/${product.id}`} className="text-primary w-fit text-xs font-medium hover:underline">
+                                {t.catalog.product.open}
+                            </Link>
                             <SheetDescription className="text-start">
                                 {product.category ?? p.uncategorized} · {money(product.price)} {product.sku && `· ${product.sku}`}
                             </SheetDescription>
