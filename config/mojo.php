@@ -60,6 +60,8 @@ return [
         'api_url' => env('ZID_API_URL', 'https://api.zid.sa/v1'),
         // Zid sends order times in UTC; sales months follow the store's clock.
         'timezone' => env('ZID_STORE_TIMEZONE', 'Asia/Riyadh'),
+        // Revenue is kept in this currency when an order does not name the store's.
+        'currency' => env('ZID_STORE_CURRENCY', 'SAR'),
     ],
 
     /*
