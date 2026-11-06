@@ -27,7 +27,8 @@ export function SettingsShell({ children, actions }: { children: ReactNode; acti
 
             <nav className="bg-muted/60 flex w-full gap-1 overflow-x-auto rounded-xl p-1 sm:w-fit">
                 {tabs.map((tab) => {
-                    const active = url.split('?')[0] === tab.href;
+                    const path = url.split('?')[0];
+                    const active = path === tab.href || path.startsWith(`${tab.href}/`);
 
                     return (
                         <Link
