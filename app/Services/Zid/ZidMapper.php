@@ -194,8 +194,10 @@ class ZidMapper
      * An order placed in another currency (AED, KWD…) carries its amounts in
      * that currency. When the payment's transaction_amount is in the store's
      * currency (its string says so), the order converts at exactly the rate
-     * the customer paid; otherwise at Zid's exchange_rate, which turns store
-     * prices into the order's currency. Without either it is left as is.
+     * the customer paid. Otherwise at Zid's exchange_rate, which is the order
+     * currency per US dollar (USD orders carry 1, KWD about 0.31: live orders
+     * show rate × riyals-paid-per-unit = 3.76 in every currency), through the
+     * dollar. Without either it is left as is, and the revenue audit says so.
      *
      * @param  array<string, mixed>  $o
      * @return array{factor: float, source: 'same'|'transaction'|'exchange_rate'|'unconverted', currency: string|null, rate: float|null}
@@ -220,7 +222,15 @@ class ZidMapper
             return $result($paid / $total, 'transaction');
         }
 
-        return $rate !== null ? $result(1 / $rate, 'exchange_rate') : $result(1.0, 'unconverted');
+        // The store currency per US dollar: set for the store, or the riyal's peg.
+        $perDollar = match (true) {
+            $store === 'USD' => 1.0,
+            is_numeric(config('mojo.zid.currency_per_usd')) && (float) config('mojo.zid.currency_per_usd') > 0 => (float) config('mojo.zid.currency_per_usd'),
+            $store === 'SAR' => 3.75,
+            default => null,
+        };
+
+        return $rate !== null && $perDollar !== null ? $result($perDollar / $rate, 'exchange_rate') : $result(1.0, 'unconverted');
     }
 
     private function code(mixed $value): ?string

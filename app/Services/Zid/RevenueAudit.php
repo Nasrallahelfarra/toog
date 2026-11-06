@@ -365,7 +365,8 @@ class RevenueAudit
             'orders_without_total' => $withoutTotal,
             'orders_without_lines' => $withoutLines,
             'groups' => $this->roundTree($groups),
-            // factor_times_rate near 1 means exchange_rate is store → order currency.
+            // factor_times_rate is the store currency per US dollar (about 3.75 for
+            // riyals) while Zid's exchange_rate stays a per-dollar rate.
             'conversion_rates' => array_map(fn (array $r) => [
                 'orders' => $r['orders'], 'average_factor' => round($r['factor'] / $r['orders'], 6),
                 'factor_times_rate' => $r['with_rate'] ? round($r['factor_times_rate'] / $r['with_rate'], 4) : null,
