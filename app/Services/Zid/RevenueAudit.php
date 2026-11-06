@@ -90,7 +90,8 @@ class RevenueAudit
         $products = Product::query()->where('store_id', $store->id)->get(['id', 'external_id', 'sku']);
 
         return [
-            'by_id' => $products->filter(fn (Product $p) => filled($p->external_id))->pluck('id', 'external_id')->all(),
+            // Keyed as the import resolves lines, so the audit counts exactly what it counts.
+            'by_id' => ZidMapper::catalogKeys($products->filter(fn (Product $p) => filled($p->external_id))->pluck('id', 'external_id')),
             'by_sku' => $products->filter(fn (Product $p) => filled($p->sku))->pluck('id', 'sku')->all(),
             'count' => $products->count(),
             'without_id' => $products->filter(fn (Product $p) => blank($p->external_id))->count(),
@@ -132,7 +133,7 @@ class RevenueAudit
                     continue;
                 }
                 $stored['revenue'] += $revenue;
-                if (isset($catalog['by_id'][(string) ($line['external_id'] ?? '')])) {
+                if (ZidMapper::productFor($line, $catalog['by_id']) !== null) {
                     $stored['matched_revenue'] += $revenue;
                 } else {
                     $stored['unmatched_lines']++;
@@ -269,7 +270,8 @@ class RevenueAudit
             'lines_counted' => 0.0, 'lines_kept' => 0.0, 'our_method' => 0.0,
         ];
         $groups = ['status' => [], 'payment_status' => [], 'payment_method' => [], 'currency' => [], 'total_key' => []];
-        $unmatched = ['lines' => 0, 'revenue' => 0.0, 'by_parent' => ['lines' => 0, 'revenue' => 0.0], 'by_sku' => ['lines' => 0, 'revenue' => 0.0], 'none' => ['lines' => 0, 'revenue' => 0.0], 'samples' => []];
+        $variants = ['lines' => 0, 'revenue' => 0.0];
+        $unmatched = ['lines' => 0, 'revenue' => 0.0, 'by_sku' => ['lines' => 0, 'revenue' => 0.0], 'none' => ['lines' => 0, 'revenue' => 0.0], 'samples' => []];
         $returned = ['orders' => 0, 'order_total' => 0.0, 'lines' => 0.0];
         $cancelled = ['orders' => 0, 'order_total' => 0.0];
         $withoutTotal = 0;
@@ -315,14 +317,17 @@ class RevenueAudit
             $totals['order_total_not_returned'] += $total;
             $totals['lines_kept'] += $record['lines_revenue'];
             foreach ($record['lines'] as $line) {
-                if ($line['match'] === 'id') {
+                // Options (sizes, colors) count for the product they belong to.
+                if ($line['match'] === 'id' || $line['match'] === 'parent') {
                     $totals['our_method'] += $line['revenue'];
+                    $variants['lines'] += (int) ($line['match'] === 'parent');
+                    $variants['revenue'] += $line['match'] === 'parent' ? $line['revenue'] : 0.0;
 
                     continue;
                 }
                 $unmatched['lines']++;
                 $unmatched['revenue'] += $line['revenue'];
-                $bucket = $line['match'] === 'parent' ? 'by_parent' : ($line['match'] === 'sku' ? 'by_sku' : 'none');
+                $bucket = $line['match'] === 'sku' ? 'by_sku' : 'none';
                 $unmatched[$bucket]['lines']++;
                 $unmatched[$bucket]['revenue'] += $line['revenue'];
                 if (count($unmatched['samples']) < self::SAMPLES) {
@@ -345,6 +350,7 @@ class RevenueAudit
             'cancelled' => array_map(fn ($v) => is_float($v) ? $this->round($v) : $v, $cancelled),
             'returned' => array_map(fn ($v) => is_float($v) ? $this->round($v) : $v, $returned),
             'unmatched' => $this->roundTree($unmatched),
+            'matched_by_parent' => $this->roundTree($variants),
             'orders_without_total' => $withoutTotal,
             'orders_without_lines' => $withoutLines,
             'groups' => $this->roundTree($groups),
@@ -402,8 +408,8 @@ class RevenueAudit
                 'name' => mb_substr((string) ($this->text($line['name'] ?? null) ?? ''), 0, 80),
                 'units' => $units, 'revenue' => (float) $revenue,
                 'match' => match (true) {
-                    isset($catalog['by_id'][$id]) => 'id',
-                    $parent !== null && isset($catalog['by_id'][$parent]) => 'parent',
+                    isset($catalog['by_id'][ZidMapper::key($id) ?? '']) => 'id',
+                    $parent !== null && isset($catalog['by_id'][ZidMapper::key($parent) ?? '']) => 'parent',
                     $sku !== null && isset($catalog['by_sku'][$sku]) => 'sku',
                     default => null,
                 },
@@ -419,7 +425,7 @@ class RevenueAudit
             'time' => $time,
             'offset' => $created !== null && preg_match('/(Z|[+-]\d{2}:?\d{2})$/i', $created) === 1,
             // The month the import files the order under.
-            'month' => $mapped !== null ? substr($mapped['month'], 0, 7) : ($time ? Carbon::parse($time->toDateString())->format('Y-m') : null),
+            'month' => $mapped !== null ? substr($mapped['month'], 0, 7) : $this->mapper->placedAt($created)?->format('Y-m'),
             'status' => $status !== null ? mb_strtolower($status) : null,
             'payment_status' => $this->text($order['payment_status']['code'] ?? null) ?? $this->text($order['payment_status'] ?? null) ?? $this->text($order['payment']['status'] ?? null),
             'payment_method' => $this->text($order['payment']['method']['code'] ?? null) ?? $this->text($order['payment_method']['code'] ?? null) ?? $this->text($order['payment_method'] ?? null),
@@ -607,9 +613,6 @@ class RevenueAudit
         }
         if ($zid['unmatched']['revenue'] >= 1) {
             $add('unmatched_lines', $zid['unmatched']['revenue'], $zid['unmatched']['lines']);
-            if ($zid['unmatched']['by_parent']['revenue'] >= 1) {
-                $add('variant_lines', $zid['unmatched']['by_parent']['revenue'], $zid['unmatched']['by_parent']['lines']);
-            }
         }
         $orderLevel = $totals['order_total_counted'] - $totals['lines_counted'];
         if ($zid['orders_without_total'] < $zid['counted_orders'] && abs($orderLevel) >= 1) {

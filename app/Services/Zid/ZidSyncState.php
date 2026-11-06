@@ -145,6 +145,7 @@ class ZidSyncState
                     'orders_since' => now()->startOfMonth()->subMonths(11)->toIso8601String(),
                     'scope' => $changedSince ? 'changes' : 'full',
                     'changed_since' => $changedSince?->toIso8601String(),
+                    'mapping' => ZidMapper::VERSION,
                 ],
             ]), true];
         });
@@ -167,6 +168,11 @@ class ZidSyncState
         $full = (clone $runs)->where(fn ($query) => $query->where('stats->scope', 'full')->orWhereNull('stats->scope'))
             ->latest('id')->first();
         if (! $full?->started_at?->gt(now()->subDays(30))) {
+            return null;
+        }
+        // Orders stored by an older reading lack what the current one keeps
+        // (an option's parent product, the store-time month): read them all again.
+        if ((int) ($full->stats['mapping'] ?? 1) < ZidMapper::VERSION) {
             return null;
         }
 

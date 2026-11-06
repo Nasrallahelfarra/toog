@@ -39,7 +39,8 @@ class RevenueAuditTest extends TestCase
         ]);
 
         $real1 = $this->store->products()->create(['name' => 'Abaya', 'external_id' => 'real-1']);
-        $this->store->products()->create(['name' => 'Scarf', 'external_id' => 'real-2', 'sku' => 'SKU-2']);
+        // Zid writes product UUIDs with dashes, and an option's parent_id without them.
+        $this->store->products()->create(['name' => 'Scarf', 'external_id' => 'B2C3D4E5-0000-4000-8000-000000000002', 'sku' => 'SKU-2']);
         $demo = $this->store->products()->create(['name' => 'Demo item']);
         $period = Carbon::parse('2026-10-01')->startOfDay();
         ProductSale::query()->create(['store_id' => $this->store->id, 'product_id' => $real1->id, 'period' => $period, 'orders' => 2, 'units' => 3, 'revenue' => 60]);
@@ -63,14 +64,19 @@ class RevenueAuditTest extends TestCase
         ];
 
         return [
-            $order(104, '2026-09-30 22:00:00', 'delivered', 10, [['id' => 'real-1', 'quantity' => 1, 'total' => 10]]),
+            // Zid times are UTC: 22:00 on Sep 30 is 01:00 on Oct 1 in Riyadh, 20:00 is still September.
+            $order(107, '2026-09-30 20:00:00', 'delivered', 9, [['id' => 'real-1', 'quantity' => 1, 'total' => 9]]),
+            $order(104, '2026-09-30 22:00:00', 'delivered', 10, [['id' => 'real-1', 'quantity' => 1, 'total' => 10]], [
+                'customer' => ['name' => 'Huda', 'mobile' => '0555000000'],
+            ]),
             $order(100, '2026-10-05 10:00:00', 'delivered', 55, [['id' => 'real-1', 'quantity' => 2, 'total' => 40]], [
                 'customer' => ['name' => 'Sara', 'mobile' => '0555000000'], 'shipping' => ['method' => ['cost' => 15]],
             ]),
             $order(101, '2026-10-06 10:00:00', 'cancelled', 23, [['id' => 'real-1', 'quantity' => 1, 'total' => 20]]),
-            $order(102, '2026-10-07 10:00:00', 'new', 30, [['id' => 'var-9', 'parent_id' => 'real-2', 'sku' => 'X', 'name' => 'Scarf / Red', 'quantity' => 1, 'total' => 30]]),
+            $order(102, '2026-10-07 10:00:00', 'new', 30, [['id' => 'var-9', 'parent_id' => 'b2c3d4e5000040008000000000000002', 'sku' => 'X', 'name' => 'Scarf / Red', 'quantity' => 1, 'total' => 30]]),
             $order(103, '2026-10-08 10:00:00', 'returned', 20, [['id' => 'real-1', 'quantity' => 1, 'total' => 20]]),
-            $order(105, '2026-10-09 10:00:00', 'delivered', 15, [['id' => 'real-2', 'quantity' => 1, 'price' => 15]]),
+            $order(105, '2026-10-09 10:00:00', 'delivered', 15, [['id' => 'b2c3d4e5-0000-4000-8000-000000000002', 'quantity' => 1, 'price' => 15]]),
+            $order(106, '2026-10-10 10:00:00', 'delivered', 12, [['id' => 'gone-1', 'name' => 'Deleted product', 'quantity' => 1, 'total' => 12]]),
         ];
     }
 
@@ -80,7 +86,7 @@ class RevenueAuditTest extends TestCase
             parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
             $orders = $this->zidOrders();
             if (($query['per_page'] ?? null) === '1') {
-                return Http::response(['orders' => [$orders[1]], 'total_order_count' => 6, 'grand_total' => 143]);
+                return Http::response(['orders' => [$orders[2]], 'total_order_count' => 7, 'grand_total' => 165]);
             }
 
             return Http::response(['orders' => $orders, 'total_order_count' => count($orders)]);
@@ -91,27 +97,30 @@ class RevenueAuditTest extends TestCase
     {
         $this->fakeZid();
 
-        $report = app(RevenueAudit::class)->run($this->store, '2026-10', 120.0);
+        $report = app(RevenueAudit::class)->run($this->store, '2026-10', 142.0);
 
         $this->assertSame(560.0, $report['ours']['sales']['revenue']);
         $this->assertSame(500.0, $report['ours']['sales']['other_revenue']);
-        $this->assertSame(5, $report['zid']['month_orders']);
-        $this->assertSame(4, $report['zid']['counted_orders']);
+        $this->assertSame(7, $report['zid']['month_orders']);
+        $this->assertSame(6, $report['zid']['counted_orders']);
         $this->assertTrue($report['zid']['read']['complete']);
         $this->assertSame([
-            'order_total_all' => 143.0, 'order_total_counted' => 120.0, 'order_total_not_returned' => 100.0,
-            'lines_counted' => 105.0, 'lines_kept' => 85.0, 'our_method' => 55.0,
+            'order_total_all' => 165.0, 'order_total_counted' => 142.0, 'order_total_not_returned' => 122.0,
+            'lines_counted' => 127.0, 'lines_kept' => 107.0, 'our_method' => 95.0,
         ], $report['zid']['totals']);
-        $this->assertSame(30.0, $report['zid']['unmatched']['by_parent']['revenue']);
-        $this->assertSame('parent', $report['zid']['unmatched']['samples'][0]['would_match_by']);
+        // The option line counts for its product; only the deleted product is lost.
+        $this->assertSame(['lines' => 1, 'revenue' => 30.0], $report['zid']['matched_by_parent']);
+        $this->assertSame(12.0, $report['zid']['unmatched']['revenue']);
+        $this->assertSame('gone-1', $report['zid']['unmatched']['samples'][0]['id']);
         $this->assertSame(15.0, $report['zid']['order_fields']['shipping.method.cost']);
 
         $reconcile = $report['zid']['reconciliation'];
-        $this->assertSame(3, $reconcile['missing_from_ours']['count']);
+        $this->assertSame(5, $reconcile['missing_from_ours']['count']);
         $this->assertSame(1, $reconcile['extra_in_ours']['cancelled_in_zid']);
 
         $codes = array_column($report['findings'], 'code');
-        foreach (['non_zid_rows', 'stale_import', 'unmatched_lines', 'variant_lines', 'order_level_amounts', 'returns_excluded', 'cancelled_excluded', 'missing_orders', 'extra_orders'] as $code) {
+        $this->assertNotContains('variant_lines', $codes);
+        foreach (['non_zid_rows', 'stale_import', 'unmatched_lines', 'order_level_amounts', 'returns_excluded', 'cancelled_excluded', 'missing_orders', 'extra_orders'] as $code) {
             $this->assertContains($code, $codes);
         }
         $this->assertSame('non_zid_rows', $report['findings'][0]['code']);
@@ -126,6 +135,7 @@ class RevenueAuditTest extends TestCase
     public function test_the_page_queues_an_audit_and_shows_its_report(): void
     {
         Bus::fake();
+        $this->withoutVite();
 
         $this->post('/store/settings/integration/revenue-audit', ['month' => '2026-10', 'expected' => '120.5'])
             ->assertRedirect('/store/settings/integration/revenue-audit');
@@ -148,7 +158,7 @@ class RevenueAuditTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->component('store/settings/revenue-audit')
                 ->where('connected', true)
                 ->where('audit.status', 'completed')
-                ->where('audit.report.zid.totals.our_method', 55)
+                ->where('audit.report.zid.totals.our_method', 95)
                 ->has('history', 1));
 
         // Audits stay out of the sync history on the integration page.
@@ -159,12 +169,11 @@ class RevenueAuditTest extends TestCase
     public function test_months_outside_the_window_and_disconnected_stores_are_refused(): void
     {
         Bus::fake();
+        $this->store->update(['connection_status' => 'disconnected']);
 
+        $this->post('/store/settings/integration/revenue-audit', ['month' => '2026-10'])->assertRedirect();
         $this->post('/store/settings/integration/revenue-audit', ['month' => '2026-11'])->assertSessionHasErrors('month');
         $this->post('/store/settings/integration/revenue-audit', ['month' => '2025-10'])->assertSessionHasErrors('month');
-
-        $this->store->update(['connection_status' => 'disconnected']);
-        $this->post('/store/settings/integration/revenue-audit', ['month' => '2026-10'])->assertRedirect();
 
         $this->assertSame(0, SyncRun::query()->where('type', RevenueAudit::TYPE)->count());
         Bus::assertNotDispatched(AuditZidRevenue::class);
