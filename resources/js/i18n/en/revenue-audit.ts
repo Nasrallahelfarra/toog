@@ -56,7 +56,7 @@ export const revenueAudit: typeof ar = {
         returns_excluded: { title: "Returns aren't counted here", body: '{count} returned orders worth {amount}.' },
         cancelled_excluded: { title: "Canceled orders aren't counted", body: '{count} canceled orders worth {amount}.' },
         timezone_shift: { title: 'Time zone difference', body: '{count} orders move between months in Riyadh time.' },
-        currency: { title: 'More than one currency', body: 'Orders use {count} currencies or a currency other than SAR, and are summed without conversion.' },
+        currency: { title: 'Orders in another currency without a rate', body: "{count} orders in a currency other than the store's came with no exchange rate from Zid, so their lines ({amount}) are summed unconverted." },
         orders_are_lines: { title: 'Our order count counts product lines', body: 'We show {count} orders, but an order with several products counts more than once.' },
     },
 

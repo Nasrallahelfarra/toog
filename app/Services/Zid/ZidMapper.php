@@ -19,8 +19,9 @@ class ZidMapper
      * How order lines and months are read. Bump it when that changes: the
      * next sync then re-reads every order instead of only the changed ones.
      * 2 — lines keep their parent product; months follow the store's clock.
+     * 3 — amounts in another currency are converted to the store's.
      */
-    public const VERSION = 2;
+    public const VERSION = 3;
 
     /**
      * One form for a Zid ID. Zid writes the same UUID with dashes on a
@@ -124,6 +125,9 @@ class ZidMapper
             return null;
         }
 
+        // Revenue is kept in the store's currency, whatever the customer paid in.
+        $factor = $this->conversion($o)['factor'];
+
         $lines = [];
         foreach ($o['products'] ?? $o['items'] ?? [] as $line) {
             $id = $line['product_id'] ?? $line['id'] ?? null;
@@ -138,7 +142,7 @@ class ZidMapper
             // A size or color option has its own ID; parent_id names the product.
             $parent = self::key($line['parent_id'] ?? null);
 
-            $lines[] = ['external_id' => (string) $id, ...($parent !== null ? ['parent_id' => $parent] : []), 'units' => $units, 'revenue' => (float) $revenue];
+            $lines[] = ['external_id' => (string) $id, ...($parent !== null ? ['parent_id' => $parent] : []), 'units' => $units, 'revenue' => round((float) $revenue * $factor, 4)];
         }
 
         return [
@@ -182,6 +186,46 @@ class ZidMapper
         }
 
         return is_numeric($value) ? (float) $value : null;
+    }
+
+    /**
+     * What one unit of the order's currency is worth in the store's currency.
+     *
+     * An order placed in another currency (AED, KWD…) carries its amounts in
+     * that currency. When the payment's transaction_amount is in the store's
+     * currency (its string says so), the order converts at exactly the rate
+     * the customer paid; otherwise at Zid's exchange_rate, which turns store
+     * prices into the order's currency. Without either it is left as is.
+     *
+     * @param  array<string, mixed>  $o
+     * @return array{factor: float, source: 'same'|'transaction'|'exchange_rate'|'unconverted', currency: string|null, rate: float|null}
+     */
+    public function conversion(array $o): array
+    {
+        $currency = $this->code($o['currency']['order_currency']['code'] ?? null) ?? $this->code($o['currency_code'] ?? null);
+        $store = $this->code($o['currency']['order_store_currency']['code'] ?? null) ?? $this->code(config('mojo.zid.currency', 'SAR'));
+        $rate = $this->number($o['currency']['order_currency']['exchange_rate'] ?? null);
+        $rate = $rate !== null && $rate > 0 ? $rate : null;
+        $result = fn (float $factor, string $source) => ['factor' => $factor, 'source' => $source, 'currency' => $currency, 'rate' => $rate];
+
+        if ($currency === null || $store === null || $currency === $store) {
+            return $result(1.0, 'same');
+        }
+
+        $total = $this->number($o['order_total'] ?? null);
+        $paid = $this->number($o['transaction_amount'] ?? null);
+        $paidIn = $this->code($o['transaction_currency']['code'] ?? null) ?? $this->code($o['transaction_currency'] ?? null)
+            ?? (is_string($o['transaction_amount_string'] ?? null) && preg_match('/\b([A-Za-z]{3})\s*$/', $o['transaction_amount_string'], $m) ? strtoupper($m[1]) : null);
+        if ($paidIn === $store && $total !== null && $total > 0 && $paid !== null && $paid > 0) {
+            return $result($paid / $total, 'transaction');
+        }
+
+        return $rate !== null ? $result(1 / $rate, 'exchange_rate') : $result(1.0, 'unconverted');
+    }
+
+    private function code(mixed $value): ?string
+    {
+        return is_string($value) && preg_match('/^[A-Za-z]{3}$/', trim($value)) ? strtoupper(trim($value)) : null;
     }
 
     /**

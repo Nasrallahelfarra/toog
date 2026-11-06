@@ -55,7 +55,7 @@ export const revenueAudit = {
         returns_excluded: { title: 'المرتجعات لا تُحسب عندنا', body: '{count} طلب مرتجع بقيمة {amount}.' },
         cancelled_excluded: { title: 'الطلبات الملغاة لا تُحسب', body: '{count} طلب ملغى بقيمة {amount}.' },
         timezone_shift: { title: 'فرق التوقيت', body: '{count} طلب ينتقل بين الشهرين حسب توقيت الرياض.' },
-        currency: { title: 'أكثر من عملة', body: 'الطلبات بـ {count} عملة أو بغير الريال، ونجمعها دون تحويل.' },
+        currency: { title: 'طلبات بعملة أخرى دون سعر تحويل', body: '{count} طلب بعملة غير عملة المتجر لم يرسل زد سعر تحويلها، فجُمعت أسطرها ({amount}) دون تحويل.' },
         orders_are_lines: { title: 'عدد الطلبات عندنا يعدّ أسطر المنتجات', body: 'نعرض {count} طلبًا، لكن الطلب الذي فيه أكثر من منتج يُعد أكثر من مرة.' },
     },
 

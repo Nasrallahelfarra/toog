@@ -269,7 +269,8 @@ class RevenueAudit
             'order_total_all' => 0.0, 'order_total_counted' => 0.0, 'order_total_not_returned' => 0.0,
             'lines_counted' => 0.0, 'lines_kept' => 0.0, 'our_method' => 0.0,
         ];
-        $groups = ['status' => [], 'payment_status' => [], 'payment_method' => [], 'currency' => [], 'total_key' => []];
+        $groups = ['status' => [], 'payment_status' => [], 'payment_method' => [], 'currency' => [], 'conversion' => [], 'total_key' => []];
+        $rates = [];
         $variants = ['lines' => 0, 'revenue' => 0.0];
         $unmatched = ['lines' => 0, 'revenue' => 0.0, 'by_sku' => ['lines' => 0, 'revenue' => 0.0], 'none' => ['lines' => 0, 'revenue' => 0.0], 'samples' => []];
         $returned = ['orders' => 0, 'order_total' => 0.0, 'lines' => 0.0];
@@ -282,7 +283,17 @@ class RevenueAudit
             $total = $record['total'] ?? 0.0;
             $totals['order_total_all'] += $total;
             $withoutTotal += $record['total'] === null ? 1 : 0;
-            foreach (['status', 'payment_status', 'payment_method', 'currency', 'total_key'] as $group) {
+            // How each currency converted: the rate paid, and Zid's exchange_rate beside it.
+            if ($record['currency'] !== null && $record['conversion'] !== 'same') {
+                $rates[$record['currency']] ??= ['orders' => 0, 'factor' => 0.0, 'factor_times_rate' => 0.0, 'with_rate' => 0];
+                $rates[$record['currency']]['orders']++;
+                $rates[$record['currency']]['factor'] += $record['factor'];
+                if ($record['rate'] !== null) {
+                    $rates[$record['currency']]['with_rate']++;
+                    $rates[$record['currency']]['factor_times_rate'] += $record['factor'] * $record['rate'];
+                }
+            }
+            foreach (['status', 'payment_status', 'payment_method', 'currency', 'conversion', 'total_key'] as $group) {
                 $name = $record[$group] ?? '—';
                 $groups[$group][$name] ??= ['orders' => 0, 'order_total' => 0.0, 'lines' => 0.0];
                 $groups[$group][$name]['orders']++;
@@ -354,6 +365,11 @@ class RevenueAudit
             'orders_without_total' => $withoutTotal,
             'orders_without_lines' => $withoutLines,
             'groups' => $this->roundTree($groups),
+            // factor_times_rate near 1 means exchange_rate is store → order currency.
+            'conversion_rates' => array_map(fn (array $r) => [
+                'orders' => $r['orders'], 'average_factor' => round($r['factor'] / $r['orders'], 6),
+                'factor_times_rate' => $r['with_rate'] ? round($r['factor_times_rate'] / $r['with_rate'], 4) : null,
+            ], $rates),
             'order_fields' => $this->topPaths($moneyPaths),
             'line_fields' => $this->topPaths($linePaths),
             'largest_differences' => array_slice(array_values(array_filter($diffs, fn ($d) => abs($d['diff']) >= 0.01)), 0, 8),
@@ -378,10 +394,14 @@ class RevenueAudit
         $mapped = $this->mapper->order($order);
         $status = $this->text($order['order_status']['code'] ?? null) ?? $this->text($order['order_status']['name'] ?? null) ?? $this->text($order['status'] ?? null);
 
+        // Every amount in the store's currency, converted as the import converts it.
+        $conversion = $this->mapper->conversion($order);
+        $factor = $conversion['factor'];
+
         [$total, $totalKey] = [null, null];
         foreach (self::TOTAL_KEYS as $candidate) {
             if (($value = $this->number($order[$candidate] ?? null)) !== null) {
-                [$total, $totalKey] = [$value, $candidate];
+                [$total, $totalKey] = [$value * $factor, $candidate];
                 break;
             }
         }
@@ -406,7 +426,7 @@ class RevenueAudit
             $lines[] = [
                 'id' => $id, 'parent_id' => $parent, 'sku' => $sku,
                 'name' => mb_substr((string) ($this->text($line['name'] ?? null) ?? ''), 0, 80),
-                'units' => $units, 'revenue' => (float) $revenue,
+                'units' => $units, 'revenue' => (float) $revenue * $factor,
                 'match' => match (true) {
                     isset($catalog['by_id'][ZidMapper::key($id) ?? '']) => 'id',
                     $parent !== null && isset($catalog['by_id'][ZidMapper::key($parent) ?? '']) => 'parent',
@@ -429,7 +449,10 @@ class RevenueAudit
             'status' => $status !== null ? mb_strtolower($status) : null,
             'payment_status' => $this->text($order['payment_status']['code'] ?? null) ?? $this->text($order['payment_status'] ?? null) ?? $this->text($order['payment']['status'] ?? null),
             'payment_method' => $this->text($order['payment']['method']['code'] ?? null) ?? $this->text($order['payment_method']['code'] ?? null) ?? $this->text($order['payment_method'] ?? null),
-            'currency' => $this->text($order['currency_code'] ?? null) ?? $this->text($order['currency']['order_currency']['code'] ?? null) ?? $this->text($order['currency']['code'] ?? null) ?? $this->text($order['currency'] ?? null),
+            'currency' => $conversion['currency'],
+            'conversion' => $conversion['source'],
+            'factor' => $factor,
+            'rate' => $conversion['rate'],
             'total' => $total,
             'total_key' => $totalKey,
             'cancelled' => $mapped === null,
@@ -628,9 +651,9 @@ class RevenueAudit
         if ($moves > 0) {
             $add('timezone_shift', null, $moves);
         }
-        $currencies = array_keys($zid['groups']['currency']);
-        if (count($currencies) > 1 || ($currencies !== [] && ! in_array(strtoupper((string) $currencies[0]), ['SAR', '—'], true))) {
-            $add('currency', null, count($currencies));
+        // Orders in another currency that Zid gave no rate for are summed as they are.
+        if (($unconverted = $zid['groups']['conversion']['unconverted']['orders'] ?? 0) > 0) {
+            $add('currency', $zid['groups']['conversion']['unconverted']['lines'], $unconverted);
         }
         if ($ours['sales']['order_lines'] !== $zid['counted_orders'] - $zid['returned']['orders'] && $ours['sales']['order_lines'] > 0) {
             $add('orders_are_lines', null, $ours['sales']['order_lines']);
