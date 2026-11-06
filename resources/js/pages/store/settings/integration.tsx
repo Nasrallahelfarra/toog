@@ -1,4 +1,4 @@
-import { router, useForm } from '@inertiajs/react';
+import { Link, router, useForm } from '@inertiajs/react';
 import {
     AlertTriangle,
     CheckCircle2,
@@ -10,6 +10,7 @@ import {
     Loader2,
     PlugZap,
     RefreshCw,
+    Scale,
     Unplug,
     UploadCloud,
     XCircle,
@@ -96,6 +97,25 @@ export default function IntegrationSettings({ zid, counts, runs, importReport, c
                     <ZidGuide status={zid.status} hasData={counts.products > 0} checkOk={check ? check.ok : null} />
                 </FadeIn>
             </div>
+
+            {zid.status === 'connected' && zid.has_credentials && counts.products > 0 && (
+                <FadeIn delay={0.1}>
+                    <div className="bg-card flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+                        <div className="flex items-start gap-2.5">
+                            <Scale className="text-muted-foreground mt-0.5 size-[18px] shrink-0" />
+                            <div className="space-y-0.5">
+                                <h2 className="text-[15px] font-semibold">{t.revenueAudit.linkTitle}</h2>
+                                <p className="text-muted-foreground text-xs leading-relaxed">{t.revenueAudit.linkHint}</p>
+                            </div>
+                        </div>
+                        <Button variant="soft" asChild>
+                            <Link href="/store/settings/integration/revenue-audit" prefetch>
+                                {t.revenueAudit.linkButton}
+                            </Link>
+                        </Button>
+                    </div>
+                </FadeIn>
+            )}
 
             <FadeIn delay={0.1}>
                 <SectionCard title={s.importTitle} description={s.importHint} icon={FileSpreadsheet}>

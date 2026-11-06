@@ -37,4 +37,7 @@ return [
     'weights_required' => 'The weights must add up to more than zero.',
     'zid_check_ok' => 'The connection passed every check — everything works.',
     'zid_check_failed' => ':count connection checks failed. See the details and fixes below.',
+    'revenue_audit_started' => 'The revenue audit against Zid has started. This page updates until the report is ready.',
+    'revenue_audit_running' => 'An audit is already running for this store. Wait for it to finish.',
+    'revenue_audit_needs_connection' => 'Connect the store to Zid first to audit its revenue.',
 ];

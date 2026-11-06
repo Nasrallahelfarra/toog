@@ -7,6 +7,7 @@ use App\Http\Controllers\Store\ImportController;
 use App\Http\Controllers\Store\IntegrationController;
 use App\Http\Controllers\Store\PerformanceController;
 use App\Http\Controllers\Store\ProductController;
+use App\Http\Controllers\Store\RevenueAuditController;
 use App\Http\Controllers\Store\SettingsController;
 use App\Http\Controllers\Store\StagnantProductController;
 use App\Support\CurrentStore;
@@ -47,6 +48,9 @@ Route::get('settings/integration', [IntegrationController::class, 'show'])->name
 Route::put('settings/integration/frequency', [IntegrationController::class, 'updateFrequency'])->name('settings.integration.frequency');
 Route::post('settings/integration/import/{type}', [ImportController::class, 'store'])->whereIn('type', ['products', 'sales'])->name('settings.import');
 Route::get('settings/integration/template/{type}', [ImportController::class, 'template'])->whereIn('type', ['products', 'sales'])->name('settings.template');
+// Revenue audit: one month of Zid orders against what the store sees here
+Route::get('settings/integration/revenue-audit', [RevenueAuditController::class, 'show'])->name('settings.revenue-audit');
+Route::post('settings/integration/revenue-audit', [RevenueAuditController::class, 'store'])->middleware('throttle:10,1')->name('settings.revenue-audit.run');
 Route::get('integrations/zid/redirect', [IntegrationController::class, 'redirect'])->name('integrations.zid.redirect');
 Route::get('integrations/zid/callback', [IntegrationController::class, 'callback'])->name('integrations.zid.callback');
 Route::delete('integrations/zid', [IntegrationController::class, 'disconnect'])->name('integrations.zid.disconnect');

@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\ProductSale;
 use App\Models\SyncRun;
 use App\Services\Zid\ConnectionCheck;
+use App\Services\Zid\RevenueAudit;
 use App\Services\Zid\ZidClient;
 use App\Services\Zid\ZidSyncState;
 use App\Support\Activity;
@@ -57,7 +58,7 @@ class IntegrationController extends Controller
             'check' => ConnectionCheck::latest($store),
             'runs' => SyncRun::query()
                 ->where('store_id', $store->id)
-                ->where('type', '!=', 'connection_check')
+                ->whereNotIn('type', ['connection_check', RevenueAudit::TYPE])
                 ->latest('id')
                 ->limit(10)
                 ->get()

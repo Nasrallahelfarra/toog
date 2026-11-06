@@ -170,7 +170,7 @@ class ZidClient
     }
 
     /**
-     * @return array{items: list<array<string, mixed>>, has_next: bool, fingerprint: string}
+     * @return array{items: list<array<string, mixed>>, has_next: bool, fingerprint: string, meta: array<string, mixed>}
      *
      * @throws ZidApiException
      * @throws ZidRateLimited
@@ -186,7 +186,7 @@ class ZidClient
     /**
      * @param  'created_at'|'updated_at'  $attribute  updated_at also returns
      *                                                orders whose status changed
-     * @return array{items: list<array<string, mixed>>, has_next: bool, fingerprint: string}
+     * @return array{items: list<array<string, mixed>>, has_next: bool, fingerprint: string, meta: array<string, mixed>}
      *
      * @throws ZidApiException
      * @throws ZidRateLimited
@@ -197,6 +197,25 @@ class ZidClient
             'per_page' => self::ORDERS_PER_PAGE, 'payload_type' => 'default',
             'date_attribute' => $attribute, 'date_from' => $since->format('Y-m-d\TH:i:s.vO'),
             'order_by' => 'created_at', 'sort_by' => 'asc',
+        ], ['orders', 'results', 'data'], $page);
+    }
+
+    /**
+     * One raw page of the orders list for the revenue audit, with the list's
+     * own summary fields (such as grand_total and counts per status).
+     *
+     * @param  array<string, scalar>  $filters
+     * @return array{items: list<array<string, mixed>>, has_next: bool, fingerprint: string, meta: array<string, mixed>}
+     *
+     * @throws ZidApiException
+     * @throws ZidRateLimited
+     */
+    public function auditOrderPage(array $filters, int $page): array
+    {
+        return $this->page(self::ORDERS_PATH, [
+            'per_page' => self::ORDERS_PER_PAGE, 'payload_type' => 'default',
+            'date_attribute' => 'created_at', 'order_by' => 'created_at', 'sort_by' => 'asc',
+            ...$filters,
         ], ['orders', 'results', 'data'], $page);
     }
 
@@ -254,7 +273,7 @@ class ZidClient
     /**
      * @param  array<string, mixed>  $query
      * @param  list<string>  $keys
-     * @return array{items: list<array<string, mixed>>, has_next: bool, fingerprint: string}
+     * @return array{items: list<array<string, mixed>>, has_next: bool, fingerprint: string, meta: array<string, mixed>}
      */
     private function page(string $path, array $query, array $keys, int $page): array
     {
@@ -282,9 +301,11 @@ class ZidClient
             throw new ZidApiException($e->response->status(), $path, $e);
         }
         $items = null;
+        $listKey = null;
         foreach ($keys as $key) {
             if (isset($json[$key]) && is_array($json[$key]) && array_is_list($json[$key])) {
                 $items = $json[$key];
+                $listKey = $key;
                 break;
             }
         }
@@ -311,9 +332,16 @@ class ZidClient
             throw new RuntimeException("Zid returned an empty page with more pages for {$path}.");
         }
 
+        // The list's own summary (grand_total, counts per status…), kept small.
+        $meta = array_filter(
+            array_diff_key(is_array($json) ? $json : [], [$listKey => true]),
+            fn ($value) => is_scalar($value) || $value === null || (is_array($value) && strlen((string) json_encode($value)) <= 2000),
+        );
+
         return [
             'items' => $items, 'has_next' => $hasNext,
             'fingerprint' => hash('sha256', json_encode(array_map(fn ($item) => $item['id'] ?? $item, $items), JSON_THROW_ON_ERROR)),
+            'meta' => $meta,
         ];
     }
 
