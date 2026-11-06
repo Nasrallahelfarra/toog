@@ -48,13 +48,26 @@ class ZidCurrencyConversionTest extends TestCase
         $this->assertSame('transaction', app(ZidMapper::class)->conversion($order)['source']);
     }
 
-    public function test_without_a_riyal_payment_the_exchange_rate_converts(): void
+    public function test_without_a_riyal_payment_the_exchange_rate_converts_through_the_dollar(): void
     {
-        // Zid's rate turns store prices into the order's: 1 SAR = 0.98 AED.
-        $order = $this->order('AED', 118, 98, paidIn: 'AED', rate: 0.98);
+        // Zid's rate is per US dollar: 1 USD = 0.3 KWD, and 1 USD = 3.75 SAR.
+        $order = $this->order('KWD', 10, 8, paidIn: 'KWD', rate: 0.3);
 
         $this->assertSame(100.0, $this->revenue($order));
         $this->assertSame('exchange_rate', app(ZidMapper::class)->conversion($order)['source']);
+
+        // A dollar order carries a rate of 1.
+        $this->assertSame(375.0, $this->revenue($this->order('USD', 110, 100, paidIn: 'USD', rate: 1)));
+    }
+
+    public function test_the_rate_paid_and_the_exchange_rate_agree_on_live_orders(): void
+    {
+        // A KWD order as Zid sent it: 2027 SAR paid for 167.66 KWD at a rate of 0.311.
+        $mapper = app(ZidMapper::class);
+        $paid = $mapper->conversion($this->order('KWD', 167.66, 151.2, paid: 2027, paidIn: 'SAR', rate: 0.311))['factor'];
+        $byRate = $mapper->conversion($this->order('KWD', 167.66, 151.2, paidIn: 'KWD', rate: 0.311))['factor'];
+
+        $this->assertEqualsWithDelta($paid, $byRate, 0.05 * $paid);
     }
 
     public function test_an_order_with_no_rate_is_left_as_it_is_and_reported(): void

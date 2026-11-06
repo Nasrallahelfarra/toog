@@ -62,6 +62,8 @@ return [
         'timezone' => env('ZID_STORE_TIMEZONE', 'Asia/Riyadh'),
         // Revenue is kept in this currency when an order does not name the store's.
         'currency' => env('ZID_STORE_CURRENCY', 'SAR'),
+        // Zid's exchange rates are per US dollar; the riyal uses its 3.75 peg when unset.
+        'currency_per_usd' => env('ZID_STORE_CURRENCY_PER_USD'),
     ],
 
     /*
