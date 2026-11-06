@@ -621,4 +621,45 @@ class ZidSyncProgressTest extends TestCase
         $this->travel(31)->days();
         $this->assertSame('full', $this->state->enqueue($this->store)->stats['scope']);
     }
+
+    public function test_option_lines_count_for_their_product_in_the_store_time_month(): void
+    {
+        $this->travelTo(Carbon::parse('2026-11-06 12:00:00'));
+        // Zid writes the product UUID with dashes, and an option's parent_id without them.
+        $dress = 'ed36c90b-535e-4c5d-aa86-2c06c0a4c67a';
+        Http::fake(fn ($request) => str_contains($request->url(), 'products/')
+            ? Http::response(['results' => [['id' => $dress, 'name' => 'Dress', 'price' => 499, 'quantity' => 5]], 'next' => null])
+            : Http::response(['orders' => [
+                // 22:30 UTC on Oct 31 is already Nov 1 in Riyadh; two sizes of one dress.
+                ['id' => 300, 'created_at' => '2026-10-31 22:30:00', 'order_status' => ['code' => 'delivered'], 'products' => [
+                    ['id' => '42e1f670-e1df-4f62-b576-b4cca47f5b6b', 'parent_id' => 'ed36c90b535e4c5daa862c06c0a4c67a', 'quantity' => 1, 'total' => 499],
+                    ['id' => '9c789e8c-5f53-4ac8-8d3d-7f4acaf07e56', 'parent_id' => 'ed36c90b535e4c5daa862c06c0a4c67a', 'quantity' => 2, 'total' => 998],
+                ]],
+            ]]));
+
+        $run = $this->state->enqueue($this->store);
+        $this->perform($run);
+
+        $this->assertSame('completed', $run->fresh()->status);
+        $sale = Product::query()->where('external_id', $dress)->firstOrFail()->sales()->sole();
+        $this->assertSame('2026-11', $sale->period->format('Y-m'));
+        $this->assertEquals(1497, $sale->revenue);
+        $this->assertEquals(3, $sale->units);
+        $this->assertEquals(1, $sale->orders, 'Two sizes in one order are one order for the product.');
+    }
+
+    public function test_orders_stored_by_an_older_reading_are_all_read_again(): void
+    {
+        Http::fake(fn ($request) => str_contains($request->url(), 'products/')
+            ? Http::response(['results' => $this->products(1), 'next' => null])
+            : Http::response(['orders' => []]));
+        $run = $this->state->enqueue($this->store);
+        $this->assertSame(ZidMapper::VERSION, $run->stats['mapping']);
+        $this->perform($run);
+        // As if it ran before option lines kept their parent product.
+        $run->update(['stats' => Arr::except($run->fresh()->stats, ['mapping'])]);
+
+        $this->travel(1)->days();
+        $this->assertSame('full', $this->state->enqueue($this->store)->stats['scope']);
+    }
 }

@@ -371,7 +371,7 @@ class SyncStoreData implements ShouldQueue
             $productCount++;
         }
         // A changes run reads few products, so order lines resolve against the whole catalog.
-        $ids = Product::query()->where('store_id', $this->store->id)->whereNotNull('external_id')->pluck('id', 'external_id')->all();
+        $ids = ZidMapper::catalogKeys(Product::query()->where('store_id', $this->store->id)->whereNotNull('external_id')->pluck('id', 'external_id'));
 
         $full = ($run->stats['scope'] ?? 'full') === 'full';
         $since = Carbon::parse($run->stats['orders_since'])->startOfMonth()->toDateString();
@@ -380,7 +380,7 @@ class SyncStoreData implements ShouldQueue
         $touch = function (string $month, array $lines) use (&$touched, $ids, $since): void {
             // Months before the 12-month window keep the totals they have.
             foreach ($month >= $since ? $lines : [] as $line) {
-                if ($productId = $ids[$line['external_id']] ?? null) {
+                if ($productId = ZidMapper::productFor($line, $ids)) {
                     $touched[$productId][$month] = true;
                 }
             }
@@ -421,13 +421,16 @@ class SyncStoreData implements ShouldQueue
 
         $buckets = [];
         foreach ($stored()->cursor() as $order) {
+            $counted = [];
             foreach (json_decode($order->lines, true, flags: JSON_THROW_ON_ERROR) as $line) {
-                $productId = $ids[$line['external_id']] ?? null;
+                $productId = ZidMapper::productFor($line, $ids);
                 if (! $productId || ! isset($touched[$productId][$order->month])) {
                     continue;
                 }
                 $bucket = $buckets[$productId][$order->month] ?? ['orders' => 0, 'units' => 0, 'revenue' => 0.0, 'returns' => 0];
-                $bucket['orders']++;
+                // Two sizes of one product in an order are one order for it.
+                $bucket['orders'] += isset($counted[$productId]) ? 0 : 1;
+                $counted[$productId] = true;
                 $bucket['units'] += $line['units'];
                 $bucket['revenue'] += $order->returned ? 0 : $line['revenue'];
                 $bucket['returns'] += $order->returned ? $line['units'] : 0;

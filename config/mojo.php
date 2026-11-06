@@ -58,6 +58,8 @@ return [
         'redirect_uri' => env('ZID_REDIRECT_URI', env('APP_URL').'/store/integrations/zid/callback'),
         'oauth_url' => env('ZID_OAUTH_URL', 'https://oauth.zid.sa'),
         'api_url' => env('ZID_API_URL', 'https://api.zid.sa/v1'),
+        // Zid sends order times in UTC; sales months follow the store's clock.
+        'timezone' => env('ZID_STORE_TIMEZONE', 'Asia/Riyadh'),
     ],
 
     /*
