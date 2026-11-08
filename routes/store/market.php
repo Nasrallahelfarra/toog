@@ -20,6 +20,7 @@ Route::post('market/reviews/analyze', [MarketController::class, 'analyzeReviews'
 Route::get('competitors', [CompetitorController::class, 'index'])->name('competitors.index');
 Route::post('competitors', [CompetitorController::class, 'store'])->name('competitors.store');
 Route::post('competitors/scan', [CompetitorController::class, 'scanAll'])->name('competitors.scan-all');
+Route::put('competitors/social-settings', [CompetitorController::class, 'updateSocialSettings'])->name('competitors.social-settings');
 Route::put('competitors/{competitor}', [CompetitorController::class, 'update'])->name('competitors.update');
 Route::delete('competitors/{competitor}', [CompetitorController::class, 'destroy'])->name('competitors.destroy');
 Route::post('competitors/{competitor}/scan', [CompetitorController::class, 'scan'])->name('competitors.scan');

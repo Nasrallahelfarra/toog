@@ -74,8 +74,9 @@ return [
     | Instagram, TikTok and Facebook competitors are read through Apify
     | actors; storefront websites keep their own crawler. Without a token
     | social competitors stay listed but are not scanned. Each scan reads at
-    | most posts_limit posts from the last `days` days, and Apify bills only
-    | that many results.
+    | most the latest posts_limit posts from the last `days` days, and Apify
+    | bills only that many results. A store can choose its own count, from 1
+    | to max_posts_limit, on the competitors page.
     |
     */
 
@@ -84,7 +85,8 @@ return [
         'base_url' => env('APIFY_BASE_URL', 'https://api.apify.com/v2'),
         // Seconds an actor may run; Apify's synchronous calls stop at 300.
         'timeout' => (int) env('APIFY_TIMEOUT', 180),
-        'posts_limit' => (int) env('APIFY_POSTS_LIMIT', 30),
+        'posts_limit' => (int) env('APIFY_POSTS_LIMIT', 15),
+        'max_posts_limit' => 100,
         'days' => (int) env('APIFY_POSTS_DAYS', 90),
         'actors' => [
             'instagram' => env('APIFY_INSTAGRAM_ACTOR', 'apify~instagram-post-scraper'),

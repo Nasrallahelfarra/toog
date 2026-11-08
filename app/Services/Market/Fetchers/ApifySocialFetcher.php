@@ -56,7 +56,7 @@ class ApifySocialFetcher implements CompetitorFetcher
         $progress?->__invoke('rules', []);
         $handle = Competitor::normalizeHandle($competitor->handle ?: $competitor->url) ?? '';
         $profile = $this->profileUrl($competitor, $handle);
-        $limit = max(1, min(100, (int) config('mojo.apify.posts_limit')));
+        $limit = $competitor->store->socialPostsLimit();
         $since = now()->subDays(max(1, (int) config('mojo.apify.days')));
         $observedAt = now()->toIso8601String();
         $sources = $warnings = [];

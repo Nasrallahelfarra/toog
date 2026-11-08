@@ -74,6 +74,7 @@ class CompetitorController extends Controller
             ],
             'platforms' => [...Competitor::STORE_PLATFORMS, ...Competitor::SOCIAL_PLATFORMS],
             'categories' => $store->products()->whereNotNull('category')->distinct()->pluck('category'),
+            'socialPosts' => ['limit' => $store->socialPostsLimit(), 'max' => (int) config('mojo.apify.max_posts_limit')],
             'selected' => $selectedCompetitor ? $this->details($selectedCompetitor) : null,
             'lastScan' => $store->syncRuns()->where('type', 'competitor_scan')->latest('id')->first(['status', 'stats', 'finished_at']),
         ]);
@@ -137,6 +138,25 @@ class CompetitorController extends Controller
         Activity::log('competitor.scan_all', $store);
 
         Inertia::flash('toast', ['type' => 'info', 'message' => __('market.scan_queued')]);
+
+        return back();
+    }
+
+    /** How many of each social account's latest posts a scan reads. */
+    public function updateSocialSettings(Request $request): RedirectResponse
+    {
+        $store = $this->current->require();
+        $data = $request->validate([
+            'posts_limit' => ['required', 'integer', 'min:1', 'max:'.(int) config('mojo.apify.max_posts_limit')],
+        ]);
+
+        $before = $store->socialPostsLimit();
+        $store->update(['settings' => [...($store->settings ?? []), 'social_posts_limit' => (int) $data['posts_limit']]]);
+        if ($before !== $store->socialPostsLimit()) {
+            Activity::log('settings.updated', $store, ['section' => 'competitors',
+                'changes' => ['social_posts_limit' => ['from' => $before, 'to' => $store->socialPostsLimit()]]]);
+        }
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('mojo.saved')]);
 
         return back();
     }
