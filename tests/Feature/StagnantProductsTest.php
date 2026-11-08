@@ -85,7 +85,8 @@ class StagnantProductsTest extends TestCase
             $context = json_decode(explode("\nImage available:", $prompt)[0], true);
             $this->assertSame('product_recovery', $operation);
             $this->assertStringContainsString('product recovery specialist', $system);
-            $this->assertStringContainsString('THREE distinct alternative visual directions', $system);
+            $this->assertStringContainsString('THREE distinct alternative design directions for the product itself', $system);
+            $this->assertStringContainsString('Never suggest changes to the photo or the model', $system);
             $this->assertStringContainsString('shopper understanding, trust or purchase consideration', $prompt);
             $this->assertSame(120, $timeoutSeconds);
             $presentation = $run->fresh()->presentation();
@@ -247,7 +248,8 @@ class StagnantProductsTest extends TestCase
         $this->assertSame(['black'], $attributes['colors']);
         $prompt = app(PromptBuilder::class)->build($request, $product->store, [], $attributes, true);
         $this->assertStringContainsString($instruction, $prompt);
-        $this->assertStringContainsString('Preserve its identity', $prompt);
+        $this->assertStringContainsString('changes the design of the product itself', $prompt);
+        $this->assertStringContainsString('Keep the photograph itself exactly as it is', $prompt);
         $this->assertStringNotContainsString('Colour palette:', $prompt);
         Queue::assertPushed(GenerateDesigns::class, 1);
     }

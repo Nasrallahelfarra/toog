@@ -88,23 +88,23 @@ export const stagnant: typeof ar = {
     regenerate: 'Request new suggestions',
     regenerateHint:
         'Requests a new expert analysis and counts toward your AI usage.',
-    visualOptions: 'Suggested directions for improving the image',
+    visualOptions: 'Suggested directions for redesigning the product',
     chooseHint:
-        'Compare each direction’s visual impact and benefit for the shopper, then choose one to apply. These are independent alternatives, not edits to combine.',
-    visualImpact: 'Observation and visual impact',
+        'Compare each proposed change to the product’s own design (cut, neckline, sleeves, length, details) and its benefit for the shopper, then choose one to apply. These are independent alternatives, not edits to combine.',
+    visualImpact: 'Observation and design change',
     persuasion: 'How it may persuade the shopper',
     choose: 'Choose this suggestion',
     selected: 'Selected suggestion',
-    chooseFirst: 'Choose a visual suggestion first',
+    chooseFirst: 'Choose a design suggestion first',
     apply: 'Apply selected suggestion in studio',
     applyHint:
-        'Opens the product image and editing instructions for you to review and generate an improved version.',
+        'Opens the product image and design-change instructions for you to review, then generate a version with the redesigned product while the photo and model stay the same.',
     businessStep: 'Suggested next step',
     noActions:
         'The expert suggested no additional actions with the available data.',
     failed: 'Recommendation incomplete',
     fromRecovery:
-        'Improve “{name}” using its product performance recommendation. The original image and editing instructions are ready.',
+        'Improve “{name}” using its product performance recommendation. The original image and design-change instructions are ready.',
     marketing: {
         title: 'Marketing plan',
         hint: 'A ready-to-run plan based on the product’s price within its category, what sells in that category and upcoming Saudi occasions.',
