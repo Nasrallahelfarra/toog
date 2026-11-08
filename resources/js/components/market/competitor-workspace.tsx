@@ -5,15 +5,14 @@ import {
     ChartNoAxesCombined,
     CheckCircle2,
     Clock,
-    Eye,
     FileSearch,
     Globe,
-    Heart,
     LoaderCircle,
     MessageSquare,
     Package,
     RefreshCw,
     Swords,
+    Unplug,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { EmptyState } from '@/components/mojo/empty-state';
@@ -24,6 +23,8 @@ import { cn } from '@/lib/utils';
 import { CompetitorAnalysis, CompetitorSources } from './competitor-analysis';
 import { CompetitorProducts } from './competitor-products';
 import { CompetitorScanProgress, isScanning } from './competitor-scan-progress';
+import { CompetitorSocialOverview, SocialPostGrid } from './competitor-social';
+import { isSocialAnalysis } from './competitor-types';
 import type {
     Competitor,
     CompetitorDetails,
@@ -46,10 +47,15 @@ export function CompetitorWorkspace({
     onBack: () => void;
     errorMessage: string | null;
 }) {
-    const { t, relative, dateTime, number, compact, dir } = useI18n();
+    const { t, relative, dateTime, number, dir } = useI18n();
     const c = t.market.competitors;
     const w = c.workspace;
-    const [tab, setTab] = useState(competitor.is_social ? 'posts' : 'overview');
+    const analysis = details.analysis;
+    const social = isSocialAnalysis(analysis) ? analysis : null;
+    const store = analysis && !isSocialAnalysis(analysis) ? analysis : null;
+    const [tab, setTab] = useState(
+        competitor.is_social && !social ? 'posts' : 'overview',
+    );
     const [filter, setFilter] = useState<ProductFilter>('all');
     const tabsRef = useRef<HTMLDivElement>(null);
     const headingRef = useRef<HTMLHeadingElement>(null);
@@ -77,12 +83,16 @@ export function CompetitorWorkspace({
         (competitor.scan.status === 'failed' || isScanning(competitor.scan)) &&
         Date.parse(details.analysis.crawl.observed_at) <
             Date.parse(competitor.scan.created_at);
+    const showPosts = () => {
+        setTab('posts');
+        tabsRef.current?.scrollIntoView({ block: 'start' });
+    };
     const navigation = [
         {
             value: 'overview',
             label: w.overview,
             icon: ChartNoAxesCombined,
-            visible: !competitor.is_social,
+            visible: !competitor.is_social || !!social,
         },
         {
             value: 'products',
@@ -95,7 +105,7 @@ export function CompetitorWorkspace({
             value: 'sources',
             label: w.sources,
             icon: FileSearch,
-            visible: !!details.analysis,
+            visible: !!store,
         },
         {
             value: 'posts',
@@ -181,15 +191,17 @@ export function CompetitorWorkspace({
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                        {competitor.url && (
+                        {competitor.profile_url && (
                             <Button variant="outline" asChild>
                                 <a
-                                    href={competitor.url}
+                                    href={competitor.profile_url}
                                     target="_blank"
                                     rel="noreferrer"
                                 >
                                     <Globe className="size-4" />
-                                    {w.visit}
+                                    {competitor.is_social
+                                        ? w.visitAccount
+                                        : w.visit}
                                     <ArrowUpRight className="size-3.5 rtl:-scale-x-100" />
                                 </a>
                             </Button>
@@ -239,6 +251,15 @@ export function CompetitorWorkspace({
                     {competitor.last_error}
                 </p>
             )}
+            {competitor.scan_blocker === 'needs_apify' && (
+                <p
+                    role="status"
+                    className="flex items-start gap-2 rounded-xl bg-info-soft/50 px-4 py-3 text-sm leading-relaxed text-info"
+                >
+                    <Unplug className="mt-0.5 size-4 shrink-0" />
+                    {c.apifyMissing}
+                </p>
+            )}
             {scanning && !isScanning(competitor.scan) && (
                 <p
                     role="status"
@@ -249,7 +270,10 @@ export function CompetitorWorkspace({
                 </p>
             )}
             {competitor.scan && competitor.scan.status !== 'completed' && (
-                <CompetitorScanProgress scan={competitor.scan} />
+                <CompetitorScanProgress
+                    scan={competitor.scan}
+                    social={competitor.is_social}
+                />
             )}
             {previousReport && (
                 <p
@@ -295,9 +319,15 @@ export function CompetitorWorkspace({
                     </TabsList>
                 </div>
                 <TabsContent value="overview">
-                    {details.analysis ? (
+                    {social ? (
+                        <CompetitorSocialOverview
+                            analysis={social}
+                            posts={details.posts}
+                            onPosts={showPosts}
+                        />
+                    ) : store ? (
                         <CompetitorAnalysis
-                            analysis={details.analysis}
+                            analysis={store}
                             products={details.products}
                             onBrowse={browse}
                             onSources={showSources}
@@ -329,64 +359,16 @@ export function CompetitorWorkspace({
                 <TabsContent value="products">
                     <CompetitorProducts
                         products={details.products}
-                        total={details.analysis?.facts.products}
+                        total={store?.facts.products}
                         filter={filter}
                         onFilterChange={setFilter}
                     />
                 </TabsContent>
                 <TabsContent value="sources">
-                    {details.analysis && (
-                        <CompetitorSources analysis={details.analysis} />
-                    )}
+                    {store && <CompetitorSources analysis={store} />}
                 </TabsContent>
                 <TabsContent value="posts">
-                    {details.posts.length ? (
-                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                            {details.posts.map((post) => (
-                                <article
-                                    key={post.id}
-                                    className="flex flex-col gap-5 rounded-2xl border bg-card p-5"
-                                >
-                                    <p
-                                        className="flex-1 text-sm leading-7"
-                                        dir="auto"
-                                    >
-                                        {post.caption}
-                                    </p>
-                                    <div className="num flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                                        <span className="flex items-center gap-1">
-                                            <Eye className="size-4" />
-                                            {compact(post.views)}
-                                        </span>
-                                        <span className="flex items-center gap-1">
-                                            <Heart className="size-4" />
-                                            {compact(post.likes)}
-                                        </span>
-                                        <span>
-                                            {number(post.engagement_rate, 1)}%{' '}
-                                            {w.postEngagement}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
-                                        <span>{relative(post.posted_at)}</span>
-                                        {post.url && (
-                                            <a
-                                                href={post.url}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="inline-flex items-center gap-1 text-primary hover:underline"
-                                            >
-                                                {t.common.open}
-                                                <ArrowUpRight className="size-4 rtl:-scale-x-100" />
-                                            </a>
-                                        )}
-                                    </div>
-                                </article>
-                            ))}
-                        </div>
-                    ) : (
-                        <EmptyState icon={MessageSquare} title={w.noPosts} />
-                    )}
+                    <SocialPostGrid posts={details.posts} />
                 </TabsContent>
             </Tabs>
         </>

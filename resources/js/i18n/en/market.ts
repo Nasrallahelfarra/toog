@@ -47,6 +47,7 @@ export const market: typeof ar = {
         shopify: 'Shopify',
         instagram: 'Instagram',
         tiktok: 'TikTok',
+        facebook: 'Facebook',
         snapchat: 'Snapchat',
     },
 
@@ -84,7 +85,7 @@ export const market: typeof ar = {
     },
 
     posts: 'Top-performing content',
-    postsHint: 'Competitors’ best posts on TikTok, Instagram and Snapchat.',
+    postsHint: 'Competitors’ best posts on Instagram, TikTok and Facebook.',
     noPosts: 'No posts tracked',
     views: 'views',
     likes: 'likes',
@@ -184,8 +185,46 @@ export const market: typeof ar = {
             pendingTitle: 'Preparing your competitor report',
             noProducts: 'No products observed yet',
             noPosts: 'No posts observed yet',
+            noPostsHint:
+                'Choose “Scan now” to read this account’s latest public posts.',
             postEngagement: 'engagement',
             scanDetails: 'Scan stage details',
+            visitAccount: 'Open account',
+            postImage: 'Post image',
+            noPostImage: 'No image for this post',
+            noCaption: 'Post without text',
+            likesHidden: 'Likes hidden',
+            engagementUnknown:
+                'No follower or view count to measure engagement against',
+            basisFollowers: 'Engagement relative to followers',
+            basisViews: 'Engagement relative to views',
+            sortPosts: 'Sort posts',
+            latestPosts: 'Latest',
+            topPosts: 'Highest engagement',
+            topPostsHint:
+                'The posts with the highest engagement in this scan; look at the designs and formats they show.',
+            postsRead: 'Posts read',
+            since: 'Since {date}',
+            avgEngagement: 'Average engagement',
+            perWeek: 'Posts per week',
+            perWeekHint: 'Posting rate over the period read',
+            followers: 'Followers',
+            followersHint: 'Follower count at scan time',
+            totalViews: 'Views',
+            totalViewsHint: 'Total views of the posts read',
+            socialAiSubtitle:
+                'Which designs and content the competitor’s audience engages with',
+            socialAiWaitingHint:
+                'You can browse the posts and their engagement now.',
+            browsePosts: 'Browse posts',
+            hashtags: 'Most used hashtags',
+            formats: 'Content formats',
+            postTypes: {
+                image: 'Image',
+                video: 'Video',
+                carousel: 'Carousel',
+                text: 'Text',
+            },
         },
         scanProgress: {
             title: 'Competitor scan progress',
@@ -200,6 +239,7 @@ export const market: typeof ar = {
                 'Percentage reflects completed stages, not remaining time.',
             pages: '{count} pages read',
             products: '{count} products found',
+            posts: '{count} posts read',
             elapsed: '{seconds} seconds since request',
             waitingLong:
                 'Processing has not started yet. Server workers may be busy or stopped. You can leave and return to check progress.',
@@ -215,6 +255,7 @@ export const market: typeof ar = {
                 'Could not refresh progress. We will try again; the scan may still be running on the server.',
             aiProcessing:
                 'Storefront data is ready; waiting for Gemini analysis.',
+            socialAiProcessing: 'Posts are ready; waiting for Gemini analysis.',
             stages: {
                 rules: 'Checking website access',
                 storefront: 'Reading the storefront',
@@ -222,7 +263,26 @@ export const market: typeof ar = {
                 saving: 'Saving products and prices',
                 analysis: 'Preparing the report and analysis',
             },
+            socialStages: {
+                rules: 'Preparing the Apify request',
+                storefront: 'Reading the account',
+                products: 'Fetching public posts',
+                saving: 'Saving posts, images and engagement',
+                analysis: 'Analysing content and designs',
+            },
             errors: {
+                needs_apify:
+                    'Reading social accounts needs an Apify token. Add APIFY_TOKEN to the server settings.',
+                apify_unauthorized:
+                    'Apify rejected the token. Check APIFY_TOKEN in the server settings.',
+                apify_payment:
+                    'The Apify account is out of credit. Add credit, then scan again.',
+                apify_timeout:
+                    'Apify did not finish reading the posts in time. Try again shortly.',
+                apify_unavailable:
+                    'Apify could not be reached or the reader could not run. Review the details below and try again.',
+                no_posts:
+                    'No public posts were found. Check the handle and that the account is public, not private.',
                 fetch_failed:
                     'Could not read the store data. Check its URL and review the details below.',
                 unsupported:
@@ -260,7 +320,24 @@ export const market: typeof ar = {
         lastError: 'Last error',
         autoScan: 'Auto monitoring',
         manualOnly: 'Needs a data provider',
-        needsApi: 'Needs API access',
+        needsApi: 'Not supported yet',
+        needsApify: 'Needs Apify',
+        apifyMissing:
+            'Instagram, TikTok and Facebook posts are read through Apify. Add APIFY_TOKEN to the server settings to start scanning this account.',
+        handleHint:
+            'Enter the account name as it appears in its link (e.g. abaya.store), or paste the profile link. The account must be public.',
+        socialHypotheses:
+            'These are conclusions from public posts worth testing in your own designs and content, not evidence of the competitor’s sales.',
+        socialAiNotConfigured:
+            'Posts are ready. Configure a Gemini key on the server and scan again to generate analysis.',
+        socialEvidenceNote:
+            'Public posts are read through Apify. Engagement is likes, comments and shares relative to followers or views: a sign of interest, not sales.',
+        socialSampleNote:
+            'This report covers the latest {count} posts in the period read, not the account’s full history.',
+        socialWarnings: {
+            followers_unavailable:
+                'The follower count could not be read; engagement uses views where available.',
+        },
         storeKind: 'Store',
         socialKind: 'Social',
         deleteTitle: 'Delete competitor?',
@@ -305,7 +382,7 @@ export const market: typeof ar = {
         scanStats: '{added} new · {updated} updated · {changes} price changes',
         coverage: 'Monitoring coverage',
         coverageHint:
-            'We collect published data from store URLs: Shopify catalogs or structured product data on public pages. Coverage depends on the site; social networks need a separate connection.',
+            'Websites: we collect published data from store URLs (Shopify catalogs or structured product data on public pages). Instagram, TikTok and Facebook: public posts and their engagement are read through Apify.',
         totals: {
             total: 'competitors',
             active: 'active',

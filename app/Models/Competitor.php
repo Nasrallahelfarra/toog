@@ -28,7 +28,15 @@ class Competitor extends Model
 {
     public const STORE_PLATFORMS = ['website', 'salla', 'zid', 'shopify'];
 
-    public const SOCIAL_PLATFORMS = ['instagram', 'tiktok', 'snapchat'];
+    public const SOCIAL_PLATFORMS = ['instagram', 'tiktok', 'facebook', 'snapchat'];
+
+    /** Public profile address for a social account entered by handle. */
+    private const PROFILE_URLS = [
+        'instagram' => 'https://www.instagram.com/%s/',
+        'tiktok' => 'https://www.tiktok.com/@%s',
+        'facebook' => 'https://www.facebook.com/%s',
+        'snapchat' => 'https://www.snapchat.com/add/%s',
+    ];
 
     protected function casts(): array
     {
@@ -42,6 +50,28 @@ class Competitor extends Model
     public function isSocial(): bool
     {
         return in_array($this->platform, self::SOCIAL_PLATFORMS, true);
+    }
+
+    /** "@name", "name" or a pasted profile link, reduced to the account name. */
+    public static function normalizeHandle(?string $value): ?string
+    {
+        $value = trim((string) $value);
+        if (preg_match('~^(?:https?://)?(?:[\w-]+\.)*(?:instagram|tiktok|facebook|snapchat)\.com/(?:add/)?@?([^/?#\s]+)~i', $value, $match)) {
+            $value = rawurldecode($match[1]);
+        }
+        $value = ltrim($value, '@');
+
+        return $value === '' ? null : $value;
+    }
+
+    /** The saved link, or the account's public profile built from its handle. */
+    public function profileUrl(): ?string
+    {
+        if ($this->url || ! $this->isSocial() || blank($this->handle)) {
+            return $this->url;
+        }
+
+        return sprintf(self::PROFILE_URLS[$this->platform], rawurlencode($this->handle));
     }
 
     /** @return HasOne<CompetitorScan, $this> */

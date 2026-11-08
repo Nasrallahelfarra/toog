@@ -63,13 +63,14 @@ class MarketController extends Controller
                 'rising' => $allTrends->where('status', 'rising')->count(),
                 'gaps' => $allTrends->where('status', 'rising')->where('in_catalog', false)->count(),
                 'competitors' => $store->competitors()->where('is_active', true)->count(),
-                'avg_engagement' => round((float) SocialPost::query()->where('store_id', $store->id)->avg('engagement_rate'), 2),
+                'avg_engagement' => round((float) SocialPost::query()->where('store_id', $store->id)->measured()->avg('engagement_rate'), 2),
                 'tracked_products' => CompetitorProduct::query()->where('store_id', $store->id)->count(),
             ],
             'activity' => $this->activityFeed($store->id),
             'posts' => SocialPost::query()
                 ->with('competitor:id,name')
                 ->where('store_id', $store->id)
+                ->measured()
                 ->orderByDesc('engagement_rate')
                 ->limit(8)
                 ->get()

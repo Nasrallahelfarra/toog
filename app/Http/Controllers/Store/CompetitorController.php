@@ -12,6 +12,7 @@ use App\Support\Activity;
 use App\Support\CurrentStore;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -51,12 +52,14 @@ class CompetitorController extends Controller
                 'name' => $c->name,
                 'platform' => $c->platform,
                 'url' => $c->url,
+                'profile_url' => $c->profileUrl(),
                 'handle' => $c->handle,
                 'category' => $c->category,
                 'notes' => $c->notes,
                 'is_active' => $c->is_active,
                 'is_social' => $c->isSocial(),
                 'auto_scan' => $this->monitor->canScan($c),
+                'scan_blocker' => $this->monitor->blocker($c),
                 'products_count' => $c->products_count,
                 'posts_count' => $c->posts_count,
                 'last_checked_at' => $c->last_checked_at?->toIso8601String(),
@@ -163,14 +166,27 @@ class CompetitorController extends Controller
                     'pattern' => $p->features['pattern'] ?? null,
                     'first_seen_at' => $p->first_seen_at?->toIso8601String(),
                 ]),
-            'posts' => SocialPost::query()->where('competitor_id', $c->id)->latest('posted_at')->limit(12)->get()
+            // A social report covers the posts read in its scan, like products above.
+            'posts' => SocialPost::query()->where('competitor_id', $c->id)
+                ->when(($c->analysis['kind'] ?? null) === 'social' ? $c->analysis['crawl']['observed_at'] ?? null : null,
+                    fn ($q, $time) => $q->where('evidence->observed_at', $time))
+                ->latest('posted_at')->limit(60)->get()
                 ->map(fn (SocialPost $p) => [
                     'id' => $p->id,
+                    'platform' => $p->platform,
                     'caption' => $p->caption,
                     'url' => $p->url,
+                    // The copy kept at scan time outlives the platform's expiring link.
+                    'thumbnail_url' => filled($p->evidence['image_path'] ?? null)
+                        ? Storage::disk('public')->url($p->evidence['image_path']) : $p->thumbnail_url,
                     'views' => $p->views,
                     'likes' => $p->likes,
-                    'engagement_rate' => (float) $p->engagement_rate,
+                    'comments' => $p->comments,
+                    'shares' => $p->shares,
+                    'engagement_rate' => $p->measuredEngagement(),
+                    'engagement_basis' => $p->evidence['engagement_basis'] ?? null,
+                    'type' => $p->evidence['type'] ?? null,
+                    'likes_hidden' => (bool) ($p->evidence['likes_hidden'] ?? false),
                     'posted_at' => $p->posted_at?->toIso8601String(),
                 ]),
         ];
@@ -193,7 +209,7 @@ class CompetitorController extends Controller
             'is_active' => ['boolean'],
         ]);
 
-        $data['handle'] = isset($data['handle']) ? ltrim($data['handle'], '@') : null;
+        $data['handle'] = Competitor::normalizeHandle($data['handle'] ?? null);
         $data['name'] = ($data['name'] ?? null) ?: (string) parse_url($data['url'], PHP_URL_HOST);
         $data['is_active'] = $request->boolean('is_active', true);
 

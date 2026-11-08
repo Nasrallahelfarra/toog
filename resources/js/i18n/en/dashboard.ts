@@ -95,6 +95,7 @@ export const dashboard: typeof ar = {
         shopify: 'Shopify',
         instagram: 'Instagram',
         tiktok: 'TikTok',
+        facebook: 'Facebook',
         snapchat: 'Snapchat',
     },
     trendTypes: {
