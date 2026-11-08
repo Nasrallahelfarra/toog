@@ -37,7 +37,8 @@ class ReportBuilder
 
     private const PLATFORMS = [
         'salla' => ['سلة', 'Salla'], 'zid' => ['زد', 'Zid'], 'shopify' => ['Shopify', 'Shopify'],
-        'instagram' => ['إنستغرام', 'Instagram'], 'tiktok' => ['تيك توك', 'TikTok'], 'snapchat' => ['سناب شات', 'Snapchat'],
+        'instagram' => ['إنستغرام', 'Instagram'], 'tiktok' => ['تيك توك', 'TikTok'], 'facebook' => ['فيسبوك', 'Facebook'],
+        'snapchat' => ['سناب شات', 'Snapchat'],
     ];
 
     private const TOPICS = [

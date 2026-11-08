@@ -68,6 +68,34 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Apify: competitors' public social posts (FR-2.3)
+    |--------------------------------------------------------------------------
+    |
+    | Instagram, TikTok and Facebook competitors are read through Apify
+    | actors; storefront websites keep their own crawler. Without a token
+    | social competitors stay listed but are not scanned. Each scan reads at
+    | most posts_limit posts from the last `days` days, and Apify bills only
+    | that many results.
+    |
+    */
+
+    'apify' => [
+        'token' => env('APIFY_TOKEN'),
+        'base_url' => env('APIFY_BASE_URL', 'https://api.apify.com/v2'),
+        // Seconds an actor may run; Apify's synchronous calls stop at 300.
+        'timeout' => (int) env('APIFY_TIMEOUT', 180),
+        'posts_limit' => (int) env('APIFY_POSTS_LIMIT', 30),
+        'days' => (int) env('APIFY_POSTS_DAYS', 90),
+        'actors' => [
+            'instagram' => env('APIFY_INSTAGRAM_ACTOR', 'apify~instagram-post-scraper'),
+            'instagram_profile' => env('APIFY_INSTAGRAM_PROFILE_ACTOR', 'apify~instagram-profile-scraper'),
+            'tiktok' => env('APIFY_TIKTOK_ACTOR', 'clockworks~tiktok-scraper'),
+            'facebook' => env('APIFY_FACEBOOK_ACTOR', 'apify~facebook-posts-scraper'),
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Store defaults (FR-3.11, FR-5.2)
     |--------------------------------------------------------------------------
     |

@@ -6,6 +6,7 @@ use App\Models\Competitor;
 use App\Models\CompetitorScan;
 use App\Models\Store;
 use App\Models\SyncRun;
+use App\Services\Market\Fetchers\ApifySocialFetcher;
 use App\Services\Market\Fetchers\CompetitorFetcher;
 use App\Services\Market\Fetchers\FetchResult;
 use App\Services\Market\Fetchers\ShopifyFetcher;
@@ -20,15 +21,27 @@ class CompetitorMonitor
     /** @var list<CompetitorFetcher> */
     private array $fetchers;
 
-    public function __construct(ShopifyFetcher $shopify, UnsupportedFetcher $fallback, private readonly CompetitorScanState $scans)
-    {
+    public function __construct(
+        ShopifyFetcher $shopify,
+        ApifySocialFetcher $social,
+        UnsupportedFetcher $fallback,
+        private readonly CompetitorScanState $scans,
+    ) {
         // Order matters: the first fetcher that supports a competitor wins.
-        $this->fetchers = [$shopify, $fallback];
+        $this->fetchers = [$shopify, $social, $fallback];
     }
 
     public function canScan(Competitor $competitor): bool
     {
         return ! $this->fetcherFor($competitor) instanceof UnsupportedFetcher;
+    }
+
+    /** What the competitor needs before it can be scanned, or null. */
+    public function blocker(Competitor $competitor): ?string
+    {
+        $fetcher = $this->fetcherFor($competitor);
+
+        return $fetcher instanceof UnsupportedFetcher ? $fetcher->reason($competitor) : null;
     }
 
     public function scan(Competitor $competitor, ?CompetitorScan $scan = null): FetchResult
@@ -68,9 +81,17 @@ class CompetitorMonitor
             'store_id' => $store->id, 'type' => 'competitor_scan', 'status' => 'running', 'started_at' => now(),
         ]);
 
-        $totals = ['scanned' => 0, 'added' => 0, 'updated' => 0, 'price_changes' => 0, 'failed' => 0, 'unsupported' => 0];
+        $totals = ['scanned' => 0, 'added' => 0, 'updated' => 0, 'price_changes' => 0, 'failed' => 0, 'unsupported' => 0, 'queued' => 0];
 
         foreach ($store->competitors()->where('is_active', true)->get() as $competitor) {
+            // An Apify read can take minutes; each social account gets its own
+            // job so a batch of them cannot outlast this one.
+            if ($this->fetcherFor($competitor) instanceof ApifySocialFetcher) {
+                $this->scans->handOff($this->scans->reserve($competitor));
+                $totals['queued']++;
+
+                continue;
+            }
             $result = $this->scan($competitor);
 
             match ($result->status) {
@@ -85,7 +106,7 @@ class CompetitorMonitor
         }
 
         $run->update([
-            'status' => $totals['failed'] > 0 && $totals['scanned'] === 0 ? 'failed' : 'completed',
+            'status' => $totals['failed'] > 0 && $totals['scanned'] === 0 && $totals['queued'] === 0 ? 'failed' : 'completed',
             'stats' => $totals,
             'finished_at' => now(),
         ]);

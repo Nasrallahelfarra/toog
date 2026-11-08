@@ -13,7 +13,7 @@ export type CompetitorScanData = {
     status: 'queued' | 'running' | 'completed' | 'failed';
     stage: string;
     progress: number;
-    metrics: { pages?: number; products?: number } | null;
+    metrics: { pages?: number; products?: number; posts?: number } | null;
     error_code: string | null;
     error: string | null;
     created_at: string;
@@ -26,13 +26,17 @@ export const isScanning = (scan: CompetitorScanData | null) =>
 
 export function CompetitorScanProgress({
     scan,
+    social = false,
     compact = false,
 }: {
     scan: CompetitorScanData;
+    /** Social accounts are read through Apify, with their own stage names. */
+    social?: boolean;
     compact?: boolean;
 }) {
     const { t, number, tr } = useI18n();
     const c = t.market.competitors.scanProgress;
+    const stageLabels = social ? c.socialStages : c.stages;
     const active = isScanning(scan);
     const [now, setNow] = useState(() => Date.now());
     useEffect(() => {
@@ -62,7 +66,7 @@ export function CompetitorScanProgress({
               ? c.completed
               : scan.status === 'failed'
                 ? c.failed
-                : (c.stages[scan.stage as (typeof stages)[number]] ??
+                : (stageLabels[scan.stage as (typeof stages)[number]] ??
                   c.running);
     const Icon = active
         ? LoaderCircle
@@ -92,14 +96,26 @@ export function CompetitorScanProgress({
             </div>
             <Progress value={scan.progress} aria-label={c.title} />
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                <span>
-                    {tr(c.pages, { count: number(scan.metrics?.pages ?? 0) })}
-                </span>
-                <span>
-                    {tr(c.products, {
-                        count: number(scan.metrics?.products ?? 0),
-                    })}
-                </span>
+                {social ? (
+                    <span>
+                        {tr(c.posts, {
+                            count: number(scan.metrics?.posts ?? 0),
+                        })}
+                    </span>
+                ) : (
+                    <>
+                        <span>
+                            {tr(c.pages, {
+                                count: number(scan.metrics?.pages ?? 0),
+                            })}
+                        </span>
+                        <span>
+                            {tr(c.products, {
+                                count: number(scan.metrics?.products ?? 0),
+                            })}
+                        </span>
+                    </>
+                )}
                 {!compact && (
                     <span>{tr(c.elapsed, { seconds: number(elapsed) })}</span>
                 )}
@@ -126,7 +142,7 @@ export function CompetitorScanProgress({
                                     <StepIcon
                                         className={`size-3.5 ${current ? 'animate-spin' : ''}`}
                                     />
-                                    {c.stages[stage]}
+                                    {stageLabels[stage]}
                                 </li>
                             );
                         })}

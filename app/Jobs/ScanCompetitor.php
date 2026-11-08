@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\CompetitorScan;
 use App\Services\Market\CompetitorMonitor;
 use App\Services\Market\CompetitorScanState;
+use App\Services\Market\Fetchers\FetchResult;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\TimeoutExceededException;
@@ -33,7 +34,12 @@ class ScanCompetitor implements ShouldQueue
 
             return;
         }
-        $monitor->scan($scan->competitor, $scan);
+        $result = $monitor->scan($scan->competitor, $scan);
+
+        // Social posts feed the store's trends; refresh them once read.
+        if ($result->status === FetchResult::OK && $scan->competitor->isSocial()) {
+            DetectTrends::dispatch($scan->competitor->store_id);
+        }
     }
 
     public function failed(?Throwable $exception): void

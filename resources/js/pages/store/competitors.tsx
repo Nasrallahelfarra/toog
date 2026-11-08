@@ -71,7 +71,7 @@ type Props = {
     } | null;
 };
 
-const SOCIAL = ['instagram', 'tiktok', 'snapchat'];
+const SOCIAL = ['instagram', 'tiktok', 'facebook', 'snapchat'];
 
 function ScanPoll({ onFailure }: { onFailure: (failed: boolean) => void }) {
     usePoll(2000, {
@@ -379,9 +379,11 @@ function CompetitorCard({
                         )}
                         {competitor.auto_scan
                             ? c.autoScan
-                            : competitor.is_social
-                              ? c.needsApi
-                              : c.manualOnly}
+                            : competitor.scan_blocker === 'needs_apify'
+                              ? c.needsApify
+                              : competitor.is_social
+                                ? c.needsApi
+                                : c.manualOnly}
                     </span>
                 </div>
 
@@ -431,7 +433,11 @@ function CompetitorCard({
                 </div>
 
                 {competitor.scan && competitor.scan.status !== 'completed' && (
-                    <CompetitorScanProgress scan={competitor.scan} compact />
+                    <CompetitorScanProgress
+                        scan={competitor.scan}
+                        social={competitor.is_social}
+                        compact
+                    />
                 )}
                 <Button variant="outline" size="sm" onClick={onOpen}>
                     <Eye className="size-4" />
@@ -496,7 +502,7 @@ function CompetitorCard({
                             </Button>
                         }
                     />
-                    {(competitor.url || competitor.handle) && (
+                    {competitor.profile_url && (
                         <Button
                             size="icon"
                             variant="ghost"
@@ -504,7 +510,7 @@ function CompetitorCard({
                             asChild
                         >
                             <a
-                                href={competitor.url ?? '#'}
+                                href={competitor.profile_url}
                                 target="_blank"
                                 rel="noreferrer"
                                 aria-label={t.common.open}
@@ -637,6 +643,9 @@ function CompetitorDialog({
                                         form.setData('handle', e.target.value)
                                     }
                                 />
+                                <p className="text-xs leading-relaxed text-muted-foreground">
+                                    {c.handleHint}
+                                </p>
                                 <InputError message={form.errors.handle} />
                             </div>
                         )}

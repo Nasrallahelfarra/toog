@@ -94,6 +94,7 @@ export const dashboard = {
         shopify: 'Shopify',
         instagram: 'إنستغرام',
         tiktok: 'تيك توك',
+        facebook: 'فيسبوك',
         snapchat: 'سناب شات',
     },
     trendTypes: {
