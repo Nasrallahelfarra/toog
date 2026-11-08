@@ -107,6 +107,8 @@ type Props = {
     trends: Trend[];
     categories: string[];
     requests: DesignRequestRow[];
+    /** Set while editing: only requests after this id are listed. */
+    since: number | null;
     outputTypes: OutputType[];
     ideas?: Idea[];
     /** A design opened for editing from the library. */
@@ -124,7 +126,7 @@ const outputIcons: Record<OutputType, LucideIcon> = {
 
 const ratios = ['1:1', '4:5', '9:16', '16:9'];
 
-export default function Studio({ source, prefillPrompt, brand, trends, categories, requests, outputTypes, ideas, refine }: Props) {
+export default function Studio({ source, prefillPrompt, brand, trends, categories, requests, since, outputTypes, ideas, refine }: Props) {
     const { t, tr, field, relative, locale } = useI18n();
     const { label } = useVocabulary();
     const s = t.studio;
@@ -144,6 +146,7 @@ export default function Studio({ source, prefillPrompt, brand, trends, categorie
         product_recommendation_id: source?.recovery_id ?? (null as number | null),
         recommendation_key: source?.action ?? '',
         source_image: null as File | null,
+        since,
     });
 
     const appendToPrompt = (text: string) => form.setData('prompt', form.data.prompt ? `${form.data.prompt.trim()} ${text}` : text);
@@ -435,10 +438,21 @@ export default function Studio({ source, prefillPrompt, brand, trends, categorie
 
                     {/* Requests with variants side by side (FR-4.9) */}
                     <div className="space-y-4">
-                        <h2 className="text-[15px] font-semibold">{s.requests.title}</h2>
+                        <h2 className="text-[15px] font-semibold">{since ? s.requests.workspaceTitle : s.requests.title}</h2>
+                        {since && (
+                            <p className="bg-muted/50 text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-4 py-3 text-xs leading-relaxed">
+                                <span>{s.requests.workspaceHint}</span>
+                                <Link href="/store/library" className="text-primary hover:underline">
+                                    {s.openLibrary}
+                                </Link>
+                                <Link href="/store/studio" className="text-primary hover:underline">
+                                    {s.requests.showAll}
+                                </Link>
+                            </p>
+                        )}
                         {requests.length === 0 ? (
                             <div className="bg-card rounded-2xl border">
-                                <EmptyState icon={WandSparkles} title={s.requests.empty} />
+                                <EmptyState icon={WandSparkles} title={since ? s.requests.workspaceEmpty : s.requests.empty} />
                             </div>
                         ) : (
                             requests.map((request) => <RequestCard key={request.id} request={request} relative={relative} />)

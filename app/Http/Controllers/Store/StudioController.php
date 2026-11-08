@@ -79,6 +79,12 @@ class StudioController extends Controller
             ? Design::query()->where('store_id', $store->id)->find($request->integer('refine'))
             : null;
 
+        // Opening the studio to edit something starts a clean workspace: the
+        // earlier results stay in the library, and only requests newer than
+        // `since` (or still generating) are listed. Submits and polls keep it.
+        $since = $request->integer('since') ?: (($source || $refine)
+            ? (int) DesignRequest::query()->where('store_id', $store->id)->max('id') : 0);
+
         return Inertia::render('store/studio/index', [
             // A prompt handed over from another page, e.g. a market trend.
             'prefillPrompt' => $request->string('prompt')->limit(500)->toString() ?: null,
@@ -87,8 +93,10 @@ class StudioController extends Controller
             'trends' => Trend::query()->where('store_id', $store->id)->where('status', 'rising')->orderByDesc('momentum')->take(8)
                 ->get(['id', 'type', 'value', 'name_ar', 'name_en', 'momentum', 'saturation', 'in_catalog']),
             'categories' => Product::query()->where('store_id', $store->id)->whereNotNull('category')->distinct()->pluck('category'),
+            'since' => $since ?: null,
             'requests' => DesignRequest::query()
                 ->where('store_id', $store->id)
+                ->when($since, fn ($q) => $q->where(fn ($q) => $q->where('id', '>', $since)->orWhereIn('status', ['pending', 'processing'])))
                 ->with(['designs' => fn ($q) => $q->orderBy('id'), 'parentDesign'])
                 ->latest()
                 ->orderByDesc('id')
@@ -123,6 +131,7 @@ class StudioController extends Controller
             'product_recommendation_id' => ['nullable', 'integer', 'prohibits:evaluation_id'],
             'recommendation_key' => ['required_with:product_recommendation_id', 'nullable', 'string', 'max:30'],
             'source_image' => ['nullable', 'image', 'max:8192'],
+            'since' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $evaluation = ! empty($data['evaluation_id'])
@@ -166,7 +175,7 @@ class StudioController extends Controller
         Activity::log('design.requested', $designRequest, ['type' => $designRequest->type, 'variants' => $designRequest->variants_count]);
         Inertia::flash('toast', ['type' => 'info', 'message' => __('mojo.design_queued')]);
 
-        return to_route('store.studio.index');
+        return $this->toWorkspace($request, $designRequest, $designRequest->type === 'modification');
     }
 
     /**
@@ -186,6 +195,7 @@ class StudioController extends Controller
             'output_type' => ['nullable', Rule::in(DesignRequest::OUTPUT_TYPES)],
             'aspect_ratio' => ['nullable', Rule::in(['1:1', '4:5', '9:16', '16:9', '3:4'])],
             'variants_count' => ['nullable', 'integer', 'min:1', 'max:2'],
+            'since' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $lines = $refinements->lines($data['presets'] ?? [], $data['color'] ?? null, $data['instruction'] ?? null);
@@ -223,7 +233,19 @@ class StudioController extends Controller
         Activity::log('design.refined', $designRequest, ['parent' => $design->id, 'presets' => $data['presets'] ?? [], 'color' => $data['color'] ?? null]);
         Inertia::flash('toast', ['type' => 'info', 'message' => __('mojo.design_queued')]);
 
-        return to_route('store.studio.index');
+        return $this->toWorkspace($request, $designRequest, true);
+    }
+
+    /**
+     * Back to the studio after a submit. An edit opens a clean workspace
+     * starting at its request, unless one is already open; a new idea from
+     * the plain studio keeps the full history.
+     */
+    private function toWorkspace(Request $request, DesignRequest $designRequest, bool $edit): RedirectResponse
+    {
+        $since = $request->integer('since') ?: ($edit ? $designRequest->id - 1 : 0);
+
+        return to_route('store.studio.index', $since ? ['since' => $since] : []);
     }
 
     public function retry(DesignRequest $designRequest): RedirectResponse

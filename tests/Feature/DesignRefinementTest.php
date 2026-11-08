@@ -42,7 +42,7 @@ class DesignRefinementTest extends TestCase
     {
         $this->actingAs($this->store->owner)->post("/store/designs/{$this->design->id}/refine", [
             'presets' => ['clean_background', 'studio_light'], 'color' => 'gold', 'instruction' => 'Keep the sleeves plain', 'variants_count' => 2,
-        ])->assertSessionHasNoErrors()->assertRedirect('/store/studio');
+        ])->assertSessionHasNoErrors()->assertRedirect('/store/studio?since='.$this->design->design_request_id);
 
         $edit = DesignRequest::query()->where('type', DesignRequest::REFINEMENT)->sole();
         $this->assertSame($this->design->id, $edit->parent_design_id);
@@ -67,6 +67,30 @@ class DesignRefinementTest extends TestCase
             ->where('requests.0.type', 'refinement')
             ->where('requests.0.parent.id', $this->design->id)
             ->where('requests.0.parent.title', 'Abaya · 1'));
+    }
+
+    public function test_editing_opens_a_clean_workspace_without_earlier_finished_designs(): void
+    {
+        $owner = $this->store->owner;
+        $running = DesignRequest::query()->create(['store_id' => $this->store->id, 'type' => 'new_idea', 'prompt' => 'Kaftan',
+            'output_type' => 'product_photo', 'aspect_ratio' => '1:1', 'variants_count' => 1, 'status' => 'processing']);
+
+        // The plain studio keeps the full history.
+        $this->actingAs($owner)->get('/store/studio')->assertInertia(fn (Assert $page) => $page
+            ->where('since', null)->has('requests', 2));
+
+        // Opening a design to edit hides finished work; anything still generating stays.
+        $this->get("/store/studio?refine={$this->design->id}")->assertInertia(fn (Assert $page) => $page
+            ->where('since', $running->id)->has('requests', 1)->where('requests.0.id', $running->id));
+
+        // The edit's own request shows after the submit, and polls keep the workspace.
+        $this->post("/store/designs/{$this->design->id}/refine", ['instruction' => 'Shorten the sleeves', 'since' => $running->id])
+            ->assertRedirect("/store/studio?since={$running->id}");
+        $edit = DesignRequest::query()->where('type', DesignRequest::REFINEMENT)->sole();
+        $edit->update(['status' => 'completed']);
+        $running->update(['status' => 'completed']);
+        $this->get("/store/studio?since={$running->id}")->assertInertia(fn (Assert $page) => $page
+            ->has('requests', 1)->where('requests.0.id', $edit->id));
     }
 
     public function test_an_edit_needs_at_least_one_change_and_known_presets(): void
