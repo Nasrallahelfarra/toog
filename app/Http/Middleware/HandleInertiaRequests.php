@@ -24,13 +24,19 @@ class HandleInertiaRequests extends Middleware
     protected $rootView = 'app';
 
     /**
-     * Determines the current asset version.
+     * Determines the current asset version from the Vite build itself.
+     *
+     * Inertia's default hashes ASSET_URL when it is set, as on Laravel Cloud,
+     * and that never changes between deploys. Open tabs would then miss a new
+     * build and request page chunks the deploy already removed (404).
      *
      * @see https://inertiajs.com/asset-versioning
      */
     public function version(Request $request): ?string
     {
-        return parent::version($request);
+        $manifest = public_path('build/manifest.json');
+
+        return is_file($manifest) ? hash_file('xxh128', $manifest) : parent::version($request);
     }
 
     /**

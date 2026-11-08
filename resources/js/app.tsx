@@ -39,5 +39,23 @@ void createInertiaApp({
     },
 });
 
+// A page chunk can vanish when a deploy replaces the build under an open
+// tab. Reload once to pick up the new build instead of failing silently;
+// the timestamp stops a loop if the chunk is genuinely missing.
+window.addEventListener('vite:preloadError', (event) => {
+    const key = 'toog:chunk-reload';
+    let last = 0;
+    try {
+        last = Number(sessionStorage.getItem(key) ?? 0);
+        sessionStorage.setItem(key, String(Date.now()));
+    } catch {
+        // Storage can be blocked; reloading once is still the right call.
+    }
+    if (Date.now() - last > 10_000) {
+        event.preventDefault();
+        window.location.reload();
+    }
+});
+
 // This will set light / dark mode on load...
 initializeTheme();
