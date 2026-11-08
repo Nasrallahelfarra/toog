@@ -60,6 +60,7 @@ type Props = {
     platforms: string[];
     categories: string[];
     selected: CompetitorDetails | null;
+    socialPosts: { limit: number; max: number };
     lastScan: {
         status: string;
         stats: {
@@ -95,6 +96,7 @@ export default function Competitors({
     platforms,
     categories,
     selected,
+    socialPosts,
     lastScan,
 }: Props) {
     const { t, tr, relative, number } = useI18n();
@@ -271,12 +273,21 @@ export default function Competitors({
                 )}
             </div>
 
-            <div className="flex items-start gap-2.5 rounded-xl bg-info-soft/60 px-4 py-3 text-xs leading-relaxed text-info">
-                <ScanLine className="mt-0.5 size-4 shrink-0" />
-                <span>
-                    <strong className="font-semibold">{c.coverage}: </strong>
-                    {c.coverageHint}
-                </span>
+            <div className="flex flex-col gap-3 rounded-xl bg-info-soft/60 px-4 py-3 text-xs leading-relaxed text-info lg:flex-row lg:items-center">
+                <div className="flex flex-1 items-start gap-2.5">
+                    <ScanLine className="mt-0.5 size-4 shrink-0" />
+                    <span>
+                        <strong className="font-semibold">
+                            {c.coverage}:{' '}
+                        </strong>
+                        {c.coverageHint}
+                    </span>
+                </div>
+                <SocialPostsLimit
+                    key={socialPosts.limit}
+                    limit={socialPosts.limit}
+                    max={socialPosts.max}
+                />
             </div>
 
             {competitors.length === 0 ? (
@@ -318,6 +329,60 @@ export default function Competitors({
                 onClose={() => setEditing(null)}
             />
         </PageBody>
+    );
+}
+
+/** How many of each social account's latest posts a scan reads. */
+function SocialPostsLimit({ limit, max }: { limit: number; max: number }) {
+    const { t } = useI18n();
+    const c = t.market.competitors;
+    const form = useForm({ posts_limit: limit });
+    const submit = (e: FormEvent) => {
+        e.preventDefault();
+        form.put('/store/competitors/social-settings', {
+            preserveScroll: true,
+        });
+    };
+
+    return (
+        <form
+            onSubmit={submit}
+            className="flex shrink-0 flex-col gap-1 text-foreground"
+        >
+            <div className="flex items-center gap-2">
+                <Label htmlFor="posts_limit" className="text-xs">
+                    {c.postsLimit}
+                </Label>
+                <Input
+                    id="posts_limit"
+                    type="number"
+                    min={1}
+                    max={max}
+                    required
+                    value={form.data.posts_limit}
+                    onChange={(e) =>
+                        form.setData('posts_limit', Number(e.target.value))
+                    }
+                    className="num h-8 w-20 bg-card text-center"
+                    aria-describedby="posts_limit_hint"
+                />
+                <Button
+                    type="submit"
+                    size="sm"
+                    variant="outline"
+                    className="h-8"
+                    disabled={
+                        form.processing || form.data.posts_limit === limit
+                    }
+                >
+                    {t.common.save}
+                </Button>
+            </div>
+            <p id="posts_limit_hint" className="text-muted-foreground">
+                {c.postsLimitHint}
+            </p>
+            <InputError message={form.errors.posts_limit} />
+        </form>
     );
 }
 

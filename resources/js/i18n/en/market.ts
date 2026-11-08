@@ -322,6 +322,9 @@ export const market: typeof ar = {
         manualOnly: 'Needs a data provider',
         needsApi: 'Not supported yet',
         needsApify: 'Needs Apify',
+        postsLimit: 'Posts per scan',
+        postsLimitHint:
+            'The latest posts of each social account. A higher number gives a fuller analysis and uses more Apify credit.',
         apifyMissing:
             'Instagram, TikTok and Facebook posts are read through Apify. Add APIFY_TOKEN to the server settings to start scanning this account.',
         handleHint:

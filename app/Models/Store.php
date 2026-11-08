@@ -81,6 +81,14 @@ class Store extends Model
         return Arr::get($this->settings ?? [], $key, PlatformSetting::storeDefault($key));
     }
 
+    /** Latest posts read per social competitor scan: the store's choice, else the server default. */
+    public function socialPostsLimit(): int
+    {
+        $limit = (int) ($this->settings['social_posts_limit'] ?? config('mojo.apify.posts_limit'));
+
+        return max(1, min((int) config('mojo.apify.max_posts_limit'), $limit));
+    }
+
     /**
      * Criteria weights (FR-3.3), normalised so they always sum to 100.
      *

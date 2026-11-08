@@ -209,6 +209,30 @@ class ApifySocialScanTest extends TestCase
         $this->assertSame(0, SocialPost::query()->count());
     }
 
+    public function test_the_store_chooses_how_many_latest_posts_a_scan_reads(): void
+    {
+        config(['mojo.apify.posts_limit' => 15]);
+        [$owner, $store] = $this->ownerWithStore();
+        $this->actingAs($owner)->get('/store/competitors')->assertInertia(fn (Assert $page) => $page
+            ->where('socialPosts.limit', 15)->where('socialPosts.max', 100));
+
+        $this->put('/store/competitors/social-settings', ['posts_limit' => 0])->assertSessionHasErrors('posts_limit');
+        $this->put('/store/competitors/social-settings', ['posts_limit' => 101])->assertSessionHasErrors('posts_limit');
+        $this->put('/store/competitors/social-settings', ['posts_limit' => 1])->assertSessionHasNoErrors()->assertRedirect();
+        $this->assertSame(1, $store->fresh()->socialPostsLimit());
+        $this->assertDatabaseHas('activity_logs', ['action' => 'settings.updated']);
+
+        $competitor = $this->competitor($store, 'instagram');
+        $this->fakeInstagram();
+        app(CompetitorMonitor::class)->scan($competitor);
+
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'instagram-post-scraper')
+            && str_contains($r->url(), 'maxItems=1') && $r['resultsLimit'] === 1);
+        // Apify may still return more; only the latest one is kept.
+        $this->assertSame(1, SocialPost::query()->where('competitor_id', $competitor->id)->count());
+        $this->assertTrue($competitor->fresh()->analysis['crawl']['limited']);
+    }
+
     public function test_a_batch_scan_hands_each_social_account_its_own_job(): void
     {
         Queue::fake();

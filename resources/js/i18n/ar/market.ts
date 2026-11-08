@@ -314,6 +314,9 @@ export const market = {
         manualOnly: 'يحتاج مزوّد بيانات',
         needsApi: 'غير مدعوم حاليًا',
         needsApify: 'يحتاج ربط Apify',
+        postsLimit: 'عدد المنشورات في كل فحص',
+        postsLimitHint:
+            'آخر منشورات كل حساب تواصل. رقم أكبر يعني تحليلًا أشمل واستهلاكًا أكبر من رصيد Apify.',
         apifyMissing:
             'نقرأ منشورات إنستغرام وتيك توك وفيسبوك عبر Apify. أضف APIFY_TOKEN في إعدادات السيرفر ليبدأ فحص هذا الحساب.',
         handleHint:
