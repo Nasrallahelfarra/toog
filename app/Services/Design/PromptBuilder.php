@@ -39,12 +39,19 @@ class PromptBuilder
             ]);
         }
         if ($request->product_recommendation_id) {
+            // The recommendation redesigns the product; the photo stays as it
+            // is unless the merchant picked another presentation in the studio.
+            $photo = $request->output_type === 'product_photo'
+                ? 'Keep the photograph itself exactly as it is: the same background, lighting, camera angle, framing, and the same model or mannequin, pose and styling.'
+                : 'Present the redesigned product as '.(self::FRAMING[$request->output_type] ?? self::FRAMING['product_photo']).'.';
+
             return implode("\n", [
-                'Edit the supplied reference image to create '.(self::FRAMING[$request->output_type] ?? self::FRAMING['product_photo']).'.',
-                'The reference is the exact catalog product. Preserve its identity, geometry, construction, brand marks and every detail not explicitly selected for editing.',
-                'Apply only the following expert recommendation, as reviewed by the merchant:',
+                'Redesign the product shown in the supplied reference image, the exact catalog product, by applying the following expert design recommendation, as reviewed by the merchant:',
                 trim($request->prompt),
-                'Do not add unrelated trends, motifs, palette changes, text or watermarks. Produce a high-quality commercial product image.',
+                'The recommendation changes the design of the product itself (its shape, structure and details). Apply it fully, even where it changes the silhouette, cut, neckline, sleeves, length or construction.',
+                'Keep the brand marks and every design detail the recommendation does not mention.',
+                $photo,
+                'Saudi market: modest and culturally respectful. Do not add unrelated trends, motifs, text or watermarks. Photorealistic commercial e-commerce quality.',
             ]);
         }
         $brand = $store->brand_guide ?? [];

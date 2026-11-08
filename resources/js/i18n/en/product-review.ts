@@ -36,8 +36,8 @@ export const productReview: typeof ar = {
         'These recommendations and hypotheses need testing. They do not guarantee sales or measure actual customer response. Coverage is limited to available data.',
     recommendations: 'Choose your improvements',
     selectionHint:
-        'Only selected visual improvements are applied to a new version. Your original is kept.',
-    visual: 'Image improvement',
+        'Only selected design changes are applied to a new version. Your original is kept.',
+    visual: 'Design change',
     business: 'Merchant action',
     priorities: {
         high: 'High priority',
