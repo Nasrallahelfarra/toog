@@ -1,4 +1,4 @@
-import { useForm } from '@inertiajs/react';
+import { useForm, usePage } from '@inertiajs/react';
 import { Check, Eraser, Gem, LayoutTemplate, Ruler, ScanLine, Shapes, Shirt, Sofa, Sun, WandSparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
@@ -39,12 +39,15 @@ export function DesignEditor({ design, open, onOpenChange }: { design: DesignIte
     const e = t.studio.editor;
     const { options } = useVocabulary();
     const reduced = useReducedMotion();
-    const form = useForm<{ presets: Preset[]; color: string; instruction: string; aspect_ratio: string; variants_count: number }>({
+    // Keep the studio's clean editing workspace, when one is open, after this edit.
+    const since = usePage<{ since?: number | null }>().props.since ?? null;
+    const form = useForm<{ presets: Preset[]; color: string; instruction: string; aspect_ratio: string; variants_count: number; since: number | null }>({
         presets: [],
         color: '',
         instruction: '',
         aspect_ratio: design.aspect_ratio,
         variants_count: 1,
+        since,
     });
     const colors = options('colors');
     const chosenColor = colors.find((c) => c.value === form.data.color);

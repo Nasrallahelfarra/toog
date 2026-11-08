@@ -68,6 +68,11 @@ export const studio: typeof ar = {
     requests: {
         title: 'Recent requests',
         empty: 'No requests yet. Start a design request or pick a suggested idea.',
+        workspaceTitle: 'Current edit',
+        workspaceHint:
+            'Only this edit’s requests are shown here. Your earlier finished designs are kept in the library.',
+        workspaceEmpty: 'Review the instructions, then choose “Generate designs”; the new version appears here.',
+        showAll: 'Show all requests',
         status: {
             pending: 'Queued',
             processing: 'Generating',
