@@ -151,6 +151,15 @@ export type ReviewRecommendation = {
     effect: ReviewText;
     instruction: ReviewText;
     source_ids: string[];
+    /** A slow-mover's new design, as a spec (absent on older recommendations). */
+    design?: DesignSpec | null;
+};
+export type DesignSpec = {
+    cut: ReviewText;
+    style: string | null;
+    pattern: string | null;
+    colors: string[];
+    details: ReviewText;
 };
 /** Ready-to-run marketing plan attached to a slow-mover recommendation. */
 export type MarketingPlan = {

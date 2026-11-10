@@ -11,7 +11,10 @@ use App\Services\Evaluation\EvaluationEngine;
 use App\Services\Evaluation\ProductReview;
 use App\Services\Evaluation\StoreContext;
 use App\Services\Market\PublicWebClient;
+use App\Support\Vocabulary;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -65,8 +68,8 @@ class ProductRecovery
             }
             $answer = $this->ai->json(
                 operation: 'product_recovery', store: $store,
-                system: $this->role($snapshot['performance'] ?? null).' Recommend practical actions for this particular product toward the goal in the context. Explain likely causes as hypotheses, not proven causes. Do not assume redesign is necessary. When an observed issue in the design of the product itself warrants it and an image is available, provide THREE distinct alternative design directions for the product itself (for apparel, the garment, e.g. the dress): the merchant will choose ONE, not combine them. Each direction must be a complete standalone redesign or modification of the product, grounded in the product seen in the supplied image. Work on its form and structure: silhouette and cut, neckline, sleeves, length and hem, waist and fit lines, layers, closures, colour, pattern/print, embroidery, embellishment and trims. Never suggest changes to the photo or the model (background, lighting, framing, camera angle, retouching, model, pose, styling, props or scene). Explain the design change, its impact on how the product looks and how it may help a shopper find it appealing or trust it. Keep each design wearable, modest for the Saudi audience and realistic to produce. Do not promise conversion gains or invent features. Preserve brand marks. Business actions should include a concrete next step and how to assess it.'.$this->reviewer->instructions().$this->marketing->instructions(),
-                prompt: json_encode($context, JSON_UNESCAPED_UNICODE)."\nImage available: ".($image ? 'yes' : 'no')."\nFor each visual alternative: reason describes the observed issue in the product's design and the intended design change; effect explains the plausible benefit for shopper understanding, trust or purchase consideration, as a hypothesis; instruction contains ONLY the exact standalone change to the product's design (what to change in its shape, structure or details), never a change to the photo or the model. Provide three genuinely distinct design directions when a design change is warranted, before any business actions. Use concise narrative fields without repeating the same explanation.",
+                system: $this->role($snapshot['performance'] ?? null).' Recommend practical actions for this particular product toward the goal in the context. Explain likely causes as hypotheses, not proven causes. '.$this->designBrief($snapshot['performance'] ?? null).' Business actions should include a concrete next step and how to assess it.'.$this->reviewer->instructions().$this->marketing->instructions(),
+                prompt: json_encode($context, JSON_UNESCAPED_UNICODE)."\nImage available: ".($image ? 'yes' : 'no')."\nFor each new design (kind=visual) also fill design, the new design's spec (what it WILL look like, not the current photo): cut is the new cut and silhouette (shape, length and hem, waist and fit, sleeves, neckline); style is the allowed style key the new design follows; pattern is the allowed pattern key of the new design; colors are one to four allowed colour keys of the new design; details are the new finishing touches (embroidery, embellishment, trims, layers, closures). Business actions set design to null. For each new design: title names the new design in a few words; reason says what in the current design holds it back or which selling signal the new design follows (category best sellers, occasions, the product's own sales and returns) and what changes; effect explains why it may look more beautiful and be more likely to catch a shopper's eye and sell, phrased as a hypothesis for shopper understanding, trust or purchase consideration; instruction contains ONLY the exact standalone change to the product's design that matches its design spec (cut, style, colours, pattern and details to apply), never a change to the photo or the model. When an image is available, give exactly three genuinely distinct new designs first, then at most three business actions. Use concise narrative fields without repeating the same explanation.",
                 schema: $this->schema(), fallback: fn () => [],
                 images: $image ? [['mime' => $image['mime'], 'data' => base64_encode($image['bytes'])]] : [], userId: $run->user_id, timeoutSeconds: 120,
             );
@@ -75,6 +78,7 @@ class ProductRecovery
             }
             $review = $this->reviewer->normalize($answer->data, $answer->fromModel, (bool) $image, $context);
             if ($review['status'] === 'available') {
+                $review['recommendations'] = $this->withDesigns($review['recommendations'], (array) ($answer->data['recommendations'] ?? []), (bool) $image);
                 $review['marketing_plan'] = $this->marketing->normalize($answer->data['marketing_plan'] ?? null);
             }
             ProductRecommendation::query()->whereKey($run->id)->where('status', 'processing')->update([
@@ -98,6 +102,20 @@ class ProductRecovery
             : 'You are a product growth specialist. Review a catalog product using its actual sales, stock, returns, price and store evidence.';
     }
 
+    /**
+     * New designs are always part of the review when the product can be
+     * seen: the merchant wants fresh, more sellable versions of the product,
+     * not only a fix for an observed flaw.
+     */
+    private function designBrief(?string $class): string
+    {
+        $purpose = $class === Product::WINNER
+            ? 'This product already sells well: the new designs are extra variants to extend the line beside the original, never replacements of it.'
+            : 'They are new versions of this product that could look more beautiful and be more likely to sell than the current one.';
+
+        return 'When an image is available, ALWAYS propose THREE distinct new design directions for the product itself (for apparel, the garment, e.g. the dress), even when the current design has no clear flaw; this review requires them regardless of any general rule that recommendations are optional. '.$purpose.' The merchant will choose ONE, not combine them. Each direction must be a complete standalone redesign of the product seen in the supplied image: keep what already works and change its form and structure: silhouette and cut, neckline, sleeves, length and hem, waist and fit lines, layers, closures, colour, pattern/print, embroidery, embellishment and trims. Ground each direction in the evidence: what sells in the category (market_context.category_best_sellers colours, patterns and styles, and the best sellers price), the product\'s own sales and returns, upcoming occasions, and what is observed in the image; state which signal it follows, as a hypothesis. Make the three genuinely different, for example one refined version close to the original, one following what sells in the category, and one bolder occasion piece. Never suggest changes to the photo or the model (background, lighting, framing, camera angle, retouching, model, pose, styling, props or scene). Explain the design change, how it changes the look and why a shopper may find it more appealing or trust it more. Keep each design wearable, modest for the Saudi audience and realistic to produce. Do not promise conversion gains or invent features. Preserve brand marks.';
+    }
+
     /** What the recommendation should achieve for the product's class. */
     private function goal(?string $class): string
     {
@@ -118,10 +136,57 @@ class ProductRecovery
     private function schema(): array
     {
         $schema = $this->reviewer->schema();
+        $pair = $this->reviewer->object(['ar' => ['type' => 'string'], 'en' => ['type' => 'string']]);
+        $item = &$schema['properties']['recommendations']['items'];
+        $item['properties']['design'] = ['type' => ['object', 'null'], 'properties' => [
+            'cut' => $pair,
+            'style' => ['type' => ['string', 'null'], 'enum' => [...array_keys(Vocabulary::styles()), null]],
+            'pattern' => ['type' => ['string', 'null'], 'enum' => [...array_keys(Vocabulary::patterns()), null]],
+            'colors' => ['type' => 'array', 'maxItems' => 4, 'items' => ['type' => 'string', 'enum' => array_keys(Vocabulary::colors())]],
+            'details' => $pair,
+        ], 'required' => ['cut', 'style', 'pattern', 'colors', 'details']];
+        $item['required'][] = 'design';
+        unset($item);
         $schema['properties']['marketing_plan'] = $this->marketing->schema(fn (array $properties) => $this->reviewer->object($properties));
         $schema['required'][] = 'marketing_plan';
 
         return $schema;
+    }
+
+    /**
+     * Attach each new design's spec (cut, style, pattern, colours, details)
+     * to its recommendation. The reviewer keeps the model's order and only
+     * drops visual items when no image was seen, so indexes still match.
+     *
+     * @param  list<array<string, mixed>>  $recommendations
+     * @param  array<int, mixed>  $raw
+     * @return list<array<string, mixed>>
+     */
+    private function withDesigns(array $recommendations, array $raw, bool $hasImage): array
+    {
+        return array_map(fn (array $item, int $i) => [...$item,
+            'design' => $hasImage && $item['kind'] === 'visual' ? $this->design($raw[$i]['design'] ?? null) : null,
+        ], $recommendations, array_keys($recommendations));
+    }
+
+    /** @return array<string, mixed>|null */
+    private function design(mixed $design): ?array
+    {
+        $rules = ['cut.ar' => 'required|string|max:800', 'cut.en' => 'required|string|max:800',
+            'details.ar' => 'required|string|max:800', 'details.en' => 'required|string|max:800'];
+        if (! is_array($design) || Validator::make($design, $rules)->fails()) {
+            return null;
+        }
+        $style = $design['style'] ?? null;
+        $pattern = $design['pattern'] ?? null;
+
+        return [
+            'cut' => Arr::only($design['cut'], ['ar', 'en']),
+            'style' => is_string($style) && array_key_exists($style, Vocabulary::styles()) ? $style : null,
+            'pattern' => is_string($pattern) && array_key_exists($pattern, Vocabulary::patterns()) ? $pattern : null,
+            'colors' => array_slice(array_values(array_unique(array_intersect(array_filter((array) ($design['colors'] ?? []), 'is_string'), array_keys(Vocabulary::colors())))), 0, 4),
+            'details' => Arr::only($design['details'], ['ar', 'en']),
+        ];
     }
 
     /** @return array{bytes: string, mime: string, extension: string}|null */

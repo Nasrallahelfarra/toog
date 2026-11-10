@@ -105,7 +105,7 @@ export const catalog: typeof ar = {
         },
         expertChecks: 'Before advising, the expert reviews:',
         checks: {
-            image: 'The product image and how it is presented',
+            image: 'Its design, with new, more appealing designs',
             price: 'Its price against its category',
             sales: 'Its sales, stock and returns',
             season: 'Upcoming occasions in the Saudi market',

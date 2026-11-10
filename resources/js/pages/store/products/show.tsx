@@ -1,4 +1,4 @@
-import { Head, Link, router, useForm, usePoll } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage, usePoll } from '@inertiajs/react';
 import {
     BarChart3,
     CalendarDays,
@@ -7,6 +7,7 @@ import {
     ImageIcon,
     ImageOff,
     Layers,
+    Loader2,
     Minus,
     Package,
     RotateCcw,
@@ -95,6 +96,8 @@ export default function ProductShow({ product, history, category, similar, recov
     const [networkError, setNetworkError] = useState(false);
     const working = recovery?.status === 'pending' || recovery?.status === 'processing';
     const categoryLabel = category.name ?? c.uncategorized;
+    // Opened from a slow-mover card: lead back to that list.
+    const fromStagnant = new URLSearchParams(usePage().url.split('?')[1] ?? '').get('from') === 'stagnant';
 
     const ask = (regenerate = false) => {
         expertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -153,13 +156,21 @@ export default function ProductShow({ product, history, category, similar, recov
             {working && <RecoveryPoll onNetwork={setNetworkError} />}
 
             <nav aria-label="breadcrumb" className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-sm">
-                <Link href="/store/catalog" className="hover:text-foreground">
-                    {c.title}
-                </Link>
-                <ChevronLeft className="size-3.5 ltr:rotate-180" />
-                <Link href={`/store/catalog?category=${encodeURIComponent(category.key)}`} className="hover:text-foreground">
-                    {categoryLabel}
-                </Link>
+                {fromStagnant ? (
+                    <Link href="/store/stagnant" className="hover:text-foreground">
+                        {t.stagnant.breadcrumb}
+                    </Link>
+                ) : (
+                    <>
+                        <Link href="/store/catalog" className="hover:text-foreground">
+                            {c.title}
+                        </Link>
+                        <ChevronLeft className="size-3.5 ltr:rotate-180" />
+                        <Link href={`/store/catalog?category=${encodeURIComponent(category.key)}`} className="hover:text-foreground">
+                            {categoryLabel}
+                        </Link>
+                    </>
+                )}
                 <ChevronLeft className="size-3.5 ltr:rotate-180" />
                 <span className="text-foreground truncate font-medium">{product.name}</span>
             </nav>
@@ -209,8 +220,8 @@ export default function ProductShow({ product, history, category, similar, recov
                     <Attributes features={product.features} />
 
                     <Button size="lg" className="w-full sm:w-auto" onClick={() => ask()} disabled={request.processing}>
-                        <Sparkles className="size-4" />
-                        {recovery?.status === 'completed' ? p.viewRecommendation : p.askExpert}
+                        {working ? <Loader2 className="size-4 motion-safe:animate-spin" /> : <Sparkles className="size-4" />}
+                        {working ? t.stagnant.pending : recovery?.status === 'completed' ? p.viewRecommendation : p.askExpert}
                     </Button>
                 </div>
             </FadeIn>
