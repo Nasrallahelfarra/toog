@@ -48,12 +48,16 @@ export const stagnant: typeof ar = {
     reset: 'Clear filters',
     performance: 'View store performance',
     request: 'Request recommendation',
-    view: 'View recommendation',
     pending: 'Preparing recommendation',
     retry: 'Request again',
-    expert: 'Product expert recommendation',
-    expertHint:
-        'A review of this product using its image, performance and available evidence.',
+    openProduct: 'View product',
+    breadcrumb: 'Slow movers',
+    recoveryStatus: {
+        none: 'No recommendation yet',
+        pending: 'Preparing recommendation',
+        completed: 'Recommendation ready',
+        failed: 'Recommendation failed',
+    },
     sending: 'Sending your request',
     sendingHint: 'Checking the request status before starting the review.',
     checkStatus: 'Check request status',
@@ -83,20 +87,26 @@ export const stagnant: typeof ar = {
     network:
         'Could not refresh the status due to a connection issue. Processing may continue; refresh the status to check.',
     waiting:
-        'You can close this window and return. The result is saved and appears automatically when ready.',
+        'You can leave this page and come back. The result is saved and appears automatically when ready.',
     saved: 'Saved recommendation',
     regenerate: 'Request new suggestions',
     regenerateHint:
         'Requests a new expert analysis and counts toward your AI usage.',
-    visualOptions: 'Suggested directions for redesigning the product',
-    chooseHint:
-        'Compare each proposed change to the product’s own design (cut, neckline, sleeves, length, details) and its benefit for the shopper, then choose one to apply. These are independent alternatives, not edits to combine.',
-    visualImpact: 'Observation and design change',
-    persuasion: 'How it may persuade the shopper',
-    choose: 'Choose this suggestion',
-    selected: 'Selected suggestion',
-    chooseFirst: 'Choose a design suggestion first',
-    apply: 'Apply selected suggestion in studio',
+    designs: 'Suggested new designs',
+    designsHint:
+        'New versions of this product that may look better and catch more shoppers, based on its image, what sells in its category and upcoming occasions. Each design is a standalone alternative; pick one and design it in the studio.',
+    designLabel: 'Design {n}',
+    designChange: 'What changes in the design',
+    spec: {
+        cut: 'New cut',
+        look: 'Style and pattern',
+        colors: 'Colours',
+        details: 'Details and finishing',
+    },
+    designWhy: 'Why this design',
+    designAppeal: 'Why it may appeal to shoppers',
+    tryDesign: 'Design this idea in the studio',
+    businessTitle: 'Business steps',
     applyHint:
         'Opens the product image and design-change instructions for you to review, then generate a version with the redesigned product while the photo and model stay the same.',
     businessStep: 'Suggested next step',

@@ -85,7 +85,8 @@ class StagnantProductsTest extends TestCase
             $context = json_decode(explode("\nImage available:", $prompt)[0], true);
             $this->assertSame('product_recovery', $operation);
             $this->assertStringContainsString('product recovery specialist', $system);
-            $this->assertStringContainsString('THREE distinct alternative design directions for the product itself', $system);
+            $this->assertStringContainsString('ALWAYS propose THREE distinct new design directions for the product itself', $system);
+            $this->assertStringContainsString('category_best_sellers', $system);
             $this->assertStringContainsString('Never suggest changes to the photo or the model', $system);
             $this->assertStringContainsString('shopper understanding, trust or purchase consideration', $prompt);
             $this->assertSame(120, $timeoutSeconds);
@@ -282,6 +283,31 @@ class StagnantProductsTest extends TestCase
         $this->assertSame($run->source_image_path, $design->source_image_path);
         $this->assertSame($run->id, $design->product_recommendation_id);
         Queue::assertPushed(GenerateDesigns::class, 1);
+    }
+
+    public function test_each_new_design_keeps_a_clean_cut_style_colour_and_details_spec(): void
+    {
+        $text = fn (string $value) => ['ar' => $value, 'en' => $value];
+        $answer = $this->review();
+        $answer['recommendations'][0]['design'] = ['cut' => $text('A-line midi with puffed sleeves'), 'style' => 'luxury', 'pattern' => 'not-a-pattern',
+            'colors' => ['dusty_pink', 'neon-green', 'gold', 'dusty_pink'], 'details' => $text('Pearl trim on the collar'), 'injected' => 'drop me'];
+        $answer['recommendations'][1]['design'] = ['cut' => $text('Should be ignored'), 'style' => 'modern', 'pattern' => null, 'colors' => [], 'details' => $text('x')];
+        $run = $this->complete($this->product(), $answer);
+
+        [$design, $business] = $run->review['recommendations'];
+        $this->assertSame(['cut' => $text('A-line midi with puffed sleeves'), 'style' => 'luxury', 'pattern' => null,
+            'colors' => ['dusty_pink', 'gold'], 'details' => $text('Pearl trim on the collar')], $design['design']);
+        $this->assertNull($business['design']);
+    }
+
+    public function test_an_incomplete_design_spec_is_dropped_without_losing_the_design(): void
+    {
+        $text = fn (string $value) => ['ar' => $value, 'en' => $value];
+        $broken = $this->review();
+        $broken['recommendations'][0]['design'] = ['cut' => $text('Missing details'), 'style' => 'luxury', 'pattern' => null, 'colors' => []];
+        $design = $this->complete($this->product(), $broken)->review['recommendations'][0];
+        $this->assertSame('visual', $design['kind']);
+        $this->assertNull($design['design']);
     }
 
     public function test_queued_work_is_distinguished_from_ai_processing_and_is_not_duplicated_when_waiting(): void
