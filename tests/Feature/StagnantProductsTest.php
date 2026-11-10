@@ -87,6 +87,11 @@ class StagnantProductsTest extends TestCase
             $this->assertStringContainsString('product recovery specialist', $system);
             $this->assertStringContainsString('ALWAYS propose THREE distinct new design directions for the product itself', $system);
             $this->assertStringContainsString('category_best_sellers', $system);
+            // Gemini rejects (400 INVALID_ARGUMENT) a spec nested in each
+            // recommendation or a colour enum inside an array; keep both out.
+            $this->assertArrayNotHasKey('design', $schema['properties']['recommendations']['items']['properties']);
+            $this->assertArrayNotHasKey('enum', $schema['properties']['designs']['items']['properties']['colors']['items']);
+            $this->assertStringContainsString('dusty_pink', $prompt);
             $this->assertStringContainsString('Never suggest changes to the photo or the model', $system);
             $this->assertStringContainsString('shopper understanding, trust or purchase consideration', $prompt);
             $this->assertSame(120, $timeoutSeconds);
@@ -289,9 +294,10 @@ class StagnantProductsTest extends TestCase
     {
         $text = fn (string $value) => ['ar' => $value, 'en' => $value];
         $answer = $this->review();
-        $answer['recommendations'][0]['design'] = ['cut' => $text('A-line midi with puffed sleeves'), 'style' => 'luxury', 'pattern' => 'not-a-pattern',
-            'colors' => ['dusty_pink', 'neon-green', 'gold', 'dusty_pink'], 'details' => $text('Pearl trim on the collar'), 'injected' => 'drop me'];
-        $answer['recommendations'][1]['design'] = ['cut' => $text('Should be ignored'), 'style' => 'modern', 'pattern' => null, 'colors' => [], 'details' => $text('x')];
+        // One spec per visual recommendation, in order; extra specs are ignored.
+        $answer['designs'] = [['cut' => $text('A-line midi with puffed sleeves'), 'style' => 'luxury', 'pattern' => 'not-a-pattern',
+            'colors' => ['dusty_pink', 'neon-green', 'gold', 'dusty_pink'], 'details' => $text('Pearl trim on the collar'), 'injected' => 'drop me'],
+            ['cut' => $text('Should be ignored'), 'style' => 'modern', 'pattern' => null, 'colors' => [], 'details' => $text('x')]];
         $run = $this->complete($this->product(), $answer);
 
         [$design, $business] = $run->review['recommendations'];
@@ -304,7 +310,7 @@ class StagnantProductsTest extends TestCase
     {
         $text = fn (string $value) => ['ar' => $value, 'en' => $value];
         $broken = $this->review();
-        $broken['recommendations'][0]['design'] = ['cut' => $text('Missing details'), 'style' => 'luxury', 'pattern' => null, 'colors' => []];
+        $broken['designs'] = [['cut' => $text('Missing details'), 'style' => 'luxury', 'pattern' => null, 'colors' => []]];
         $design = $this->complete($this->product(), $broken)->review['recommendations'][0];
         $this->assertSame('visual', $design['kind']);
         $this->assertNull($design['design']);

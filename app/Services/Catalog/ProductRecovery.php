@@ -69,7 +69,7 @@ class ProductRecovery
             $answer = $this->ai->json(
                 operation: 'product_recovery', store: $store,
                 system: $this->role($snapshot['performance'] ?? null).' Recommend practical actions for this particular product toward the goal in the context. Explain likely causes as hypotheses, not proven causes. '.$this->designBrief($snapshot['performance'] ?? null).' Business actions should include a concrete next step and how to assess it.'.$this->reviewer->instructions().$this->marketing->instructions(),
-                prompt: json_encode($context, JSON_UNESCAPED_UNICODE)."\nImage available: ".($image ? 'yes' : 'no')."\nFor each new design (kind=visual) also fill design, the new design's spec (what it WILL look like, not the current photo): cut is the new cut and silhouette (shape, length and hem, waist and fit, sleeves, neckline); style is the allowed style key the new design follows; pattern is the allowed pattern key of the new design; colors are one to four allowed colour keys of the new design; details are the new finishing touches (embroidery, embellishment, trims, layers, closures). Business actions set design to null. For each new design: title names the new design in a few words; reason says what in the current design holds it back or which selling signal the new design follows (category best sellers, occasions, the product's own sales and returns) and what changes; effect explains why it may look more beautiful and be more likely to catch a shopper's eye and sell, phrased as a hypothesis for shopper understanding, trust or purchase consideration; instruction contains ONLY the exact standalone change to the product's design that matches its design spec (cut, style, colours, pattern and details to apply), never a change to the photo or the model. When an image is available, give exactly three genuinely distinct new designs first, then at most three business actions. Use concise narrative fields without repeating the same explanation.",
+                prompt: json_encode($context, JSON_UNESCAPED_UNICODE)."\nImage available: ".($image ? 'yes' : 'no')."\nAlso return designs: one spec per new design (kind=visual), in the same order as those recommendations, describing what the new design WILL look like, not the current photo: cut is the new cut and silhouette (shape, length and hem, waist and fit, sleeves, neckline); style is the allowed style key the new design follows; pattern is the allowed pattern key of the new design; colors are one to four colour keys of the new design, chosen only from: ".implode(', ', array_keys(Vocabulary::colors()))."; details are the new finishing touches (embroidery, embellishment, trims, layers, closures). Business actions get no spec; with no image, designs is empty. For each new design: title names the new design in a few words; reason says what in the current design holds it back or which selling signal the new design follows (category best sellers, occasions, the product's own sales and returns) and what changes; effect explains why it may look more beautiful and be more likely to catch a shopper's eye and sell, phrased as a hypothesis for shopper understanding, trust or purchase consideration; instruction contains ONLY the exact standalone change to the product's design that matches its design spec (cut, style, colours, pattern and details to apply), never a change to the photo or the model. When an image is available, give exactly three genuinely distinct new designs first, then at most three business actions. Use concise narrative fields without repeating the same explanation.",
                 schema: $this->schema(), fallback: fn () => [],
                 images: $image ? [['mime' => $image['mime'], 'data' => base64_encode($image['bytes'])]] : [], userId: $run->user_id, timeoutSeconds: 120,
             );
@@ -78,7 +78,7 @@ class ProductRecovery
             }
             $review = $this->reviewer->normalize($answer->data, $answer->fromModel, (bool) $image, $context);
             if ($review['status'] === 'available') {
-                $review['recommendations'] = $this->withDesigns($review['recommendations'], (array) ($answer->data['recommendations'] ?? []), (bool) $image);
+                $review['recommendations'] = $this->withDesigns($review['recommendations'], (array) ($answer->data['designs'] ?? []), (bool) $image);
                 $review['marketing_plan'] = $this->marketing->normalize($answer->data['marketing_plan'] ?? null);
             }
             ProductRecommendation::query()->whereKey($run->id)->where('status', 'processing')->update([
@@ -137,16 +137,20 @@ class ProductRecovery
     {
         $schema = $this->reviewer->schema();
         $pair = $this->reviewer->object(['ar' => ['type' => 'string'], 'en' => ['type' => 'string']]);
-        $item = &$schema['properties']['recommendations']['items'];
-        $item['properties']['design'] = ['type' => ['object', 'null'], 'properties' => [
+        // Gemini caps schema complexity and answers 400 INVALID_ARGUMENT past
+        // it. Any extra nested field inside each recommendation crosses that
+        // cap, and so does a colour enum inside an array, so the design specs
+        // are a separate top-level list with plain colour strings: the prompt
+        // names the allowed colours and design() drops anything else. Check a
+        // change here against the live API, not only the tests.
+        $schema['properties']['designs'] = ['type' => 'array', 'maxItems' => 3, 'items' => $this->reviewer->object([
             'cut' => $pair,
             'style' => ['type' => ['string', 'null'], 'enum' => [...array_keys(Vocabulary::styles()), null]],
             'pattern' => ['type' => ['string', 'null'], 'enum' => [...array_keys(Vocabulary::patterns()), null]],
-            'colors' => ['type' => 'array', 'maxItems' => 4, 'items' => ['type' => 'string', 'enum' => array_keys(Vocabulary::colors())]],
+            'colors' => ['type' => 'array', 'maxItems' => 4, 'items' => ['type' => 'string']],
             'details' => $pair,
-        ], 'required' => ['cut', 'style', 'pattern', 'colors', 'details']];
-        $item['required'][] = 'design';
-        unset($item);
+        ])];
+        $schema['required'][] = 'designs';
         $schema['properties']['marketing_plan'] = $this->marketing->schema(fn (array $properties) => $this->reviewer->object($properties));
         $schema['required'][] = 'marketing_plan';
 
@@ -155,18 +159,23 @@ class ProductRecovery
 
     /**
      * Attach each new design's spec (cut, style, pattern, colours, details)
-     * to its recommendation. The reviewer keeps the model's order and only
-     * drops visual items when no image was seen, so indexes still match.
+     * to its recommendation: the n-th spec describes the n-th visual
+     * recommendation, so the saved shape is one spec per design.
      *
      * @param  list<array<string, mixed>>  $recommendations
-     * @param  array<int, mixed>  $raw
+     * @param  array<int, mixed>  $specs
      * @return list<array<string, mixed>>
      */
-    private function withDesigns(array $recommendations, array $raw, bool $hasImage): array
+    private function withDesigns(array $recommendations, array $specs, bool $hasImage): array
     {
-        return array_map(fn (array $item, int $i) => [...$item,
-            'design' => $hasImage && $item['kind'] === 'visual' ? $this->design($raw[$i]['design'] ?? null) : null,
-        ], $recommendations, array_keys($recommendations));
+        $specs = array_values($specs);
+        $n = 0;
+
+        return array_map(function (array $item) use ($specs, $hasImage, &$n) {
+            $visual = $hasImage && $item['kind'] === 'visual';
+
+            return [...$item, 'design' => $visual ? $this->design($specs[$n++] ?? null) : null];
+        }, $recommendations);
     }
 
     /** @return array<string, mixed>|null */
