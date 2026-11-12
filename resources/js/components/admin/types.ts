@@ -13,6 +13,7 @@ export type AdminStoreRow = {
     month_cost: number;
     ai_monthly_budget: number | null;
     budget_usage: number | null;
+    show_revenue: boolean;
     last_synced_at: string | null;
     created_at: string | null;
 };

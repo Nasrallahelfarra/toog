@@ -65,6 +65,7 @@ export const activity: typeof ar = {
         'integration.disconnected': 'Disconnected Zid',
         'integration.checked': 'Checked the Zid connection',
         'admin.store_activated': 'Activated the store',
+        'admin.store_revenue_visibility': 'Changed revenue visibility for the store',
         'admin.store_suspended': 'Suspended the store',
         'admin.store_updated': 'Edited store details',
         'admin.store_created': 'Created the store',

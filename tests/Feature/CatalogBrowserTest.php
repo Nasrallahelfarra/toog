@@ -21,6 +21,8 @@ class CatalogBrowserTest extends TestCase
         parent::setUp();
         config(['inertia.ssr.enabled' => false]);
         $this->store = app(CreateStore::class)->handle(User::factory()->create(), ['name' => 'Store']);
+        // These tests cover the money figures, which the admin shows per store.
+        $this->store->update(['settings' => [...$this->store->settings ?? [], 'show_revenue' => true]]);
         $latest = now()->startOfMonth()->subMonth();
 
         foreach ([['Abaya', 'عبايات', 300, [10, 20]], ['Scarf', 'طرح', 80, [5, 5]], ['Loose', null, 50, [0, 2]]] as [$name, $category, $price, $units]) {

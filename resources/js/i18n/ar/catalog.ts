@@ -31,6 +31,8 @@ export const catalog = {
     categoriesTitle: 'الأقسام',
     categoriesHint: 'اضغط على قسم لتعرض منتجاته ومبيعاته',
     share: '{share}% من الإيرادات',
+    shareUnits: '{share}% من القطع المباعة',
+    lastMonthUnits: 'آخر شهر: {n} وحدة',
     productsCount: '{count} منتج',
     winners: '{count} رابح',
     stagnant: '{count} راكد',

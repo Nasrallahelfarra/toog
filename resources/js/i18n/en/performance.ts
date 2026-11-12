@@ -160,6 +160,12 @@ export const performance: typeof ar = {
 
     trendTitle: 'Sales over 12 months',
     trendHint: 'monthly revenue and units sold',
+    trendHintUnits: 'units sold and orders each month',
+    totalUnits: 'Units sold (12 months)',
+    totalOrders: 'Orders',
+    bestMonth: 'Best month',
+    unitsChartLabel: 'Units sold per month, {total} in total',
+    unitsCount: '{n} units',
     revenue: 'Revenue',
     units: 'Units',
     orders: 'Orders',

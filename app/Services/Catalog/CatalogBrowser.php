@@ -106,12 +106,15 @@ class CatalogBrowser
 
     /**
      * Every category with its products, its sales in the period, a 12-month
-     * revenue line and a few of its best-selling product images.
+     * revenue line and a few of its best-selling product images. With
+     * $byUnits (revenue hidden from the store) the line, the share and the
+     * order all follow units sold instead.
      *
      * @return list<array<string, mixed>>
      */
-    public function categories(Store $store, int $months, ?string $month = null): array
+    public function categories(Store $store, int $months, ?string $month = null, bool $byUnits = false): array
     {
+        $measure = $byUnits ? 'units' : 'revenue';
         $start = $this->start($store, $month ? 1 : $months, $month)->format('Y-m');
         $end = $this->end($store, $month)->format('Y-m');
         $history = $this->months($store, self::HISTORY, $month);
@@ -125,10 +128,10 @@ class CatalogBrowser
             ->groupBy(fn (ProductSale $s): string => $s->getAttribute('category') ?? self::UNCATEGORIZED);
 
         $products = Product::query()->where('store_id', $store->id)
-            ->get(['id', 'category', 'image_url', 'revenue', 'performance'])
+            ->get(['id', 'category', 'image_url', 'revenue', 'units_sold', 'performance'])
             ->groupBy(fn (Product $p) => $p->category ?? self::UNCATEGORIZED);
 
-        $rows = $products->map(function (Collection $items, string $key) use ($sales, $start, $end, $history) {
+        $rows = $products->map(function (Collection $items, string $key) use ($sales, $start, $end, $history, $byUnits, $measure) {
             $rows = $sales->get($key, collect());
             $current = $rows->filter(fn (ProductSale $s) => $this->month($s) >= $start && $this->month($s) <= $end);
             $byMonth = $rows->groupBy(fn (ProductSale $s) => $this->month($s));
@@ -141,15 +144,15 @@ class CatalogBrowser
                 'units' => (int) $current->sum('units'),
                 'winners' => $items->where('performance', Product::WINNER)->count(),
                 'stagnant' => $items->where('performance', Product::STAGNANT)->count(),
-                'images' => $items->whereNotNull('image_url')->sortByDesc('revenue')->take(3)->pluck('image_url')->values()->all(),
-                'spark' => array_map(fn (string $m) => round((float) $byMonth->get($m, collect())->sum('revenue'), 2), $history),
+                'images' => $items->whereNotNull('image_url')->sortByDesc($byUnits ? 'units_sold' : 'revenue')->take(3)->pluck('image_url')->values()->all(),
+                'spark' => array_map(fn (string $m) => round((float) $byMonth->get($m, collect())->sum($measure), 2), $history),
             ];
         });
 
-        $total = max(1.0, (float) $rows->sum('revenue'));
+        $total = max(1.0, (float) $rows->sum($measure));
 
-        return array_values($rows->map(fn (array $row) => [...$row, 'share' => round($row['revenue'] / $total * 100, 1)])
-            ->sortByDesc('revenue')->all());
+        return array_values($rows->map(fn (array $row) => [...$row, 'share' => round($row[$measure] / $total * 100, 1)])
+            ->sortByDesc($measure)->all());
     }
 
     /**

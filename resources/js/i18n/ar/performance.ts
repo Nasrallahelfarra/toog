@@ -159,6 +159,12 @@ export const performance = {
 
     trendTitle: 'المبيعات خلال 12 شهرًا',
     trendHint: 'الإيرادات والوحدات المباعة شهريًا',
+    trendHintUnits: 'عدد القطع المباعة والطلبات في كل شهر',
+    totalUnits: 'القطع المباعة (12 شهرًا)',
+    totalOrders: 'عدد الطلبات',
+    bestMonth: 'أفضل شهر',
+    unitsChartLabel: 'القطع المباعة شهريًا، المجموع {total}',
+    unitsCount: '{n} قطعة',
     revenue: 'الإيرادات',
     units: 'الوحدات',
     orders: 'الطلبات',

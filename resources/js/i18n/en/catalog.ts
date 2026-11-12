@@ -32,6 +32,8 @@ export const catalog: typeof ar = {
     categoriesTitle: 'Categories',
     categoriesHint: 'Open a category to see its products and sales',
     share: '{share}% of revenue',
+    shareUnits: '{share}% of units sold',
+    lastMonthUnits: 'Last month: {n} units',
     productsCount: '{count} products',
     winners: '{count} best sellers',
     stagnant: '{count} slow movers',

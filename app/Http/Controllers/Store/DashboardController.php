@@ -18,6 +18,7 @@ use App\Services\Zid\ConnectionCheck;
 use App\Services\Zid\ZidClient;
 use App\Services\Zid\ZidSyncState;
 use App\Support\CurrentStore;
+use App\Support\RevenueVisibility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -72,7 +73,7 @@ class DashboardController extends Controller
         return Inertia::render('store/dashboard', [
             'sync' => $sync,
             'demoCatalog' => fn () => $cleanup->availableInDashboard($store, $request->user()) ? $cleanup->preview($store) : null,
-            'kpis' => [
+            'kpis' => RevenueVisibility::apply($store, [
                 'evaluated_this_month' => $thisMonth,
                 'evaluated_delta' => $lastMonth > 0 ? round(($thisMonth - $lastMonth) / $lastMonth * 100, 1) : null,
                 'acceptance_rate' => $completed->count() ? (int) round($decisions[Evaluation::ACCEPT] / $completed->count() * 100) : null,
@@ -83,8 +84,8 @@ class DashboardController extends Controller
                 'at_risk' => $performance->atRiskCount($store),
                 'revenue' => $revenueNow,
                 'revenue_delta' => $revenuePrev > 0 ? round(($revenueNow - $revenuePrev) / $revenuePrev * 100, 1) : null,
-            ],
-            'revenueTrend' => array_column($trend, 'revenue'),
+            ]),
+            'revenueTrend' => $store->showsRevenue() ? array_column($trend, 'revenue') : [],
             'evaluationsTrend' => $byMonth->map(fn ($m) => $m['accept'] + $m['modify'] + $m['reject'])->all(),
             'decisions' => $decisions,
             'byMonth' => $byMonth,

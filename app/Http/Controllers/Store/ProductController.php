@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Services\Catalog\CatalogBrowser;
 use App\Support\CurrentStore;
+use App\Support\RevenueVisibility;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -22,7 +23,7 @@ class ProductController extends Controller
         $store = $this->current->require();
         abort_unless($product->store_id === $store->id, 404);
 
-        return Inertia::render('store/products/show', [
+        return Inertia::render('store/products/show', RevenueVisibility::apply($store, [
             'product' => [
                 ...$product->only(['id', 'name', 'sku', 'external_id', 'category', 'image_url', 'performance', 'performance_score',
                     'stock', 'units_sold', 'views', 'turnover_days', 'is_novel']),
@@ -35,6 +36,7 @@ class ProductController extends Controller
                 'classification_reason' => $product->performanceReason(),
             ],
             ...$catalog->productDetail($store, $product),
+        ]) + [
             // Polled while the expert works on a recommendation.
             'recovery' => fn () => $product->recovery?->presentation(),
         ]);
