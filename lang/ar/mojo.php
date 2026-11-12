@@ -13,6 +13,10 @@ return [
     'user_enabled' => 'تم تفعيل المستخدم.',
     'evaluation_queued' => 'جارٍ تقييم المنتج… ستظهر النتيجة خلال لحظات.',
     'design_queued' => 'جارٍ توليد التصاميم…',
+    'designer_queued' => 'بدأ المصمم الذكي العمل على مجموعتك…',
+    'designer_redraw' => 'يعيد المصمم رسم التصميم…',
+    'designer_deleted' => 'حُذفت المجموعة، وبقيت تصاميمها في المكتبة.',
+    'designer_fabric_required' => 'أضف صورة القماش أو اختر نوعه لنبدأ.',
     'sync_started' => 'بدأت مزامنة البيانات.',
     'import_done' => 'تم استيراد الملف بنجاح.',
     // Admin panel

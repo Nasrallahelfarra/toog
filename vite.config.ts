@@ -17,6 +17,11 @@ export default defineConfig({
                     weights: [300, 400, 500, 600, 700],
                     subsets: ['arabic', 'latin'],
                 }),
+                // Display face for collection and design names in the AI designer.
+                bunny('Noto Naskh Arabic', {
+                    weights: [500, 600, 700],
+                    subsets: ['arabic', 'latin'],
+                }),
             ],
         }),
         inertia(),

@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Storage;
  * @property int $id
  * @property int $store_id
  * @property int|null $design_request_id
+ * @property int|null $design_collection_id
  * @property int|null $user_id
  * @property int|null $evaluation_id
  * @property string $title
@@ -35,6 +36,7 @@ use Illuminate\Support\Facades\Storage;
 #[Fillable([
     'store_id', 'design_request_id', 'user_id', 'evaluation_id', 'title', 'image_path', 'output_type',
     'aspect_ratio', 'palette', 'tags', 'status', 'is_favorite', 'score', 'provider', 'model', 'cost', 'prompt',
+    'design_collection_id',
 ])]
 #[Appends(['image_url'])]
 class Design extends Model
