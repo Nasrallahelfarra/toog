@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useI18n } from '@/hooks/use-i18n';
+import { useRevenueVisible } from '@/hooks/use-revenue-visible';
 import { cn } from '@/lib/utils';
 
 type Metric = 'revenue' | 'units' | 'orders';
@@ -98,7 +99,8 @@ function visit(params: Params, only: string[], preserveScroll = true) {
 export default function Catalog(props: Props) {
     const { t, tr, money, number, date } = useI18n();
     const c = t.catalog;
-    const [metric, setMetric] = useState<Metric>('revenue');
+    const showRevenue = useRevenueVisible();
+    const [metric, setMetric] = useState<Metric>(showRevenue ? 'revenue' : 'units');
     const params: Params = { months: props.months, month: props.month, category: props.category, ...props.filters };
     const monthName = (key: string) => date(`${key}-01`, { month: 'long', year: 'numeric' });
     const vsPrevious = props.month ? c.kpi.vsPreviousMonth : c.kpi.vsPrevious;
@@ -165,19 +167,21 @@ export default function Catalog(props: Props) {
                 </SectionCard>
             ) : (
                 <>
-                    <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                        <StaggerItem>
-                            <StatCard
-                                label={c.kpi.revenue}
-                                value={props.summary.revenue}
-                                format={(n) => money(n)}
-                                icon={Wallet}
-                                tone="gold"
-                                delta={props.summary.delta.revenue}
-                                deltaLabel={vsPrevious}
-                                spark={props.trend.map((p) => p.revenue)}
-                            />
-                        </StaggerItem>
+                    <Stagger className={cn('grid gap-4 sm:grid-cols-2', showRevenue ? 'xl:grid-cols-4' : 'xl:grid-cols-3')}>
+                        {showRevenue && (
+                            <StaggerItem>
+                                <StatCard
+                                    label={c.kpi.revenue}
+                                    value={props.summary.revenue}
+                                    format={(n) => money(n)}
+                                    icon={Wallet}
+                                    tone="gold"
+                                    delta={props.summary.delta.revenue}
+                                    deltaLabel={vsPrevious}
+                                    spark={props.trend.map((p) => p.revenue)}
+                                />
+                            </StaggerItem>
+                        )}
                         <StaggerItem>
                             <StatCard
                                 label={c.kpi.units}
@@ -199,6 +203,7 @@ export default function Catalog(props: Props) {
                                 tone="info"
                                 delta={props.summary.delta.orders}
                                 deltaLabel={vsPrevious}
+                                spark={showRevenue ? undefined : props.trend.map((p) => p.orders)}
                             />
                         </StaggerItem>
                         <StaggerItem>
@@ -258,7 +263,9 @@ function SalesChart({
     const { t, tr, money, number, compact, date } = useI18n();
     const c = t.catalog;
     const axes = useChartAxes();
-    const [table, setTable] = useState(false);
+    const showRevenue = useRevenueVisible();
+    const metrics: Metric[] = showRevenue ? ['revenue', 'units', 'orders'] : ['units', 'orders'];
+    const [table, setTable] = useState(!showRevenue);
     const format = (value: number) => (metric === 'revenue' ? money(value) : number(value));
     const empty = trend.every((p) => p[metric] === 0);
     const peak = useMemo(() => trend.reduce((best, p) => (p[metric] > best[metric] ? p : best), trend[0]), [trend, metric]);
@@ -275,7 +282,7 @@ function SalesChart({
             action={
                 <Tabs value={metric} onValueChange={(v) => onMetric(v as Metric)}>
                     <TabsList>
-                        {(['revenue', 'units', 'orders'] as Metric[]).map((m) => (
+                        {metrics.map((m) => (
                             <TabsTrigger key={m} value={m} className="px-3">
                                 {c.metrics[m]}
                             </TabsTrigger>
@@ -361,7 +368,7 @@ function SalesChart({
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>{c.month}</TableHead>
-                                        <TableHead className="text-end">{c.metrics.revenue}</TableHead>
+                                        {showRevenue && <TableHead className="text-end">{c.metrics.revenue}</TableHead>}
                                         <TableHead className="text-end">{c.metrics.units}</TableHead>
                                         <TableHead className="text-end">{c.metrics.orders}</TableHead>
                                     </TableRow>
@@ -370,7 +377,7 @@ function SalesChart({
                                     {trend.map((p) => (
                                         <TableRow key={p.period}>
                                             <TableCell>{date(p.period, { month: 'long', year: 'numeric' })}</TableCell>
-                                            <TableCell className="num text-end">{money(p.revenue)}</TableCell>
+                                            {showRevenue && <TableCell className="num text-end">{money(p.revenue)}</TableCell>}
                                             <TableCell className="num text-end">{number(p.units)}</TableCell>
                                             <TableCell className="num text-end">{number(p.orders)}</TableCell>
                                         </TableRow>
@@ -389,6 +396,7 @@ function SalesChart({
 function CategoryGrid({ categories, onOpen }: { categories: Category[]; onOpen: (key: string) => void }) {
     const { t, tr, money, number } = useI18n();
     const c = t.catalog;
+    const showRevenue = useRevenueVisible();
 
     return (
         <section className="space-y-3">
@@ -417,8 +425,8 @@ function CategoryGrid({ categories, onOpen }: { categories: Category[]; onOpen: 
                                         <Sparkline data={cat.spark} width={88} height={32} />
                                     </div>
                                     <div className="flex items-baseline justify-between gap-2">
-                                        <span className="num text-xl font-semibold">{money(cat.revenue)}</span>
-                                        <span className="text-muted-foreground text-xs">{tr(c.share, { share: number(cat.share, 1) })}</span>
+                                        <span className="num text-xl font-semibold">{showRevenue ? money(cat.revenue) : tr(c.unitsSold, { n: number(cat.units) })}</span>
+                                        <span className="text-muted-foreground text-xs">{tr(showRevenue ? c.share : c.shareUnits, { share: number(cat.share, 1) })}</span>
                                     </div>
                                     <Meter value={cat.share} tone="navy" height={5} />
                                     <div className="mt-auto flex flex-wrap gap-2 text-[11px]">
@@ -466,6 +474,9 @@ function ImageStrip({ images }: { images: string[] }) {
 function ProductsSection({ products, params, title, hint }: { products: Paginated<Product>; params: Params; title: string; hint: string }) {
     const { t } = useI18n();
     const c = t.catalog;
+    const showRevenue = useRevenueVisible();
+    const defaultSort = showRevenue ? 'revenue' : 'units';
+    const sorts = SORTS.filter((sort) => showRevenue || sort !== 'revenue');
     const [search, setSearch] = useState(params.search ?? '');
     const apply = (next: Partial<Filters>) => visit({ ...params, ...next }, ['products']);
 
@@ -501,12 +512,12 @@ function ProductsSection({ products, params, title, hint }: { products: Paginate
                             ))}
                         </SelectContent>
                     </Select>
-                    <Select value={params.sort ?? 'revenue'} onValueChange={(v) => apply({ sort: v === 'revenue' ? undefined : v })}>
+                    <Select value={params.sort ?? defaultSort} onValueChange={(v) => apply({ sort: v === defaultSort ? undefined : v })}>
                         <SelectTrigger className="w-44">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            {SORTS.map((sort) => (
+                            {sorts.map((sort) => (
                                 <SelectItem key={sort} value={sort}>
                                     {c.sort[sort]}
                                 </SelectItem>
@@ -537,6 +548,7 @@ function ProductsSection({ products, params, title, hint }: { products: Paginate
 function ProductCard({ product }: { product: Product }) {
     const { t, tr, money, number } = useI18n();
     const c = t.catalog;
+    const showRevenue = useRevenueVisible();
     const [broken, setBroken] = useState(false);
 
     return (
@@ -569,7 +581,9 @@ function ProductCard({ product }: { product: Product }) {
                         <span className="text-muted-foreground text-xs">{tr(c.unitsSold, { n: number(product.month_units ?? product.units_sold) })}</span>
                     </div>
                     <div className="mt-auto flex items-end justify-between gap-2 pt-1">
-                        <span className="num text-muted-foreground text-xs">{money(product.month_revenue ?? product.revenue)}</span>
+                        <span className="num text-muted-foreground text-xs">
+                            {showRevenue ? money(product.month_revenue ?? product.revenue) : tr(c.lastMonthUnits, { n: number(product.history.at(-1)?.units ?? 0) })}
+                        </span>
                         <Sparkline data={product.history.map((h) => h.units)} width={84} height={28} />
                     </div>
                 </div>

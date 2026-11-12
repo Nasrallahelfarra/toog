@@ -34,6 +34,8 @@ class RevenueAuditTest extends TestCase
         $this->owner = User::factory()->create();
         $this->store = app(CreateStore::class)->handle($this->owner, ['name' => 'Audit test']);
         $this->store->update([
+            // The audit is open to the owner once the admin shows revenue.
+            'settings' => [...$this->store->settings ?? [], 'show_revenue' => true],
             'platform' => 'zid', 'platform_store_id' => '41960', 'connection_status' => 'connected',
             'zid_authorization' => 'app-token', 'zid_access_token' => 'manager-token',
         ]);

@@ -102,6 +102,16 @@ class Store extends Model
         return array_map(fn ($w) => round($w * 100 / $total, 2), $weights);
     }
 
+    /**
+     * Whether the store's own dashboard shows revenue figures. Off by
+     * default: only the platform admin can switch it on, per store. When
+     * off, the store sees units and orders only.
+     */
+    public function showsRevenue(): bool
+    {
+        return (bool) ($this->settings['show_revenue'] ?? false);
+    }
+
     public function isActive(): bool
     {
         return $this->status === self::STATUS_ACTIVE;

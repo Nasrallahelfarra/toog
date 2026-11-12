@@ -23,6 +23,7 @@ Route::put('stores/{store}', [StoreController::class, 'update'])->name('stores.u
 Route::delete('stores/{store}', [StoreController::class, 'destroy'])->name('stores.destroy');
 Route::post('stores/{store}/suspend', [StoreController::class, 'suspend'])->name('stores.suspend');
 Route::post('stores/{store}/activate', [StoreController::class, 'activate'])->name('stores.activate');
+Route::put('stores/{store}/revenue-visibility', [StoreController::class, 'revenueVisibility'])->name('stores.revenue-visibility');
 
 Route::get('users', [UserController::class, 'index'])->name('users.index');
 Route::post('users', [UserController::class, 'store'])->name('users.store');

@@ -26,6 +26,8 @@ export type CurrentStore = {
     status: 'active' | 'suspended';
     platform: string;
     connection_status: 'connected' | 'disconnected' | 'error';
+    /** Revenue figures are shown only when the platform admin allows it. */
+    show_revenue: boolean;
     logo_url: string | null;
 };
 

@@ -18,7 +18,7 @@ import {
     Turtle,
 } from 'lucide-react';
 import { useState } from 'react';
-import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, Bar, CartesianGrid, ComposedChart, LabelList, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartLegend, ChartTooltip, useChartAxes } from '@/components/mojo/chart';
 import { ColorChips } from '@/components/mojo/color-chips';
 import { PerformanceBadge } from '@/components/mojo/decision-badge';
@@ -46,6 +46,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/hooks/use-i18n';
+import { useRevenueVisible } from '@/hooks/use-revenue-visible';
 import { useVocabulary } from '@/hooks/use-vocabulary';
 import type { VocabularyGroup } from '@/hooks/use-vocabulary';
 import { cn } from '@/lib/utils';
@@ -89,7 +90,7 @@ type Product = {
 
 type Props = {
     summary: {
-        classes: Record<ClassKey, { count: number; revenue_share: number }>;
+        classes: Record<ClassKey, { count: number; revenue_share: number | null }>;
         unclassified: number;
         total: number;
         needs_reclassification: boolean;
@@ -238,6 +239,7 @@ export default function Performance(props: Props) {
 
 function ClassificationSection({ summary, signals }: { summary: Props['summary']; signals: Props['signals'] }) {
     const { t, tr, number } = useI18n();
+    const showRevenue = useRevenueVisible();
     const p = t.performance;
     const total = Math.max(1, summary.total - summary.unclassified);
     const [signal, setSignal] = useState<SignalKey | null>(null);
@@ -278,7 +280,9 @@ function ClassificationSection({ summary, signals }: { summary: Props['summary']
                                     <span className="num text-3xl font-semibold">{number(cls.count)}</span>
                                     <span className="text-muted-foreground text-sm">{number(share)}%</span>
                                 </div>
-                                <p className="text-muted-foreground mt-1 text-xs">{tr(p.classShare, { share: cls.revenue_share })}</p>
+                                {showRevenue && cls.revenue_share !== null && (
+                                    <p className="text-muted-foreground mt-1 text-xs">{tr(p.classShare, { share: cls.revenue_share })}</p>
+                                )}
                                 <Meter value={share} tone={meta.tone} height={6} className="mt-3" />
                             </div>
                         </StaggerItem>
@@ -295,8 +299,9 @@ function ClassificationSection({ summary, signals }: { summary: Props['summary']
                                 key={key}
                                 type="button"
                                 onClick={() => open(key as SignalKey)}
+                                disabled={!showRevenue && key === 'revenue'}
                                 aria-haspopup="dialog"
-                                className="group hover:bg-muted/60 focus-visible:ring-ring block w-full rounded-lg px-2 py-1.5 text-start transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                                className="group disabled:pointer-events-none hover:bg-muted/60 focus-visible:ring-ring block w-full rounded-lg px-2 py-1.5 text-start transition-colors focus-visible:ring-2 focus-visible:outline-none"
                             >
                                 <Meter
                                     label={
@@ -328,6 +333,12 @@ function ClassificationSection({ summary, signals }: { summary: Props['summary']
 }
 
 function SalesTrend({ trend }: { trend: Props['trend'] }) {
+    const showRevenue = useRevenueVisible();
+
+    return showRevenue ? <RevenueTrend trend={trend} /> : <UnitsTrend trend={trend} />;
+}
+
+function RevenueTrend({ trend }: { trend: Props['trend'] }) {
     const { t, date, compact, money, number } = useI18n();
     const axes = useChartAxes();
     const p = t.performance;
@@ -401,10 +412,92 @@ function SalesTrend({ trend }: { trend: Props['trend'] }) {
     );
 }
 
-function CategoryBreakdown({ categories }: { categories: Props['categories'] }) {
-    const { t, money, number } = useI18n();
+/**
+ * Sales without money: units sold per month as bars, orders as a line,
+ * with the month's figure on each bar. Shown while revenue is hidden.
+ */
+function UnitsTrend({ trend }: { trend: Props['trend'] }) {
+    const { t, tr, date, compact, number } = useI18n();
+    const axes = useChartAxes();
     const p = t.performance;
-    const maxRevenue = Math.max(1, ...categories.map((c) => c.revenue));
+    const data = trend.map((m) => ({ ...m, label: date(m.period, { month: 'short' }) }));
+    const totalUnits = trend.reduce((sum, m) => sum + m.units, 0);
+    const totalOrders = trend.reduce((sum, m) => sum + m.orders, 0);
+    const best = trend.reduce<Props['trend'][number] | null>((top, m) => (m.units > (top?.units ?? 0) ? m : top), null);
+
+    return (
+        <SectionCard
+            title={p.trendTitle}
+            description={p.trendHintUnits}
+            icon={TrendingUp}
+            action={
+                <ChartLegend
+                    items={[
+                        { label: p.units, color: 'var(--chart-2)' },
+                        { label: p.orders, color: 'var(--chart-1)' },
+                    ]}
+                />
+            }
+            className="h-full"
+        >
+            <div className="mb-4 grid grid-cols-3 gap-2">
+                {[
+                    [p.totalUnits, number(totalUnits)],
+                    [p.totalOrders, number(totalOrders)],
+                    [p.bestMonth, best ? `${date(best.period, { month: 'long' })} · ${number(best.units)}` : '—'],
+                ].map(([label, value]) => (
+                    <div key={label} className="bg-muted/50 rounded-xl px-3 py-2">
+                        <div className="text-muted-foreground text-[11px]">{label}</div>
+                        <div className="num truncate text-sm font-semibold">{value}</div>
+                    </div>
+                ))}
+            </div>
+            <div className="h-64" dir="ltr" role="img" aria-label={tr(p.unitsChartLabel, { total: number(totalUnits) })}>
+                <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={data} margin={{ top: 18, right: 4, left: 4, bottom: 0 }}>
+                        <CartesianGrid {...axes.grid} />
+                        <XAxis dataKey="label" {...axes.xAxis} />
+                        <YAxis yAxisId="units" {...axes.yAxis} width={40} tickFormatter={(v: number) => compact(v)} />
+                        <YAxis
+                            yAxisId="orders"
+                            {...axes.yAxis}
+                            orientation={axes.yAxis.orientation === 'left' ? 'right' : 'left'}
+                            width={36}
+                            tickFormatter={(v: number) => compact(v)}
+                        />
+                        <Tooltip cursor={{ fill: 'var(--muted)', opacity: 0.5 }} content={<ChartTooltip formatter={(value) => number(value)} />} />
+                        <Bar yAxisId="units" dataKey="units" name={p.units} fill="var(--chart-2)" radius={[6, 6, 0, 0]} maxBarSize={34} animationDuration={900}>
+                            <LabelList
+                                dataKey="units"
+                                position="top"
+                                fontSize={10}
+                                fill="var(--muted-foreground)"
+                                formatter={(v: unknown) => (Number(v) > 0 ? compact(Number(v)) : '')}
+                            />
+                        </Bar>
+                        <Line
+                            yAxisId="orders"
+                            type="monotone"
+                            dataKey="orders"
+                            name={p.orders}
+                            stroke="var(--chart-1)"
+                            strokeWidth={2}
+                            dot={{ r: 3, strokeWidth: 0, fill: 'var(--chart-1)' }}
+                            animationDuration={1200}
+                        />
+                    </ComposedChart>
+                </ResponsiveContainer>
+            </div>
+        </SectionCard>
+    );
+}
+
+function CategoryBreakdown({ categories }: { categories: Props['categories'] }) {
+    const { t, tr, money, number } = useI18n();
+    const p = t.performance;
+    const showRevenue = useRevenueVisible();
+    const measure = (c: Props['categories'][number]) => (showRevenue ? c.revenue : c.units) ?? 0;
+    const maxRevenue = Math.max(1, ...categories.map(measure));
 
     return (
         <SectionCard title={p.categoriesTitle} icon={BarChart3} className="h-full">
@@ -414,10 +507,10 @@ function CategoryBreakdown({ categories }: { categories: Props['categories'] }) 
                         <div className="flex items-baseline justify-between gap-2 text-sm">
                             <span className="font-medium">{c.category ?? p.uncategorized}</span>
                             <span className="num text-muted-foreground text-xs">
-                                {money(c.revenue)} · {number(c.products)}
+                                {showRevenue ? money(c.revenue) : tr(p.unitsCount, { n: number(c.units) })} · {number(c.products)}
                             </span>
                         </div>
-                        <div className="bg-muted flex h-2.5 overflow-hidden rounded-full" style={{ width: `${Math.max(12, (c.revenue / maxRevenue) * 100)}%` }}>
+                        <div className="bg-muted flex h-2.5 overflow-hidden rounded-full" style={{ width: `${Math.max(12, (measure(c) / maxRevenue) * 100)}%` }}>
                             {(['winners', 'average', 'at_risk', 'stagnant'] as const).map((k) => {
                                 const tone = k === 'winners' ? 'bg-success' : k === 'average' ? 'bg-info' : k === 'at_risk' ? 'bg-warning' : 'bg-danger';
                                 const width = c.products ? (c[k] / c.products) * 100 : 0;
@@ -625,6 +718,7 @@ function DataQuality({ quality }: { quality: Props['quality'] }) {
 
 function ProductsSection({ products, filters, categoryNames }: Pick<Props, 'products' | 'filters' | 'categoryNames'>) {
     const { t, number, money, percent, tr } = useI18n();
+    const showRevenue = useRevenueVisible();
     const p = t.performance;
     const [search, setSearch] = useState(filters.search ?? '');
     const [selected, setSelected] = useState<Product | null>(null);
@@ -688,7 +782,7 @@ function ProductsSection({ products, filters, categoryNames }: Pick<Props, 'prod
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        {(Object.keys(p.sorts) as (keyof typeof p.sorts)[]).map((key) => (
+                        {(Object.keys(p.sorts) as (keyof typeof p.sorts)[]).filter((key) => showRevenue || key !== 'revenue').map((key) => (
                             <SelectItem key={key} value={key}>
                                 {p.sorts[key]}
                             </SelectItem>
@@ -706,7 +800,7 @@ function ProductsSection({ products, filters, categoryNames }: Pick<Props, 'prod
                             <TableHead className="ps-5">{p.columns.product}</TableHead>
                             <TableHead>{p.columns.class}</TableHead>
                             <TableHead>{p.columns.units}</TableHead>
-                            <TableHead>{p.columns.revenue}</TableHead>
+                            {showRevenue && <TableHead>{p.columns.revenue}</TableHead>}
                             <TableHead>{p.columns.addToCart}</TableHead>
                             <TableHead>{p.columns.returnRate}</TableHead>
                             <TableHead>{p.columns.turnover}</TableHead>
@@ -734,7 +828,7 @@ function ProductsSection({ products, filters, categoryNames }: Pick<Props, 'prod
                                     </div>
                                 </TableCell>
                                 <TableCell className="num">{number(product.units_sold)}</TableCell>
-                                <TableCell className="num">{money(product.revenue)}</TableCell>
+                                {showRevenue && <TableCell className="num">{money(product.revenue)}</TableCell>}
                                 <TableCell className="num">{percent(product.add_to_cart_rate, 1)}</TableCell>
                                 <TableCell className={cn('num', product.return_rate >= 15 && 'text-danger')}>{percent(product.return_rate, 1)}</TableCell>
                                 <TableCell className={cn('num', (product.turnover_days ?? 0) >= 180 && 'text-warning')}>
@@ -780,12 +874,13 @@ function ProductDrawer({ product, onClose }: { product: Product | null; onClose:
     const { t, number, money, percent, date, tr, isRtl } = useI18n();
     const { label } = useVocabulary();
     const p = t.performance;
+    const showRevenue = useRevenueVisible();
 
     const facts = product
         ? [
               [p.performanceScore, product.performance_score ?? '—'],
               [p.columns.units, number(product.units_sold)],
-              [p.columns.revenue, money(product.revenue)],
+              ...(showRevenue ? [[p.columns.revenue, money(product.revenue)]] : []),
               [p.views, number(product.views)],
               [p.columns.addToCart, percent(product.add_to_cart_rate, 1)],
               [p.columns.returnRate, percent(product.return_rate, 1)],

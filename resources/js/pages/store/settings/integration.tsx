@@ -1,4 +1,4 @@
-import { Link, router, useForm } from '@inertiajs/react';
+import { Link, router, useForm, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
     CheckCircle2,
@@ -75,6 +75,9 @@ type Props = {
 export default function IntegrationSettings({ zid, counts, runs, importReport, check, sync }: Props) {
     const { t, tr, number } = useI18n();
     const s = t.settings.integration;
+    const { currentStore, actingAsAdmin } = usePage().props;
+    // The revenue audit is all money: the owner sees it only once the admin shows revenue.
+    const canAudit = currentStore?.show_revenue === true || actingAsAdmin === true;
 
     return (
         <SettingsShell>
@@ -98,7 +101,7 @@ export default function IntegrationSettings({ zid, counts, runs, importReport, c
                 </FadeIn>
             </div>
 
-            {zid.status === 'connected' && zid.has_credentials && counts.products > 0 && (
+            {zid.status === 'connected' && zid.has_credentials && counts.products > 0 && canAudit && (
                 <FadeIn delay={0.1}>
                     <div className="bg-card flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
                         <div className="flex items-start gap-2.5">

@@ -268,6 +268,23 @@ class StoreController extends Controller
         return back();
     }
 
+    /**
+     * Show or hide revenue in the store's own dashboard. Hidden by default;
+     * while hidden the store sees units sold and orders only.
+     */
+    public function revenueVisibility(Request $request, Store $store): RedirectResponse
+    {
+        $data = $request->validate(['show_revenue' => ['required', 'boolean']]);
+        $show = (bool) $data['show_revenue'];
+
+        $store->update(['settings' => array_merge($store->settings ?? [], ['show_revenue' => $show])]);
+
+        Activity::log('admin.store_revenue_visibility', $store, ['show_revenue' => $show], $store->id);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __($show ? 'mojo.revenue_shown' : 'mojo.revenue_hidden')]);
+
+        return back();
+    }
+
     public function activate(Store $store): RedirectResponse
     {
         $store->update(['status' => Store::STATUS_ACTIVE, 'suspended_reason' => null]);
@@ -309,6 +326,7 @@ class StoreController extends Controller
             'month_cost' => $cost,
             'ai_monthly_budget' => $budget,
             'budget_usage' => $budget ? (int) round($cost / $budget * 100) : null,
+            'show_revenue' => $s->showsRevenue(),
             'last_synced_at' => $s->last_synced_at?->toIso8601String(),
             'created_at' => $s->created_at?->toIso8601String(),
         ];

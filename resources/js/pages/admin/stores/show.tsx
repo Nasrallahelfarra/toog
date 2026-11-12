@@ -4,6 +4,8 @@ import {
     ArrowLeft,
     BadgeDollarSign,
     Cpu,
+    Eye,
+    EyeOff,
     LogIn,
     PauseCircle,
     PlayCircle,
@@ -41,6 +43,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DeleteStoreDialog } from '@/components/admin/delete-dialogs';
@@ -176,6 +179,8 @@ export default function AdminStoreShow({ store, overview, ai, members, activity,
                 </FadeIn>
             )}
 
+            <RevenueVisibility store={store} />
+
             <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StaggerItem>
                     <StatCard label={t.admin.stores.products} value={store.products_count} icon={Store} />
@@ -238,6 +243,42 @@ export default function AdminStoreShow({ store, overview, ai, members, activity,
                 </TabsContent>
             </Tabs>
         </PageBody>
+    );
+}
+
+/** The admin's switch for showing revenue on this store's own dashboard (hidden by default). */
+function RevenueVisibility({ store }: { store: StoreDetail }) {
+    const { t } = useI18n();
+    const r = t.admin.detail.revenueVisibility;
+    const [busy, setBusy] = useState(false);
+    const on = store.show_revenue;
+
+    const toggle = (value: boolean) =>
+        router.put(
+            `/admin/stores/${store.id}/revenue-visibility`,
+            { show_revenue: value },
+            { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => setBusy(false) },
+        );
+
+    return (
+        <FadeIn
+            className={`flex flex-wrap items-center justify-between gap-4 rounded-2xl border px-5 py-4 transition-colors ${on ? 'border-success/30 bg-success-soft/50' : 'border-border/70 bg-card'}`}
+        >
+            <div className="flex min-w-0 items-start gap-3">
+                <span className={`mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl ${on ? 'bg-success/15 text-success' : 'bg-muted text-muted-foreground'}`}>
+                    {on ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+                </span>
+                <div className="min-w-0">
+                    <p className="text-sm font-semibold">{r.title}</p>
+                    <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">{on ? r.on : r.off}</p>
+                </div>
+            </div>
+            <label className="flex shrink-0 cursor-pointer items-center gap-3">
+                <span className={`text-xs font-medium ${on ? 'text-success' : 'text-muted-foreground'}`}>{on ? r.shown : r.hidden}</span>
+                {busy ? <Spinner className="size-4" /> : null}
+                <Switch checked={on} disabled={busy} onCheckedChange={toggle} aria-label={r.title} />
+            </label>
+        </FadeIn>
     );
 }
 

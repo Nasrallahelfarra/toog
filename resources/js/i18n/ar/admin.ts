@@ -115,6 +115,13 @@ export const admin = {
     },
 
     detail: {
+        revenueVisibility: {
+            title: 'ظهور الإيرادات لصاحب المتجر',
+            on: 'الإيرادات ظاهرة: يرى صاحب المتجر المبالغ في لوحة المتجر والكتالوج والأداء والتقارير.',
+            off: 'الإيرادات مخفية: يرى صاحب المتجر عدد المبيعات والقطع المباعة كل شهر فقط، دون أي مبالغ.',
+            shown: 'ظاهرة',
+            hidden: 'مخفية',
+        },
         tabs: {
             overview: 'نظرة عامة',
             ai: 'استهلاك الذكاء الاصطناعي',
@@ -310,6 +317,7 @@ export const admin = {
         'admin.store_updated': 'عدّل إعدادات المتجر',
         'admin.store_suspended': 'أوقف المتجر',
         'admin.store_activated': 'فعّل المتجر',
+        'admin.store_revenue_visibility': 'غيّر ظهور الإيرادات للمتجر',
         'admin.user_created': 'أنشأ مستخدمًا',
         'admin.user_updated': 'عدّل بيانات مستخدم',
         'admin.user_disabled': 'عطّل حساب مستخدم',

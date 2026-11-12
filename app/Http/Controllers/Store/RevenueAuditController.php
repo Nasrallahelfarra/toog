@@ -25,9 +25,20 @@ class RevenueAuditController extends Controller
 
     public function __construct(private readonly CurrentStore $current) {}
 
+    /**
+     * The audit is all revenue, so the owner only reaches it once the admin
+     * shows revenue for the store. The admin can always run it, to check the
+     * figures before switching revenue on.
+     */
+    private function authorizeRevenue(Request $request, Store $store): void
+    {
+        abort_unless($store->showsRevenue() || $request->user()?->isAdmin(), 404);
+    }
+
     public function show(Request $request): Response
     {
         $store = $this->current->require();
+        $this->authorizeRevenue($request, $store);
         $this->expire($store);
         $runs = SyncRun::query()->where('store_id', $store->id)->where('type', RevenueAudit::TYPE)->latest('id')->limit(8)->get();
         $selected = $request->integer('run') ? $runs->firstWhere('id', $request->integer('run')) : $runs->first();
@@ -47,6 +58,7 @@ class RevenueAuditController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $store = $this->current->require();
+        $this->authorizeRevenue($request, $store);
         $data = $request->validate([
             'month' => ['required', 'date_format:Y-m', 'after_or_equal:'.now()->startOfMonth()->subMonths(11)->format('Y-m'), 'before_or_equal:'.now()->format('Y-m')],
             'expected' => ['nullable', 'numeric', 'min:0', 'max:1000000000'],

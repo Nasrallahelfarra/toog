@@ -7,6 +7,8 @@ return [
     'deleted' => 'Deleted.',
     'store_suspended' => 'Store suspended.',
     'store_activated' => 'Store activated.',
+    'revenue_shown' => 'Revenue is now visible to the store owner.',
+    'revenue_hidden' => 'Revenue is hidden from the store owner; they see sales and units only.',
     'user_disabled' => 'User disabled.',
     'user_enabled' => 'User enabled.',
     'evaluation_queued' => 'Evaluating the product… the result will appear in a moment.',

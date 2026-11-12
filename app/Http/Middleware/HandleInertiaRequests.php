@@ -68,6 +68,8 @@ class HandleInertiaRequests extends Middleware
                 'status' => $store->status,
                 'platform' => $store->platform,
                 'connection_status' => $store->connection_status,
+                // Revenue is hidden from the store unless the admin shows it.
+                'show_revenue' => $store->showsRevenue(),
                 'logo_url' => $store->logo_path ? Storage::disk('public')->url($store->logo_path) : null,
             ] : null,
             'stores' => $user instanceof User && ! $user->isAdmin()

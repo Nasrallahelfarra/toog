@@ -61,7 +61,7 @@ class ReportBuilder
         $this->locale = $locale;
 
         [$summary, $sections] = match ($type) {
-            'performance' => $this->performance($store, $from, $to, $summaryOnly),
+            'performance' => $this->withoutRevenue($store, $this->performance($store, $from, $to, $summaryOnly)),
             'market' => $this->market($store, $from, $to, $summaryOnly),
             'evaluations' => $this->evaluations($store, $from, $to, $filters, $summaryOnly),
             'balance' => $this->balanceReport($store, $summaryOnly),
@@ -360,6 +360,31 @@ class ReportBuilder
         ]);
 
         return implode(' · ', $parts)." ({$signature['share']}%)";
+    }
+
+    /**
+     * Drop every revenue figure from a report while the platform admin has
+     * revenue switched off for the store: the summary tile and the columns.
+     *
+     * @param  array{0: list<array<string, mixed>>, 1: list<array<string, mixed>>}  $report
+     * @return array{0: list<array<string, mixed>>, 1: list<array<string, mixed>>}
+     */
+    private function withoutRevenue(Store $store, array $report): array
+    {
+        if ($store->showsRevenue()) {
+            return $report;
+        }
+
+        [$summary, $sections] = $report;
+
+        return [
+            array_values(array_filter($summary, fn (array $m) => ($m['format'] ?? null) !== 'money' || $m['label_en'] !== 'Revenue')),
+            array_map(fn (array $section) => [
+                ...$section,
+                'columns' => array_values(array_filter($section['columns'], fn (array $c) => $c['key'] !== 'revenue')),
+                'rows' => array_map(fn (array $row) => array_diff_key($row, ['revenue' => true]), $section['rows']),
+            ], $sections),
+        ];
     }
 
     /**

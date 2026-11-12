@@ -37,6 +37,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useI18n } from '@/hooks/use-i18n';
+import { useRevenueVisible } from '@/hooks/use-revenue-visible';
 import { useVocabulary } from '@/hooks/use-vocabulary';
 import { cn } from '@/lib/utils';
 
@@ -88,6 +89,7 @@ const statusTone: Record<ClassKey | 'none', string> = {
 
 export default function ProductShow({ product, history, category, similar, recovery }: Props) {
     const { t, tr, money, number, percent, date } = useI18n();
+    const showRevenue = useRevenueVisible();
     const c = t.catalog;
     const p = c.product;
     const expertRef = useRef<HTMLDivElement>(null);
@@ -139,7 +141,7 @@ export default function ProductShow({ product, history, category, similar, recov
               ? p.status[product.performance]
               : p.status.unclassified;
 
-    const kpis: { icon: LucideIcon; label: string; value: string; hint?: string }[] = [
+    const kpis: { icon: LucideIcon; label: string; value: string; hint?: string }[] = ([
         { icon: Package, label: p.kpi.units, value: number(product.units_sold) },
         { icon: Wallet, label: p.kpi.revenue, value: money(product.revenue) },
         { icon: Layers, label: p.kpi.stock, value: number(product.stock) },
@@ -148,7 +150,7 @@ export default function ProductShow({ product, history, category, similar, recov
         { icon: ShoppingCart, label: p.kpi.cart, value: product.views > 0 ? percent(product.add_to_cart_rate, 1) : '—', hint: product.views > 0 ? undefined : p.kpi.noViews },
         { icon: Trophy, label: p.kpi.rank, value: tr(p.kpi.rankValue, { rank: number(category.rank), total: number(category.products) }) },
         { icon: CalendarDays, label: p.kpi.launched, value: date(product.launched_at) },
-    ];
+    ] as { icon: LucideIcon; label: string; value: string; hint?: string }[]).filter((kpi) => showRevenue || kpi.icon !== Wallet);
 
     return (
         <PageBody>
@@ -375,8 +377,9 @@ function SalesChart({ history }: { history: Props['history'] }) {
     const p = t.catalog.product;
     const c = t.catalog;
     const axes = useChartAxes();
+    const showRevenue = useRevenueVisible();
     const [metric, setMetric] = useState<Metric>('units');
-    const [table, setTable] = useState(false);
+    const [table, setTable] = useState(!showRevenue);
     const format = (value: number) => (metric === 'revenue' ? money(value) : number(value));
     const best = useMemo(() => history.reduce((top, row) => (row[metric] > top[metric] ? row : top), history[0]), [history, metric]);
     const sold = history.some((row) => row.units > 0);
@@ -390,7 +393,7 @@ function SalesChart({ history }: { history: Props['history'] }) {
             action={
                 <Tabs value={metric} onValueChange={(v) => setMetric(v as Metric)}>
                     <TabsList>
-                        {(['units', 'revenue', 'orders'] as Metric[]).map((m) => (
+                        {(['units', 'revenue', 'orders'] as Metric[]).filter((m) => showRevenue || m !== 'revenue').map((m) => (
                             <TabsTrigger key={m} value={m} className="px-3">
                                 {c.metrics[m]}
                             </TabsTrigger>
@@ -437,7 +440,7 @@ function SalesChart({ history }: { history: Props['history'] }) {
                                     <TableRow>
                                         <TableHead>{c.month}</TableHead>
                                         <TableHead className="text-end">{c.metrics.units}</TableHead>
-                                        <TableHead className="text-end">{c.metrics.revenue}</TableHead>
+                                        {showRevenue && <TableHead className="text-end">{c.metrics.revenue}</TableHead>}
                                         <TableHead className="text-end">{c.metrics.orders}</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -446,7 +449,7 @@ function SalesChart({ history }: { history: Props['history'] }) {
                                         <TableRow key={row.period}>
                                             <TableCell>{date(row.period, { month: 'long', year: 'numeric' })}</TableCell>
                                             <TableCell className="num text-end">{number(row.units)}</TableCell>
-                                            <TableCell className="num text-end">{money(row.revenue)}</TableCell>
+                                            {showRevenue && <TableCell className="num text-end">{money(row.revenue)}</TableCell>}
                                             <TableCell className="num text-end">{number(row.orders)}</TableCell>
                                         </TableRow>
                                     ))}
@@ -464,13 +467,15 @@ function SalesChart({ history }: { history: Props['history'] }) {
 function CategoryComparison({ product, category }: { product: Props['product']; category: Props['category'] }) {
     const { t, tr, money, number, percent } = useI18n();
     const p = t.catalog.product;
-    const rows: { key: keyof Props['category']['median']; value: number | null; better: 'higher' | 'lower' | null; format: (n: number) => string }[] = [
+    const showRevenue = useRevenueVisible();
+    const all: { key: keyof Props['category']['median']; value: number | null; better: 'higher' | 'lower' | null; format: (n: number) => string }[] = [
         { key: 'price', value: product.price, better: null, format: (n) => money(n) },
         { key: 'units_sold', value: product.units_sold, better: 'higher', format: (n) => number(n) },
         { key: 'revenue', value: product.revenue, better: 'higher', format: (n) => money(n) },
         { key: 'return_rate', value: product.return_rate, better: 'lower', format: (n) => percent(n, 1) },
         { key: 'turnover_days', value: product.turnover_days, better: 'lower', format: (n) => tr(t.performance.days, { n: number(n) }) },
     ];
+    const rows = all.filter((row) => showRevenue || row.key !== 'revenue');
 
     return (
         <SectionCard title={p.compareTitle} description={tr(p.compareHint, { category: category.name ?? t.catalog.uncategorized })} icon={Coins} className="h-full">

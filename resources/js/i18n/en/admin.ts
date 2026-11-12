@@ -116,6 +116,13 @@ export const admin: typeof ar = {
     },
 
     detail: {
+        revenueVisibility: {
+            title: 'Revenue visible to the store owner',
+            on: 'Revenue is visible: the owner sees amounts on the store dashboard, catalog, performance and reports.',
+            off: 'Revenue is hidden: the owner sees the number of sales and units sold each month only, with no amounts.',
+            shown: 'Visible',
+            hidden: 'Hidden',
+        },
         tabs: {
             overview: 'Overview',
             ai: 'AI usage',
@@ -311,6 +318,7 @@ export const admin: typeof ar = {
         'admin.store_updated': 'Updated store settings',
         'admin.store_suspended': 'Suspended the store',
         'admin.store_activated': 'Activated the store',
+        'admin.store_revenue_visibility': 'Changed revenue visibility for the store',
         'admin.user_created': 'Created a user',
         'admin.user_updated': 'Updated a user',
         'admin.user_disabled': 'Disabled a user',

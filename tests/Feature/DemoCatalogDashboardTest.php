@@ -38,7 +38,7 @@ class DemoCatalogDashboardTest extends TestCase
         $this->owner = User::factory()->create(['email' => 'lama@demo.sa']);
         $this->store = app(CreateStore::class)->handle($this->owner, ['name' => 'Dar Lama']);
         $this->store->update([
-            'settings' => ['demo_seed' => 'lama@demo.sa'], 'platform_store_id' => '41960',
+            'settings' => ['demo_seed' => 'lama@demo.sa', 'show_revenue' => true], 'platform_store_id' => '41960',
             'zid_authorization' => 'private-app-token', 'zid_access_token' => 'private-manager-token',
             'connection_status' => 'connected',
         ]);

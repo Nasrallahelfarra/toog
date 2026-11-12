@@ -10,6 +10,7 @@ use App\Services\Catalog\FeatureExtraction;
 use App\Services\Zid\ZidClient;
 use App\Support\Activity;
 use App\Support\CurrentStore;
+use App\Support\RevenueVisibility;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -28,6 +29,9 @@ class PerformanceController extends Controller
     {
         $store = $this->current->require();
         $filters = $request->only(['class', 'category', 'search', 'sort']);
+        if (! $store->showsRevenue() && ($filters['sort'] ?? null) === 'revenue') {
+            $filters['sort'] = 'units';
+        }
 
         $products = Product::query()
             ->where('store_id', $store->id)
@@ -77,16 +81,19 @@ class PerformanceController extends Controller
 
         return Inertia::render('store/performance', [
             // Closures, so the extraction progress poll does not recompute the whole catalog.
-            'summary' => fn () => $performance->summary($store),
-            'trend' => fn () => $performance->monthlyTrend($store),
-            'categories' => fn () => $performance->categories($store),
+            'summary' => fn () => RevenueVisibility::apply($store, $performance->summary($store)),
+            'trend' => fn () => RevenueVisibility::apply($store, $performance->monthlyTrend($store)),
+            'categories' => fn () => RevenueVisibility::apply($store, collect($performance->categories($store))
+                ->when(! $store->showsRevenue(), fn ($rows) => $rows->sortByDesc('units'))->values()->all()),
             'profile' => fn () => $performance->successProfile($store),
             'quality' => fn () => $performance->dataQuality($store),
-            'products' => $products,
+            'products' => RevenueVisibility::apply($store, $products),
             'filters' => $filters,
             'categoryNames' => fn () => $performance->categoryNames($store),
             // Loaded only when a classification criterion is opened.
-            'signals' => Inertia::optional(fn () => $performance->signals($store)),
+            'signals' => Inertia::optional(fn () => $store->showsRevenue()
+                ? $performance->signals($store)
+                : array_diff_key($performance->signals($store), ['revenue' => true])),
             'sync' => [
                 'status' => $store->connection_status,
                 'last_synced_at' => $store->last_synced_at?->toIso8601String(),

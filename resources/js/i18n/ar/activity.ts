@@ -64,6 +64,7 @@ export const activity = {
         'integration.disconnected': 'ألغى ربط زد',
         'integration.checked': 'فحص ربط زد',
         'admin.store_activated': 'فعّل المتجر',
+        'admin.store_revenue_visibility': 'غيّر ظهور الإيرادات للمتجر',
         'admin.store_suspended': 'أوقف المتجر',
         'admin.store_updated': 'عدّل بيانات المتجر',
         'admin.store_created': 'أنشأ المتجر',
