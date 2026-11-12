@@ -11,6 +11,7 @@ use App\Models\SocialPost;
 use App\Models\Store;
 use App\Models\Trend;
 use App\Services\Evaluation\Candidate;
+use App\Services\Market\CompetitorSignals;
 use App\Support\FashionVocabulary;
 use App\Support\Vocabulary;
 use Carbon\CarbonImmutable;
@@ -31,6 +32,8 @@ use Illuminate\Support\Facades\Storage;
  */
 class DesignerInsights
 {
+    public function __construct(private readonly CompetitorSignals $signals) {}
+
     private const ATTRIBUTES = ['colors', 'pattern', 'material', 'style'];
 
     private const RETURN_LIMIT = 25;
@@ -270,53 +273,15 @@ class DesignerInsights
             return [[], []];
         }
 
-        $products = CompetitorProduct::query()->where('store_id', $this->store->id)
-            ->whereIn('competitor_id', $active->keys())
-            ->where(fn ($q) => $q->whereNull('last_seen_at')->orWhere('last_seen_at', '>=', now()->subDays(45)))
-            ->get();
-        // A product found in a competitor's very first crawl is not "new".
-        $firstSeen = $products->groupBy('competitor_id')->map(fn (Collection $items) => $items->min('first_seen_at'));
-
-        $signals = function (CompetitorProduct $cp) use ($firstSeen): array {
-            $evidence = $cp->evidence ?? [];
-            $out = [];
-            if ($cp->is_best_seller) {
-                $out[] = 'best_seller_label';
-            }
-            if (! empty($evidence['published_sales'])) {
-                $out[] = 'published_sales';
-            }
-            if (! empty($evidence['promotion'])) {
-                $out[] = 'homepage_featured';
-            }
-            if ($cp->previous_price && $cp->price && (float) $cp->previous_price > 0 && ((float) $cp->previous_price - (float) $cp->price) / (float) $cp->previous_price >= 0.10) {
-                $out[] = 'price_drop';
-            }
-            $first = $firstSeen[$cp->competitor_id] ?? null;
-            if ($cp->first_seen_at && $cp->first_seen_at->gte(now()->subDays(30)) && $first && $cp->first_seen_at->gt(CarbonImmutable::parse($first)->addDay())) {
-                $out[] = 'new_arrival';
-            }
-
-            return $out;
-        };
-
-        $points = ['best_seller_label' => 3, 'published_sales' => 3, 'homepage_featured' => 2, 'price_drop' => 1, 'new_arrival' => 1];
-        $look = fn (CompetitorProduct $cp) => implode('|', [mb_strtolower((string) $cp->category), $cp->features['colors'][0] ?? '', $cp->features['pattern'] ?? '']);
-
-        $flagged = $products->map(fn (CompetitorProduct $cp) => [$cp, $signals($cp)])->filter(fn ($r) => $r[1] !== []);
-        // The same look working at two or more competitors is an "echo".
-        $echo = $flagged->groupBy(fn ($r) => $look($r[0]))->map(fn (Collection $g) => $g->pluck('0.competitor_id')->unique()->count());
-
         $mine = $this->products->whereIn('id', array_column($bestsellers, 'id'));
 
-        $hits = $flagged
-            ->map(function ($r) use ($points, $echo, $look, $active, $mine) {
-                [$cp, $sig] = $r;
-                $echoed = ($echo[$look($cp)] ?? 1) >= 2 && trim($look($cp), '|') !== '';
+        $hits = $this->signals->storeHits($this->store, $active)
+            ->take(8)
+            ->map(function (array $hit) use ($active, $mine) {
+                $cp = $hit['product'];
+                $sig = $hit['signals'];
                 $candidate = $this->competitorCandidate($cp);
                 $similar = $mine->first(fn (Product $p) => Candidate::fromProduct($p)->similarity($candidate) >= 0.55);
-                $drop = $cp->previous_price && (float) $cp->previous_price > 0
-                    ? (int) round(((float) $cp->previous_price - (float) $cp->price) / (float) $cp->previous_price * 100) : null;
 
                 return [
                     'id' => $cp->id,
@@ -328,11 +293,11 @@ class DesignerInsights
                     'category' => $cp->category,
                     'price' => $cp->price !== null ? (float) $cp->price : null,
                     'currency' => $cp->evidence['currency'] ?? null,
-                    'drop_pct' => in_array('price_drop', $sig, true) ? $drop : null,
+                    'drop_pct' => $hit['drop_pct'],
                     'signals' => $sig,
                     'published_sales' => $cp->evidence['published_sales'] ?? null,
-                    'echo' => $echoed,
-                    'rank' => array_sum(array_map(fn ($s) => $points[$s], $sig)) + ($echoed ? 2 : 0),
+                    'echo' => $hit['echo'],
+                    'rank' => $hit['rank'],
                     'colors' => array_values(array_filter((array) ($cp->features['colors'] ?? []), 'is_string')),
                     'pattern' => $cp->features['pattern'] ?? null,
                     'style' => $cp->features['style'] ?? null,
@@ -341,8 +306,6 @@ class DesignerInsights
                     'prefill' => $this->prefillFromCompetitor($cp),
                 ];
             })
-            ->sortByDesc('rank')
-            ->take(8)
             ->values()
             ->all();
 
@@ -350,8 +313,8 @@ class DesignerInsights
     }
 
     /**
-     * Posts whose engagement is at least twice the competitor's own median
-     * on the same basis (followers vs views are never compared).
+     * Posts whose engagement is at least twice their own account's usual,
+     * measured against a baseline of at least five posts.
      *
      * @param  Collection<int, string>  $active
      * @return list<array<string, mixed>>
@@ -360,20 +323,13 @@ class DesignerInsights
     {
         $posts = SocialPost::query()->where('store_id', $this->store->id)
             ->whereIn('competitor_id', $active->keys())
-            ->measured()
             ->where(fn ($q) => $q->whereNull('posted_at')->orWhere('posted_at', '>=', now()->subDays(90)))
             ->get();
+        $lifts = $this->signals->lifts($posts);
 
         return $posts
-            ->groupBy(fn (SocialPost $p) => $p->competitor_id.'|'.($p->evidence['engagement_basis'] ?? 'unknown'))
-            ->filter(fn (Collection $group) => $group->count() >= 5)
-            ->flatMap(function (Collection $group) {
-                $median = (float) $group->map(fn (SocialPost $p) => (float) $p->engagement_rate)->median();
-
-                return $median > 0
-                    ? $group->map(fn (SocialPost $p) => [$p, round((float) $p->engagement_rate / $median, 1)])->filter(fn ($r) => $r[1] >= 2)
-                    : collect();
-            })
+            ->map(fn (SocialPost $p) => [$p, $lifts[$p->id]['lift'] ?? null, $lifts[$p->id]['baseline'] ?? 0])
+            ->filter(fn ($r) => $r[1] !== null && $r[1] >= 2 && $r[2] >= CompetitorSignals::BASELINE)
             ->sortByDesc(fn ($r) => $r[1])
             ->take(4)
             ->map(fn ($r) => [
@@ -381,7 +337,8 @@ class DesignerInsights
                 'competitor' => $active[$r[0]->competitor_id] ?? '—',
                 'platform' => $r[0]->platform,
                 'url' => $r[0]->url,
-                'thumbnail_url' => $r[0]->thumbnail_url,
+                // Copied images do not expire like Instagram links do.
+                'thumbnail_url' => self::publicUrl($r[0]->evidence['image_path'] ?? null) ?? $r[0]->thumbnail_url,
                 'caption' => mb_substr((string) $r[0]->caption, 0, 140),
                 'times_median' => $r[1],
                 'likes' => $r[0]->likes,
@@ -392,7 +349,7 @@ class DesignerInsights
                 'posted_at' => $r[0]->posted_at?->toDateString(),
                 'prefill' => [
                     'colors' => array_slice(array_values(array_filter((array) ($r[0]->features['colors'] ?? []), 'is_string')), 0, 3),
-                    'inspiration' => ['kind' => 'social', 'id' => $r[0]->id, 'label' => $active[$r[0]->competitor_id] ?? '—', 'image_url' => $r[0]->thumbnail_url],
+                    'inspiration' => ['kind' => 'social', 'id' => $r[0]->id, 'label' => $active[$r[0]->competitor_id] ?? '—', 'image_url' => self::publicUrl($r[0]->evidence['image_path'] ?? null) ?? $r[0]->thumbnail_url],
                     'notes' => $this->say('منشور حقق تفاعلًا مرتفعًا لدى المنافس: استلهم الفكرة دون نسخ الشكل.', 'A high-engagement competitor post: borrow the idea, not the look.'),
                 ],
             ])

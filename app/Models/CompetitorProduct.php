@@ -23,10 +23,11 @@ use Illuminate\Support\Carbon;
  * @property array<string, mixed>|null $evidence
  * @property Carbon|null $first_seen_at
  * @property Carbon|null $last_seen_at
+ * @property Carbon|null $watched_at
  */
 #[Fillable([
     'store_id', 'competitor_id', 'external_id', 'name', 'category', 'price', 'previous_price', 'image_url',
-    'url', 'is_best_seller', 'features', 'first_seen_at', 'last_seen_at', 'evidence',
+    'url', 'is_best_seller', 'features', 'first_seen_at', 'last_seen_at', 'evidence', 'watched_at',
 ])]
 class CompetitorProduct extends Model
 {
@@ -40,6 +41,7 @@ class CompetitorProduct extends Model
             'is_best_seller' => 'boolean',
             'first_seen_at' => 'datetime',
             'last_seen_at' => 'datetime',
+            'watched_at' => 'datetime',
         ];
     }
 

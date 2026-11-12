@@ -2,6 +2,9 @@
 
 return [
     'competitor_saved' => 'Competitor saved.',
+    'radar_read' => 'The standout posts were read and analysed.',
+    'radar_read_failed' => 'The posts could not be read right now; the computed results are unchanged.',
+    'radar_nothing_to_read' => 'No posts above their usual in this window to read.',
     'competitor_deleted' => 'Competitor deleted.',
     'scan_queued' => 'Scan requests submitted. Follow each competitor’s progress on its card.',
     'scan_in_progress' => 'Wait for the current scan to finish before editing or deleting this competitor.',

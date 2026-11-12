@@ -1,7 +1,7 @@
 import { useForm, usePoll } from '@inertiajs/react';
 import { BrainCircuit, ImagePlus, Lightbulb } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { useI18n } from '@/hooks/use-i18n';
@@ -23,12 +23,14 @@ export function DesignerWorkspace({
     openCollection,
     insights,
     aiLive,
+    initialPrefill = null,
 }: {
     designer: DesignerProps;
     collections: Collection[];
     openCollection: number | null;
     insights: Insights | undefined;
     aiLive: boolean;
+    initialPrefill?: Prefill | null;
 }) {
     const { t, locale, field } = useI18n();
     const d = t.designer;
@@ -116,6 +118,12 @@ export function DesignerWorkspace({
                 }));
             },
         });
+
+    // Arriving from the competitor radar's "design like this": fill the brief once.
+    useEffect(() => {
+        if (initialPrefill) applyPrefill(initialPrefill);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const topOpportunity = useMemo<Prefill | null>(
         () =>

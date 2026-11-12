@@ -28,7 +28,7 @@ class FeatureExtractor
             'black' => ['أسود', 'اسود', 'سوداء', 'black'],
             'white' => ['أبيض', 'ابيض', 'بيضاء', 'white'],
             'ivory' => ['عاجي', 'ivory', 'cream', 'كريمي'],
-            'beige' => ['بيج', 'beige', 'nude'],
+            'beige' => ['بيج', 'نود', 'beige', 'nude'],
             'sand' => ['رملي', 'sand', 'camel', 'كاميل'],
             'gold' => ['ذهبي', 'gold', 'golden'],
             'brown' => ['بني', 'brown', 'chocolate', 'شوكولا'],

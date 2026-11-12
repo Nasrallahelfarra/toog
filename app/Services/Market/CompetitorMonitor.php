@@ -9,6 +9,7 @@ use App\Models\SyncRun;
 use App\Services\Market\Fetchers\ApifySocialFetcher;
 use App\Services\Market\Fetchers\CompetitorFetcher;
 use App\Services\Market\Fetchers\FetchResult;
+use App\Services\Market\Fetchers\SallaFetcher;
 use App\Services\Market\Fetchers\ShopifyFetcher;
 use App\Services\Market\Fetchers\UnsupportedFetcher;
 use Throwable;
@@ -22,13 +23,14 @@ class CompetitorMonitor
     private array $fetchers;
 
     public function __construct(
+        SallaFetcher $salla,
         ShopifyFetcher $shopify,
         ApifySocialFetcher $social,
         UnsupportedFetcher $fallback,
         private readonly CompetitorScanState $scans,
     ) {
         // Order matters: the first fetcher that supports a competitor wins.
-        $this->fetchers = [$shopify, $social, $fallback];
+        $this->fetchers = [$salla, $shopify, $social, $fallback];
     }
 
     public function canScan(Competitor $competitor): bool
