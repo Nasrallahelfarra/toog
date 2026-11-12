@@ -298,6 +298,27 @@ class CompetitorRadarTest extends TestCase
                 ->where('designerPrefill.inspiration.id', $product->id));
     }
 
+    public function test_a_social_link_saved_as_a_website_is_read_as_that_account(): void
+    {
+        // Added through the form with "website" picked.
+        $this->actingAs($this->store->owner)->post('/store/competitors', [
+            'platform' => 'website', 'url' => 'https://www.instagram.com/sadeimfashion', 'name' => 'سديم',
+        ])->assertSessionHasNoErrors();
+        $added = Competitor::query()->where('store_id', $this->store->id)->latest('id')->first();
+        $this->assertSame('instagram', $added->platform);
+        $this->assertSame('sadeimfashion', $added->handle);
+
+        // Saved that way before the fix: corrected on its next scan, never crawled.
+        Http::fake();
+        $old = Competitor::query()->create(['store_id' => $this->store->id, 'name' => 'سديم', 'platform' => 'website',
+            'url' => 'https://www.facebook.com/profile.php?id=61586215060091', 'is_active' => true]);
+        app(CompetitorMonitor::class)->scan($old);
+
+        $this->assertSame('facebook', $old->fresh()->platform);
+        $this->assertSame('61586215060091', $old->fresh()->handle);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'facebook.com/robots.txt'));
+    }
+
     public function test_competitor_products_of_other_stores_cannot_be_watched(): void
     {
         $other = app(CreateStore::class)->handle(User::factory()->create(), ['name' => 'Other']);

@@ -237,8 +237,14 @@ class CompetitorController extends Controller
             'is_active' => ['boolean'],
         ]);
 
+        // A pasted Instagram or Facebook link with "website" picked is that
+        // account; those sites forbid crawlers, so read it as social.
+        if (! $social && ($platform = Competitor::socialPlatformOf($data['url'] ?? null))) {
+            $data['platform'] = $platform;
+            $data['handle'] = $data['handle'] ?? $data['url'];
+        }
         $data['handle'] = Competitor::normalizeHandle($data['handle'] ?? null);
-        $data['name'] = ($data['name'] ?? null) ?: (string) parse_url($data['url'], PHP_URL_HOST);
+        $data['name'] = ($data['name'] ?? null) ?: ($data['handle'] ?? (string) parse_url($data['url'], PHP_URL_HOST));
         $data['is_active'] = $request->boolean('is_active', true);
 
         return $data;
