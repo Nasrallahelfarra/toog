@@ -51,7 +51,7 @@ class ShopifyFetcher implements CompetitorFetcher
                 throw new RuntimeException('The store rate-limited this scan. Further requests were skipped.');
             }
             if (! $this->web->allowed($robots, $url)) {
-                throw new RuntimeException('The storefront robots rules disallow this page.');
+                throw new RuntimeException("The storefront robots rules disallow this page: {$url}");
             }
             $response = $this->web->get($url);
             $rateLimited = $response->status() === 429;

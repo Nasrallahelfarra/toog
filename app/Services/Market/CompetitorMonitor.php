@@ -52,6 +52,8 @@ class CompetitorMonitor
         if (! $this->scans->claim($scan)) {
             return FetchResult::unsupported('scan_in_progress');
         }
+        // An Instagram or Facebook link saved as a website is read as that account.
+        $competitor->correctSocialPlatform();
         try {
             $result = $this->fetcherFor($competitor)->fetch($competitor,
                 fn (string $stage, array $metrics = []) => $this->scans->advance($scan, $stage, $metrics));

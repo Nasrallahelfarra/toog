@@ -52,6 +52,41 @@ class Competitor extends Model
         return in_array($this->platform, self::SOCIAL_PLATFORMS, true);
     }
 
+    /**
+     * The social platform a link belongs to, if any: an Instagram, TikTok,
+     * Facebook or Snapchat link saved as a website must be read as that
+     * account (those sites forbid crawlers; their posts come through Apify).
+     */
+    public static function socialPlatformOf(?string $url): ?string
+    {
+        $host = strtolower((string) parse_url(trim((string) $url), PHP_URL_HOST));
+
+        return match (true) {
+            $host === '' => null,
+            (bool) preg_match('/(^|\.)instagram\.com$/', $host) => 'instagram',
+            (bool) preg_match('/(^|\.)tiktok\.com$/', $host) => 'tiktok',
+            (bool) preg_match('/(^|\.)(facebook\.com|fb\.com)$/', $host) => 'facebook',
+            (bool) preg_match('/(^|\.)snapchat\.com$/', $host) => 'snapchat',
+            default => null,
+        };
+    }
+
+    /**
+     * Turn a social link saved under a store platform into that social
+     * account. Returns true when the competitor changed.
+     */
+    public function correctSocialPlatform(): bool
+    {
+        $social = $this->isSocial() ? null : self::socialPlatformOf($this->url);
+        if (! $social) {
+            return false;
+        }
+
+        $this->update(['platform' => $social, 'handle' => $this->handle ?: self::normalizeHandle($this->url)]);
+
+        return true;
+    }
+
     /** "@name", "name" or a pasted profile link, reduced to the account name. */
     public static function normalizeHandle(?string $value): ?string
     {
