@@ -13,6 +13,10 @@ return [
     'user_enabled' => 'User enabled.',
     'evaluation_queued' => 'Evaluating the product… the result will appear in a moment.',
     'design_queued' => 'Generating designs…',
+    'designer_queued' => 'The AI designer is working on your collection…',
+    'designer_redraw' => 'The designer is redrawing this design…',
+    'designer_deleted' => 'Collection deleted; its designs stay in the library.',
+    'designer_fabric_required' => 'Add a fabric photo or pick a fabric type to start.',
     'sync_started' => 'Data sync started.',
     'import_done' => 'File imported successfully.',
     // Admin panel

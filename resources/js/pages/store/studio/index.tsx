@@ -1,4 +1,4 @@
-import { Link, router, useForm, usePoll } from '@inertiajs/react';
+import { Link, router, useForm, usePage, usePoll } from '@inertiajs/react';
 import {
     AlertTriangle,
     Camera,
@@ -32,6 +32,9 @@ import { ScoreRing } from '@/components/mojo/score-ring';
 import { SectionCard } from '@/components/mojo/section-card';
 import { aspectClass, DesignCard } from '@/components/studio/design-card';
 import { DesignEditor } from '@/components/studio/design-editor';
+import { DesignerWorkspace } from '@/components/studio/designer/designer-workspace';
+import { GarmentIcon } from '@/components/studio/designer/garment-icons';
+import type { Collection, DesignerProps, Insights } from '@/components/studio/designer/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -113,7 +116,19 @@ type Props = {
     ideas?: Idea[];
     /** A design opened for editing from the library. */
     refine: DesignItem | null;
+    mode: Mode;
+    designer: DesignerProps;
+    collections: Collection[];
+    openCollection: number | null;
+    /** Deferred: arrives after the first paint. */
+    insights?: Insights;
 };
+
+type Mode = 'designer' | 'modify' | 'idea' | 'mockup';
+type ClassicMode = Exclude<Mode, 'designer'>;
+
+const MODES: Mode[] = ['designer', 'modify', 'idea', 'mockup'];
+const modeIcons: Record<Mode, LucideIcon> = { designer: Sparkles, modify: RefreshCw, idea: Lightbulb, mockup: Camera };
 
 const outputIcons: Record<OutputType, LucideIcon> = {
     product_photo: Camera,
@@ -126,7 +141,101 @@ const outputIcons: Record<OutputType, LucideIcon> = {
 
 const ratios = ['1:1', '4:5', '9:16', '16:9'];
 
-export default function Studio({ source, prefillPrompt, brand, trends, categories, requests, since, outputTypes, ideas, refine }: Props) {
+/**
+ * The design studio. The AI fashion designer is its first mode; editing a
+ * product, a free idea and product shots keep their own form.
+ */
+export default function Studio(props: Props) {
+    const { t } = useI18n();
+    const { aiLive } = usePage<{ aiLive: boolean }>().props;
+    const s = t.studio;
+    const [mode, setMode] = useState<Mode>(props.mode);
+
+    const changeMode = (next: Mode) => {
+        setMode(next);
+        const url = new URL(window.location.href);
+        url.searchParams.set('mode', next);
+        window.history.replaceState(window.history.state, '', url);
+    };
+
+    return (
+        <PageBody className={mode === 'designer' ? 'max-w-[1720px]' : undefined}>
+            <PageHeader
+                title={s.title}
+                eyebrow={t.designer.eyebrow}
+                description={mode === 'designer' ? t.designer.subtitle : s.subtitle}
+                icon={WandSparkles}
+                actions={
+                    <Button variant="outline" asChild>
+                        <Link href="/store/library">
+                            <Images className="size-4" />
+                            {s.openLibrary}
+                        </Link>
+                    </Button>
+                }
+            />
+
+            <nav className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" aria-label={s.title}>
+                {MODES.map((key) => {
+                    const Icon = modeIcons[key];
+                    const activeMode = mode === key;
+
+                    return (
+                        <button
+                            key={key}
+                            type="button"
+                            onClick={() => changeMode(key)}
+                            aria-current={activeMode ? 'page' : undefined}
+                            className={cn(
+                                'flex shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border px-3.5 py-2 text-start transition-all',
+                                activeMode ? 'border-gold bg-gold-soft/60 ring-gold/20 shadow-sm ring-2' : 'bg-card text-muted-foreground hover:text-foreground hover:border-foreground/20',
+                            )}
+                        >
+                            {key === 'designer' ? <GarmentIcon garment="abaya" className={cn('h-6 w-5', activeMode && 'text-gold-foreground dark:text-gold')} /> : <Icon className="size-4" />}
+                            <span>
+                                <span className={cn('block text-sm leading-tight', activeMode ? 'text-foreground font-semibold' : 'font-medium')}>{t.designer.modes[key]}</span>
+                                <span className="text-muted-foreground block text-[11px] leading-tight">{t.designer.modeHints[key]}</span>
+                            </span>
+                        </button>
+                    );
+                })}
+            </nav>
+
+            {mode === 'designer' ? (
+                <DesignerWorkspace designer={props.designer} collections={props.collections} openCollection={props.openCollection} insights={props.insights} aiLive={aiLive} />
+            ) : (
+                <ClassicStudio key={mode} {...props} mode={mode} />
+            )}
+        </PageBody>
+    );
+}
+
+function ModifyEmpty() {
+    const { t } = useI18n();
+    const m = t.designer.modifyEmpty;
+
+    return (
+        <div className="bg-card rounded-2xl border">
+            <EmptyState
+                icon={RefreshCw}
+                title={m.title}
+                description={m.body}
+                action={
+                    <div className="flex flex-wrap justify-center gap-2">
+                        <Button variant="gold" asChild>
+                            <Link href="/store/catalog">{m.catalog}</Link>
+                        </Button>
+                        <Button variant="outline" asChild>
+                            <Link href="/store/evaluations">{m.evaluations}</Link>
+                        </Button>
+                    </div>
+                }
+            />
+        </div>
+    );
+}
+
+function ClassicStudio({ source, prefillPrompt, brand, trends, categories, requests, since, outputTypes, ideas, refine, mode }: Props & { mode: ClassicMode }) {
     const { t, tr, field, relative, locale } = useI18n();
     const { label } = useVocabulary();
     const s = t.studio;
@@ -135,7 +244,7 @@ export default function Studio({ source, prefillPrompt, brand, trends, categorie
     const running = requests.some((r) => r.status === 'pending' || r.status === 'processing');
 
     const form = useForm({
-        type: (source ? 'modification' : 'new_idea') as RequestType,
+        type: (mode === 'modify' && source ? 'modification' : mode === 'mockup' ? 'mockup' : 'new_idea') as RequestType,
         title: source?.name ?? '',
         prompt: source?.prompt ?? prefillPrompt ?? '',
         category: source?.category ?? '',
@@ -200,45 +309,19 @@ export default function Studio({ source, prefillPrompt, brand, trends, categorie
     const brandStyle = locale === 'ar' ? brand.style_ar : brand.style_en;
 
     return (
-        <PageBody>
+        <>
             {running && <Poll />}
-            <PageHeader
-                title={s.title}
-                description={s.subtitle}
-                icon={WandSparkles}
-                actions={
-                    <Button variant="outline" asChild>
-                        <Link href="/store/library">
-                            <Images className="size-4" />
-                            {s.openLibrary}
-                        </Link>
-                    </Button>
-                }
-            />
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-                {/* Request form */}
+                {/* Request form; editing needs a product picked first */}
+                {mode === 'modify' && !source ? (
+                    <div className="xl:sticky xl:top-20 xl:self-start">
+                        <ModifyEmpty />
+                    </div>
+                ) : (
                 <form id="studio-form" onSubmit={submit} className="space-y-5 xl:sticky xl:top-20 xl:self-start">
                     <SectionCard title={s.form.heading} icon={Sparkles}>
                         <div className="space-y-5">
-                            <div className="grid grid-cols-3 gap-2">
-                                {(['modification', 'new_idea', 'mockup'] as RequestType[]).map((type) => (
-                                    <button
-                                        key={type}
-                                        type="button"
-                                        disabled={type === 'modification' && !form.data.evaluation_id && !form.data.product_recommendation_id}
-                                        onClick={() => form.setData((data) => ({ ...data, type, ...(type !== 'modification' ? { product_recommendation_id: null, recommendation_key: '' } : {}) }))}
-                                        className={cn(
-                                            'flex cursor-pointer flex-col gap-1 rounded-xl border p-3 text-start transition-all disabled:cursor-not-allowed disabled:opacity-40',
-                                            form.data.type === type ? 'border-primary bg-primary/5 ring-primary/15 ring-2' : 'hover:border-primary/30',
-                                        )}
-                                    >
-                                        <span className="text-sm font-medium">{s.form.types[type]}</span>
-                                        <span className="text-muted-foreground text-[11px] leading-snug">{s.form.typeHints[type]}</span>
-                                    </button>
-                                ))}
-                            </div>
-
                             <AnimatePresence>
                                 {source && (form.data.evaluation_id || form.data.product_recommendation_id) && (
                                     <motion.div
@@ -379,6 +462,7 @@ export default function Studio({ source, prefillPrompt, brand, trends, categorie
                         </div>
                     </SectionCard>
                 </form>
+                )}
 
                 <div className="space-y-6">
                     {/* Proactive ideas (FR-4.4) */}
@@ -461,7 +545,7 @@ export default function Studio({ source, prefillPrompt, brand, trends, categorie
                 </div>
             </div>
             {refine && <DesignEditor design={refine} open={refining} onOpenChange={setRefining} />}
-        </PageBody>
+        </>
     );
 }
 

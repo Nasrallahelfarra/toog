@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Store;
 use App\Http\Controllers\Controller;
 use App\Jobs\GenerateDesigns;
 use App\Models\Design;
+use App\Models\DesignCollection;
 use App\Models\DesignRequest;
 use App\Models\Evaluation;
 use App\Models\Product;
@@ -13,8 +14,10 @@ use App\Models\Trend;
 use App\Services\Design\DesignService;
 use App\Services\Design\IdeaService;
 use App\Services\Design\Refinements;
+use App\Services\Designer\DesignerInsights;
 use App\Support\Activity;
 use App\Support\CurrentStore;
+use App\Support\FashionVocabulary;
 use App\Support\Vocabulary;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -33,7 +36,7 @@ class StudioController extends Controller
 {
     public function __construct(private readonly CurrentStore $current) {}
 
-    public function index(Request $request, DesignService $designs, IdeaService $ideas): Response
+    public function index(Request $request, DesignService $designs, IdeaService $ideas, DesignerInsights $insights): Response
     {
         $store = $this->current->require();
         $source = null;
@@ -85,7 +88,29 @@ class StudioController extends Controller
         $since = $request->integer('since') ?: (($source || $refine)
             ? (int) DesignRequest::query()->where('store_id', $store->id)->max('id') : 0);
 
+        // The AI designer is the studio's first mode; older links keep their mode.
+        $mode = in_array($request->query('mode'), ['designer', 'modify', 'idea', 'mockup'], true) ? $request->query('mode') : match (true) {
+            $source !== null => 'modify',
+            $request->filled('prompt') || $refine !== null || $request->integer('since') > 0 => 'idea',
+            default => 'designer',
+        };
+        $collectionId = $request->integer('collection');
+
         return Inertia::render('store/studio/index', [
+            'mode' => $mode,
+            'designer' => fn () => [
+                'vocabulary' => FashionVocabulary::forFrontend(),
+                'briefing' => DesignerController::briefing($store->id),
+                'brand_colors' => collect($store->brand_guide['colors'] ?? [])->map(fn ($hex) => $designs->nearestColor((string) $hex))->unique()->values()->all(),
+            ],
+            // The latest collections; one opened by link stays first.
+            'collections' => fn () => DesignCollection::query()->where('store_id', $store->id)
+                ->when($collectionId, fn ($q) => $q->orderByRaw('id = ? DESC', [$collectionId]))
+                ->latest('id')->limit(6)->get()
+                ->map(fn (DesignCollection $c) => DesignerController::present($c)),
+            'openCollection' => $collectionId ?: null,
+            // Store intelligence for the designer's rail: loaded after the page.
+            'insights' => Inertia::defer(fn () => $insights->build($store)),
             // A prompt handed over from another page, e.g. a market trend.
             'prefillPrompt' => $request->string('prompt')->limit(500)->toString() ?: null,
             'source' => $source,
@@ -245,7 +270,20 @@ class StudioController extends Controller
     {
         $since = $request->integer('since') ?: ($edit ? $designRequest->id - 1 : 0);
 
-        return to_route('store.studio.index', $since ? ['since' => $since] : []);
+        return to_route('store.studio.index', array_filter(['mode' => self::modeFor($designRequest), 'since' => $since ?: null]));
+    }
+
+    /**
+     * The studio tab a request belongs to; the AI designer is the default
+     * tab, so a request's own tab is named on every redirect back.
+     */
+    private static function modeFor(DesignRequest $designRequest): string
+    {
+        return match ($designRequest->type) {
+            'modification' => 'modify',
+            'mockup' => 'mockup',
+            default => 'idea',
+        };
     }
 
     public function retry(DesignRequest $designRequest): RedirectResponse
@@ -257,7 +295,13 @@ class StudioController extends Controller
 
         Inertia::flash('toast', ['type' => 'info', 'message' => __('mojo.design_queued')]);
 
-        return back();
+        // Back to the page it came from, on the request's own tab.
+        $previous = parse_url(url()->previous());
+        parse_str($previous['query'] ?? '', $query);
+
+        return ($previous['path'] ?? '') === '/store/studio'
+            ? to_route('store.studio.index', [...$query, 'mode' => self::modeFor($designRequest)])
+            : back();
     }
 
     /**

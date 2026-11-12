@@ -42,7 +42,7 @@ class DesignRefinementTest extends TestCase
     {
         $this->actingAs($this->store->owner)->post("/store/designs/{$this->design->id}/refine", [
             'presets' => ['clean_background', 'studio_light'], 'color' => 'gold', 'instruction' => 'Keep the sleeves plain', 'variants_count' => 2,
-        ])->assertSessionHasNoErrors()->assertRedirect('/store/studio?since='.$this->design->design_request_id);
+        ])->assertSessionHasNoErrors()->assertRedirect('/store/studio?mode=idea&since='.$this->design->design_request_id);
 
         $edit = DesignRequest::query()->where('type', DesignRequest::REFINEMENT)->sole();
         $this->assertSame($this->design->id, $edit->parent_design_id);
@@ -85,7 +85,7 @@ class DesignRefinementTest extends TestCase
 
         // The edit's own request shows after the submit, and polls keep the workspace.
         $this->post("/store/designs/{$this->design->id}/refine", ['instruction' => 'Shorten the sleeves', 'since' => $running->id])
-            ->assertRedirect("/store/studio?since={$running->id}");
+            ->assertRedirect("/store/studio?mode=idea&since={$running->id}");
         $edit = DesignRequest::query()->where('type', DesignRequest::REFINEMENT)->sole();
         $edit->update(['status' => 'completed']);
         $running->update(['status' => 'completed']);

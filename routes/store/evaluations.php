@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Store\DesignController;
+use App\Http\Controllers\Store\DesignerController;
 use App\Http\Controllers\Store\DesignImprovementController;
 use App\Http\Controllers\Store\EvaluationBatchController;
 use App\Http\Controllers\Store\EvaluationController;
@@ -31,6 +32,13 @@ Route::get('batches/{batch}', [EvaluationBatchController::class, 'show'])->name(
 Route::get('studio', [StudioController::class, 'index'])->name('studio.index');
 Route::post('studio', [StudioController::class, 'store'])->name('studio.store');
 Route::post('studio/{designRequest}/retry', [StudioController::class, 'retry'])->name('studio.retry');
+
+// The AI fashion designer, one of the studio's modes
+Route::post('studio/collections', [DesignerController::class, 'store'])->middleware('throttle:10,1')->name('designer.store');
+Route::post('studio/collections/{collection}/retry', [DesignerController::class, 'retry'])->name('designer.retry');
+Route::post('studio/collections/{collection}/concepts/{index}/redraw', [DesignerController::class, 'redraw'])->whereNumber('index')->middleware('throttle:20,1')->name('designer.redraw');
+Route::delete('studio/collections/{collection}', [DesignerController::class, 'destroy'])->name('designer.destroy');
+Route::post('studio/designer/advice', [DesignerController::class, 'advise'])->middleware('throttle:6,1')->name('designer.advice');
 
 Route::get('library', [DesignController::class, 'index'])->name('library.index');
 Route::patch('designs/{design}', [DesignController::class, 'update'])->name('designs.update');

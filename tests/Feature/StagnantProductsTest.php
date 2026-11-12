@@ -244,7 +244,7 @@ class StagnantProductsTest extends TestCase
             ->component('store/studio/index')->where('source.name', $product->name)->where('source.id', null)
             ->where('source.recovery_id', $run->id)->where('source.prompt', $instruction)
             ->where('source.image_url', Storage::disk('public')->url($run->source_image_path)));
-        $this->post('/store/studio', $this->studioPayload($run))->assertSessionHasNoErrors()->assertRedirect('/store/studio');
+        $this->post('/store/studio', $this->studioPayload($run))->assertSessionHasNoErrors()->assertRedirect('/store/studio?mode=modify');
         $request = DesignRequest::query()->firstOrFail();
         $this->assertSame($run->source_image_path, $request->source_image_path);
         $this->assertSame($run->id, $request->product_recommendation_id);
@@ -282,7 +282,7 @@ class StagnantProductsTest extends TestCase
             ->where('source.prompt', 'Create a restrained palette')->where('source.action', 'r2')
             ->where('source.image_url', Storage::disk('public')->url($run->source_image_path)));
         $this->post('/store/studio', [...$this->studioPayload($run), 'recommendation_key' => 'r2', 'prompt' => 'Create a restrained palette'])
-            ->assertSessionHasNoErrors()->assertRedirect('/store/studio');
+            ->assertSessionHasNoErrors()->assertRedirect('/store/studio?mode=modify');
         $design = DesignRequest::query()->firstOrFail();
         $this->assertSame('Create a restrained palette', $design->prompt);
         $this->assertSame($run->source_image_path, $design->source_image_path);

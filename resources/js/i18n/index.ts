@@ -7,6 +7,7 @@ import { calendar as arCalendar } from './ar/calendar';
 import { catalog as arCatalog } from './ar/catalog';
 import { common as arCommon } from './ar/common';
 import { dashboard as arDashboard } from './ar/dashboard';
+import { designer as arDesigner } from './ar/designer';
 import { evaluation as arEvaluation } from './ar/evaluation';
 import { market as arMarket } from './ar/market';
 import { nav as arNav } from './ar/nav';
@@ -28,6 +29,7 @@ import { calendar as enCalendar } from './en/calendar';
 import { catalog as enCatalog } from './en/catalog';
 import { common as enCommon } from './en/common';
 import { dashboard as enDashboard } from './en/dashboard';
+import { designer as enDesigner } from './en/designer';
 import { evaluation as enEvaluation } from './en/evaluation';
 import { market as enMarket } from './en/market';
 import { nav as enNav } from './en/nav';
@@ -56,6 +58,7 @@ export const ar = {
     settings: arSettings,
     evaluation: arEvaluation,
     studio: arStudio,
+    designer: arDesigner,
     productReview: arProductReview,
     zidSync: arZidSync,
     stagnant: arStagnant,
@@ -82,6 +85,7 @@ export const en: Dictionary = {
     settings: enSettings,
     evaluation: enEvaluation,
     studio: enStudio,
+    designer: enDesigner,
     productReview: enProductReview,
     zidSync: enZidSync,
     stagnant: enStagnant,
