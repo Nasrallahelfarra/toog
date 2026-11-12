@@ -56,6 +56,10 @@ class Competitor extends Model
     public static function normalizeHandle(?string $value): ?string
     {
         $value = trim((string) $value);
+        // Facebook pages without a username: profile.php?id=<number>.
+        if (preg_match('~facebook\.com/profile\.php\?(?:[^#\s]*&)?id=(\d+)~i', $value, $match)) {
+            return $match[1];
+        }
         if (preg_match('~^(?:https?://)?(?:[\w-]+\.)*(?:instagram|tiktok|facebook|snapchat)\.com/(?:add/)?@?([^/?#\s]+)~i', $value, $match)) {
             $value = rawurldecode($match[1]);
         }

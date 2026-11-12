@@ -30,7 +30,10 @@ class PublicWebClient
         )));
     }
 
-    public function get(string $url, int $redirects = 0): Response
+    /**
+     * @param  array<string, string>  $headers  extra request headers (e.g. a public storefront API key)
+     */
+    public function get(string $url, int $redirects = 0, array $headers = []): Response
     {
         $parts = parse_url($url);
         $host = strtolower(trim($parts['host'] ?? '', '[]'));
@@ -55,7 +58,7 @@ class PublicWebClient
 
         $ip = str_contains($addresses[0], ':') ? "[{$addresses[0]}]" : $addresses[0];
         $response = Http::connectTimeout(5)->timeout(15)
-            ->withHeaders(['User-Agent' => 'Toog-MarketMonitor/1.0 (+public catalog)', 'Accept' => 'text/html,application/json'])
+            ->withHeaders(['User-Agent' => 'Toog-MarketMonitor/1.0 (+public catalog)', 'Accept' => 'text/html,application/json', ...$headers])
             ->withOptions([
                 'allow_redirects' => false,
                 'curl' => [CURLOPT_RESOLVE => ["{$host}:{$port}:{$ip}"]],
@@ -72,7 +75,7 @@ class PublicWebClient
                 throw new RuntimeException('Too many storefront redirects.');
             }
 
-            return $this->get($this->absolute($url, $response->header('Location')), $redirects + 1);
+            return $this->get($this->absolute($url, $response->header('Location')), $redirects + 1, $headers);
         }
         if (strlen($response->body()) > 5_000_000) {
             throw new RuntimeException('The public page exceeds the crawl size limit.');

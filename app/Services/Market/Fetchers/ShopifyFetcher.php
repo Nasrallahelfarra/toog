@@ -22,6 +22,7 @@ class ShopifyFetcher implements CompetitorFetcher
         private readonly PublicWebClient $web,
         private readonly StorefrontParser $parser,
         private readonly CompetitorAnalysis $analysis,
+        private readonly SallaFetcher $salla,
     ) {}
 
     public function supports(Competitor $competitor): bool
@@ -62,6 +63,13 @@ class ShopifyFetcher implements CompetitorFetcher
         $homeResponse = $read($home);
         if (! $homeResponse->successful()) {
             return FetchResult::failed('Storefront returned HTTP '.$homeResponse->status());
+        }
+        // A store saved as a plain website that turns out to be on Salla is
+        // read through Salla's public catalog, and remembered as Salla.
+        if ($competitor->platform !== 'shopify' && SallaFetcher::detect($homeResponse->body())) {
+            $competitor->update(['platform' => 'salla']);
+
+            return $this->salla->fetch($competitor, $progress, $homeResponse->body());
         }
         $page = $this->parser->parse($homeResponse->body(), $home);
         $stage = 'products';
