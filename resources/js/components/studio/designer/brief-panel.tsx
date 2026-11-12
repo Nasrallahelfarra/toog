@@ -51,6 +51,7 @@ export type BriefForm = {
 };
 
 const MAX_COLORS = 4;
+const FABRIC_INPUT_ID = 'designer-fabric-input';
 
 /**
  * The AI designer's brief: fabric (photo and/or type), garment, occasion,
@@ -495,9 +496,25 @@ function FabricDrop({
         if (f && f.type.startsWith('image/')) onChange(f);
     };
 
+    // Always mounted, so "fabric photo" buttons elsewhere can open the picker.
+    const picker = (
+        <input
+            ref={input}
+            id={FABRIC_INPUT_ID}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+                pick(e.target.files);
+                e.target.value = '';
+            }}
+        />
+    );
+
     if (!preview && reusedUrl) {
         return (
             <div className="flex items-center gap-4 rounded-xl bg-muted/40 p-3">
+                {picker}
                 <img
                     src={reusedUrl}
                     alt=""
@@ -523,13 +540,19 @@ function FabricDrop({
     if (preview) {
         return (
             <div className="flex items-center gap-4 rounded-xl bg-muted/40 p-3">
-                <div className="relative shrink-0">
+                {picker}
+                <button
+                    type="button"
+                    onClick={() => input.current?.click()}
+                    className="relative shrink-0 cursor-pointer"
+                    aria-label={d.fabricDrop}
+                >
                     <img
                         src={preview}
                         alt=""
-                        className="size-20 rounded-full object-cover shadow-sm ring-4 ring-white/70 dark:ring-white/10"
+                        className="size-20 rounded-full object-cover shadow-sm ring-4 ring-white/70 transition-opacity hover:opacity-85 dark:ring-white/10"
                     />
-                </div>
+                </button>
                 <div className="min-w-0 flex-1 space-y-2">
                     <p className="text-[11px] text-muted-foreground">
                         {d.sampled}
@@ -599,15 +622,18 @@ function FabricDrop({
                     </span>
                 </span>
             </button>
-            <input
-                ref={input}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => pick(e.target.files)}
-            />
+            {picker}
         </div>
     );
+}
+
+/** Opens the brief's fabric photo picker from anywhere on the page. */
+export function openFabricPicker() {
+    const field = document.getElementById(FABRIC_INPUT_ID);
+    field
+        ?.closest('form')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    field?.click();
 }
 
 /** Top colours of an image, as platform colour keys covering at least 8% each. */
