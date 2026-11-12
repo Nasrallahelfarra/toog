@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { useI18n } from '@/hooks/use-i18n';
-import { BriefPanel } from './brief-panel';
+import { BriefPanel, openFabricPicker } from './brief-panel';
 import type { BriefForm } from './brief-panel';
 import { CollectionView } from './collection-view';
 import { GarmentIcon } from './garment-icons';
@@ -171,7 +171,7 @@ export function DesignerWorkspace({
                         />
                     ) : (
                         <EmptyTable
-                            onUpload={focusBrief}
+                            onUpload={openFabricPicker}
                             onOpportunity={
                                 topOpportunity
                                     ? () => applyPrefill(topOpportunity)
