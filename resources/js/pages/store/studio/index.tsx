@@ -34,7 +34,7 @@ import { aspectClass, DesignCard } from '@/components/studio/design-card';
 import { DesignEditor } from '@/components/studio/design-editor';
 import { DesignerWorkspace } from '@/components/studio/designer/designer-workspace';
 import { GarmentIcon } from '@/components/studio/designer/garment-icons';
-import type { Collection, DesignerProps, Insights } from '@/components/studio/designer/types';
+import type { Collection, DesignerProps, Insights, Prefill } from '@/components/studio/designer/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -120,6 +120,8 @@ type Props = {
     designer: DesignerProps;
     collections: Collection[];
     openCollection: number | null;
+    /** "Design like this" from the competitor radar. */
+    designerPrefill: Prefill | null;
     /** Deferred: arrives after the first paint. */
     insights?: Insights;
 };
@@ -202,7 +204,14 @@ export default function Studio(props: Props) {
             </nav>
 
             {mode === 'designer' ? (
-                <DesignerWorkspace designer={props.designer} collections={props.collections} openCollection={props.openCollection} insights={props.insights} aiLive={aiLive} />
+                <DesignerWorkspace
+                    designer={props.designer}
+                    collections={props.collections}
+                    openCollection={props.openCollection}
+                    insights={props.insights}
+                    aiLive={aiLive}
+                    initialPrefill={props.designerPrefill}
+                />
             ) : (
                 <ClassicStudio key={mode} {...props} mode={mode} />
             )}

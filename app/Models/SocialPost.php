@@ -25,10 +25,11 @@ use Illuminate\Support\Carbon;
  * @property array<string, mixed>|null $features
  * @property array<string, mixed>|null $evidence
  * @property Carbon|null $posted_at
+ * @property array<string, mixed>|null $ai_reading per language, kept across scans
  */
 #[Fillable([
     'store_id', 'competitor_id', 'external_id', 'platform', 'url', 'caption', 'thumbnail_url', 'views', 'likes', 'shares',
-    'comments', 'engagement_rate', 'features', 'evidence', 'posted_at',
+    'comments', 'engagement_rate', 'features', 'evidence', 'posted_at', 'ai_reading',
 ])]
 class SocialPost extends Model
 {
@@ -58,6 +59,7 @@ class SocialPost extends Model
         return [
             'features' => 'array',
             'evidence' => 'array',
+            'ai_reading' => 'array',
             'engagement_rate' => 'decimal:2',
             'posted_at' => 'datetime',
         ];

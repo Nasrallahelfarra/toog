@@ -4,6 +4,7 @@ namespace App\Services\Market\Fetchers;
 
 use App\Models\Competitor;
 use App\Models\SocialPost;
+use App\Models\SocialPostObservation;
 use App\Services\Market\ApifyClient;
 use App\Services\Market\ApifyException;
 use App\Services\Market\FeatureExtractor;
@@ -118,6 +119,13 @@ class ApifySocialFetcher implements CompetitorFetcher
                     $result->added++;
                 }
                 $ids[] = $existing->id;
+                // Scans overwrite the post's numbers; keep a dated copy so
+                // engagement speed and rising ideas can be measured later.
+                SocialPostObservation::query()->create([
+                    'social_post_id' => $existing->id, 'observed_at' => $observedAt,
+                    'likes' => $post['likes'], 'comments' => $post['comments'], 'shares' => $post['shares'], 'views' => $post['views'],
+                    'followers' => $evidence['followers'] ?? null,
+                ]);
             }
 
             return $ids;

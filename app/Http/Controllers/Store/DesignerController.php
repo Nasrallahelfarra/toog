@@ -4,9 +4,14 @@ namespace App\Http\Controllers\Store;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\GenerateDesignCollection;
+use App\Models\CompetitorProduct;
 use App\Models\DesignCollection;
 use App\Models\DesignerBriefing;
+use App\Models\SocialPost;
+use App\Models\Store;
 use App\Services\Designer\DesignerAdvisor;
+use App\Services\Market\CompetitorRadar;
+use App\Services\Market\PostTagger;
 use App\Support\Activity;
 use App\Support\CurrentStore;
 use App\Support\FashionVocabulary;
@@ -178,6 +183,44 @@ class DesignerController extends Controller
                 'image_url' => ! empty($concept['image_path']) ? $disk->url($concept['image_path']) : null,
             ], $c->concepts ?? []),
         ];
+    }
+
+    /**
+     * A brief prefill for "design like this" on the competitor radar:
+     * `post:ID` (a competitor post) or `product:ID` (a competitor product).
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function inspire(Store $store, string $inspire): ?array
+    {
+        if (! preg_match('/^(post|product):(\d+)$/', $inspire, $m)) {
+            return null;
+        }
+        $ar = app()->getLocale() === 'ar';
+        $notes = $ar ? 'مستوحى من منافس: خذ الفكرة وغيّر عنصرين على الأقل (القصّة، النقشة أو اللون) بروح متجرك.'
+            : 'Inspired by a competitor: take the idea and change at least two of cut, pattern or colour, in your own style.';
+
+        if ($m[1] === 'post') {
+            $post = SocialPost::query()->where('store_id', $store->id)->with('competitor:id,name')->find((int) $m[2]);
+            if (! $post) {
+                return null;
+            }
+            $tags = app(PostTagger::class)->tag($post);
+
+            return ['garment' => $tags['garment'], 'colors' => array_slice($tags['colors'], 0, 3), 'pattern' => $tags['pattern'], 'notes' => $notes,
+                'inspiration' => ['kind' => 'social', 'id' => $post->id, 'label' => $post->competitor?->name ?? '—', 'image_url' => CompetitorRadar::image($post)]];
+        }
+
+        $product = CompetitorProduct::query()->where('store_id', $store->id)->find((int) $m[2]);
+        if (! $product) {
+            return null;
+        }
+        $features = $product->features ?? [];
+
+        return ['garment' => FashionVocabulary::garmentFor($product->category, $product->name),
+            'colors' => array_slice(array_values(array_filter((array) ($features['colors'] ?? []), 'is_string')), 0, 3),
+            'pattern' => $features['pattern'] ?? null, 'notes' => $notes,
+            'inspiration' => ['kind' => 'competitor', 'id' => $product->id, 'label' => $product->name, 'image_url' => $product->image_url]];
     }
 
     /**

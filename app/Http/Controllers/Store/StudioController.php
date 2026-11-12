@@ -109,6 +109,8 @@ class StudioController extends Controller
                 ->latest('id')->limit(6)->get()
                 ->map(fn (DesignCollection $c) => DesignerController::present($c)),
             'openCollection' => $collectionId ?: null,
+            // "Design like this" from the competitor radar.
+            'designerPrefill' => DesignerController::inspire($store, $request->string('inspire')->toString()),
             // Store intelligence for the designer's rail: loaded after the page.
             'insights' => Inertia::defer(fn () => $insights->build($store)),
             // A prompt handed over from another page, e.g. a market trend.

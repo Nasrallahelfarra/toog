@@ -4,6 +4,7 @@ use App\Http\Controllers\Store\ActivityController;
 use App\Http\Controllers\Store\BalanceController;
 use App\Http\Controllers\Store\CalendarController;
 use App\Http\Controllers\Store\CompetitorController;
+use App\Http\Controllers\Store\CompetitorRadarController;
 use App\Http\Controllers\Store\MarketController;
 use App\Http\Controllers\Store\NotificationController;
 use App\Http\Controllers\Store\ReportController;
@@ -24,6 +25,9 @@ Route::put('competitors/social-settings', [CompetitorController::class, 'updateS
 Route::put('competitors/{competitor}', [CompetitorController::class, 'update'])->name('competitors.update');
 Route::delete('competitors/{competitor}', [CompetitorController::class, 'destroy'])->name('competitors.destroy');
 Route::post('competitors/{competitor}/scan', [CompetitorController::class, 'scan'])->name('competitors.scan');
+// The competitor radar: AI reading of what engages, and watching a product
+Route::post('competitors/reading', [CompetitorRadarController::class, 'read'])->middleware('throttle:6,1')->name('competitors.reading');
+Route::post('competitors/products/{product}/watch', [CompetitorRadarController::class, 'watch'])->whereNumber('product')->name('competitors.products.watch');
 
 Route::get('balance', [BalanceController::class, 'index'])->name('balance');
 

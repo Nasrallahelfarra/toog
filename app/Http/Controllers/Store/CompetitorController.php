@@ -7,6 +7,7 @@ use App\Models\Competitor;
 use App\Models\CompetitorProduct;
 use App\Models\SocialPost;
 use App\Services\Market\CompetitorMonitor;
+use App\Services\Market\CompetitorRadar;
 use App\Services\Market\CompetitorScanState;
 use App\Support\Activity;
 use App\Support\CurrentStore;
@@ -44,6 +45,7 @@ class CompetitorController extends Controller
             ->get();
 
         $selected = $request->integer('competitor') ?: null;
+        $days = in_array($request->integer('days'), CompetitorRadar::WINDOWS, true) ? $request->integer('days') : 30;
         $selectedCompetitor = $selected ? $competitors->firstWhere('id', $selected) : null;
 
         return Inertia::render('store/competitors', [
@@ -77,6 +79,12 @@ class CompetitorController extends Controller
             'socialPosts' => ['limit' => $store->socialPostsLimit(), 'max' => (int) config('mojo.apify.max_posts_limit')],
             'selected' => $selectedCompetitor ? $this->details($selectedCompetitor) : null,
             'lastScan' => $store->syncRuns()->where('type', 'competitor_scan')->latest('id')->first(['status', 'stats', 'finished_at']),
+            // The radar answers "what earns them engagement, and what should
+            // I add?"; managing the list is its own tab.
+            'tab' => in_array($request->query('tab'), ['radar', 'products', 'accounts'], true) ? $request->query('tab') : 'radar',
+            'days' => $days,
+            'radar' => Inertia::defer(fn () => app(CompetitorRadar::class)->build($store, $days)),
+            'reading' => fn () => CompetitorRadarController::reading($store->id, $days),
         ]);
     }
 

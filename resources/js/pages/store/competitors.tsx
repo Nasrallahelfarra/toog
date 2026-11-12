@@ -16,6 +16,9 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { ProductsView } from '@/components/market/radar/products-view';
+import { RadarView } from '@/components/market/radar/radar-view';
+import type { Days, RadarData, Reading } from '@/components/market/radar/types';
 import InputError from '@/components/input-error';
 import { CompetitorWorkspace } from '@/components/market/competitor-workspace';
 import type {
@@ -70,7 +73,16 @@ type Props = {
         } | null;
         finished_at: string | null;
     } | null;
+    tab: Tab;
+    days: Days;
+    /** Deferred: the radar arrives after the first paint. */
+    radar?: RadarData;
+    reading: Reading;
 };
+
+type Tab = 'radar' | 'products' | 'accounts';
+const TABS: Tab[] = ['radar', 'products', 'accounts'];
+const WINDOWS: Days[] = [7, 30, 90];
 
 const SOCIAL = ['instagram', 'tiktok', 'facebook', 'snapchat'];
 
@@ -98,8 +110,35 @@ export default function Competitors({
     selected,
     socialPosts,
     lastScan,
+    tab: initialTab,
+    days,
+    radar,
+    reading,
 }: Props) {
     const { t, tr, relative, number } = useI18n();
+    const rt = t.radar;
+    const [tab, setTab] = useState<Tab>(initialTab);
+    const [loadingDays, setLoadingDays] = useState(false);
+    const changeTab = (next: Tab) => {
+        setTab(next);
+        const url = new URL(window.location.href);
+        if (next === 'radar') url.searchParams.delete('tab');
+        else url.searchParams.set('tab', next);
+        window.history.replaceState(window.history.state, '', url);
+    };
+    const changeDays = (next: Days) =>
+        router.get(
+            '/store/competitors',
+            { days: next, ...(tab !== 'radar' ? { tab } : {}) },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                only: ['radar', 'reading', 'days'],
+                onStart: () => setLoadingDays(true),
+                onFinish: () => setLoadingDays(false),
+            },
+        );
     const [editing, setEditing] = useState<Competitor | 'new' | null>(null);
     const [scanning, setScanning] = useState<number | 'all' | null>(null);
     const [requestFailed, setRequestFailed] = useState(false);
@@ -175,16 +214,35 @@ export default function Competitors({
     return (
         <PageBody>
             <PageHeader
-                title={c.title}
-                description={c.description}
-                icon={Swords}
+                title={rt.title}
+                description={rt.description}
+                icon={Radar}
                 actions={
                     <>
-                        <Button variant="outline" asChild>
-                            <Link href="/store/market">
-                                <Radar className="size-4" />
-                                {t.market.title}
-                            </Link>
+                        <div
+                            className="flex rounded-xl bg-muted p-1"
+                            role="group"
+                            aria-label={rt.title}
+                        >
+                            {WINDOWS.map((w) => (
+                                <button
+                                    key={w}
+                                    type="button"
+                                    onClick={() => changeDays(w)}
+                                    aria-pressed={days === w}
+                                    className={cn(
+                                        'cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
+                                        days === w
+                                            ? 'bg-card shadow-sm'
+                                            : 'text-muted-foreground hover:text-foreground',
+                                    )}
+                                >
+                                    {rt.windows[w]}
+                                </button>
+                            ))}
+                        </div>
+                        <Button variant="ghost" asChild>
+                            <Link href="/store/market">{rt.marketLink}</Link>
                         </Button>
                         <Button
                             variant="outline"
@@ -210,6 +268,33 @@ export default function Competitors({
                     </>
                 }
             />
+
+            <nav
+                className="-mx-1 flex gap-1 overflow-x-auto border-b px-1"
+                aria-label={rt.title}
+            >
+                {TABS.map((key) => (
+                    <button
+                        key={key}
+                        type="button"
+                        onClick={() => changeTab(key)}
+                        aria-current={tab === key ? 'page' : undefined}
+                        className={cn(
+                            '-mb-px cursor-pointer border-b-2 px-4 py-2.5 text-sm whitespace-nowrap transition-colors',
+                            tab === key
+                                ? 'border-gold font-semibold text-foreground'
+                                : 'border-transparent text-muted-foreground hover:text-foreground',
+                        )}
+                    >
+                        {rt.tabs[key]}
+                        {key === 'accounts' && (
+                            <span className="num ms-1.5 text-xs text-muted-foreground">
+                                {number(stats.total)}
+                            </span>
+                        )}
+                    </button>
+                ))}
+            </nav>
 
             {scanning === null &&
                 competitors.some((x) => isScanning(x.scan)) && (
@@ -240,61 +325,11 @@ export default function Competitors({
                 </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl border border-border/70 bg-card px-5 py-3.5 text-sm shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-                {(['total', 'active', 'products', 'posts'] as const).map(
-                    (key) => (
-                        <span key={key} className="flex items-baseline gap-1.5">
-                            <strong className="num text-lg font-semibold">
-                                {number(stats[key])}
-                            </strong>
-                            <span className="text-muted-foreground">
-                                {c.totals[key]}
-                            </span>
-                        </span>
-                    ),
-                )}
-                {lastScan?.finished_at && (
-                    <span className="ms-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Clock className="size-3.5" />
-                        {tr(c.lastScan, {
-                            time: relative(lastScan.finished_at),
-                        })}
-                        {lastScan.stats && (
-                            <span className="hidden md:inline">
-                                ·{' '}
-                                {tr(c.scanStats, {
-                                    added: lastScan.stats.added ?? 0,
-                                    updated: lastScan.stats.updated ?? 0,
-                                    changes: lastScan.stats.price_changes ?? 0,
-                                })}
-                            </span>
-                        )}
-                    </span>
-                )}
-            </div>
-
-            <div className="flex flex-col gap-3 rounded-xl bg-info-soft/60 px-4 py-3 text-xs leading-relaxed text-info lg:flex-row lg:items-center">
-                <div className="flex flex-1 items-start gap-2.5">
-                    <ScanLine className="mt-0.5 size-4 shrink-0" />
-                    <span>
-                        <strong className="font-semibold">
-                            {c.coverage}:{' '}
-                        </strong>
-                        {c.coverageHint}
-                    </span>
-                </div>
-                <SocialPostsLimit
-                    key={socialPosts.limit}
-                    limit={socialPosts.limit}
-                    max={socialPosts.max}
-                />
-            </div>
-
-            {competitors.length === 0 ? (
+            {tab !== 'accounts' && competitors.length === 0 && (
                 <EmptyState
                     icon={Swords}
-                    title={c.empty}
-                    description={c.emptyHint}
+                    title={rt.empty.noCompetitors}
+                    description={rt.empty.noCompetitorsBody}
                     action={
                         <Button onClick={() => setEditing('new')}>
                             <Plus className="size-4" />
@@ -302,23 +337,119 @@ export default function Competitors({
                         </Button>
                     }
                 />
-            ) : (
-                <Stagger className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {competitors.map((competitor) => (
-                        <StaggerItem key={competitor.id}>
-                            <CompetitorCard
-                                competitor={competitor}
-                                scanning={
-                                    scanning === competitor.id ||
-                                    isScanning(competitor.scan)
-                                }
-                                onOpen={() => openDetails(competitor.id)}
-                                onEdit={() => setEditing(competitor)}
-                                onScan={() => scan(competitor.id)}
-                            />
-                        </StaggerItem>
-                    ))}
-                </Stagger>
+            )}
+            {tab !== 'accounts' && competitors.length > 0 && (
+                <div
+                    className={cn(
+                        'transition-opacity',
+                        loadingDays && 'pointer-events-none opacity-60',
+                    )}
+                >
+                    {!radar ? (
+                        <RadarSkeleton />
+                    ) : tab === 'radar' ? (
+                        <RadarView
+                            radar={radar}
+                            reading={reading}
+                            onTab={changeTab}
+                        />
+                    ) : (
+                        <ProductsView radar={radar} />
+                    )}
+                </div>
+            )}
+
+            {tab === 'accounts' && (
+                <>
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl border border-border/70 bg-card px-5 py-3.5 text-sm shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+                        {(
+                            ['total', 'active', 'products', 'posts'] as const
+                        ).map((key) => (
+                            <span
+                                key={key}
+                                className="flex items-baseline gap-1.5"
+                            >
+                                <strong className="num text-lg font-semibold">
+                                    {number(stats[key])}
+                                </strong>
+                                <span className="text-muted-foreground">
+                                    {c.totals[key]}
+                                </span>
+                            </span>
+                        ))}
+                        {lastScan?.finished_at && (
+                            <span className="ms-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Clock className="size-3.5" />
+                                {tr(c.lastScan, {
+                                    time: relative(lastScan.finished_at),
+                                })}
+                                {lastScan.stats && (
+                                    <span className="hidden md:inline">
+                                        ·{' '}
+                                        {tr(c.scanStats, {
+                                            added: lastScan.stats.added ?? 0,
+                                            updated:
+                                                lastScan.stats.updated ?? 0,
+                                            changes:
+                                                lastScan.stats.price_changes ??
+                                                0,
+                                        })}
+                                    </span>
+                                )}
+                            </span>
+                        )}
+                    </div>
+
+                    <div className="flex flex-col gap-3 rounded-xl bg-info-soft/60 px-4 py-3 text-xs leading-relaxed text-info lg:flex-row lg:items-center">
+                        <div className="flex flex-1 items-start gap-2.5">
+                            <ScanLine className="mt-0.5 size-4 shrink-0" />
+                            <span>
+                                <strong className="font-semibold">
+                                    {c.coverage}:{' '}
+                                </strong>
+                                {c.coverageHint}
+                            </span>
+                        </div>
+                        <SocialPostsLimit
+                            key={socialPosts.limit}
+                            limit={socialPosts.limit}
+                            max={socialPosts.max}
+                        />
+                    </div>
+
+                    {competitors.length === 0 ? (
+                        <EmptyState
+                            icon={Swords}
+                            title={c.empty}
+                            description={c.emptyHint}
+                            action={
+                                <Button onClick={() => setEditing('new')}>
+                                    <Plus className="size-4" />
+                                    {c.add}
+                                </Button>
+                            }
+                        />
+                    ) : (
+                        <Stagger className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                            {competitors.map((competitor) => (
+                                <StaggerItem key={competitor.id}>
+                                    <CompetitorCard
+                                        competitor={competitor}
+                                        scanning={
+                                            scanning === competitor.id ||
+                                            isScanning(competitor.scan)
+                                        }
+                                        onOpen={() =>
+                                            openDetails(competitor.id)
+                                        }
+                                        onEdit={() => setEditing(competitor)}
+                                        onScan={() => scan(competitor.id)}
+                                    />
+                                </StaggerItem>
+                            ))}
+                        </Stagger>
+                    )}
+                </>
             )}
 
             <CompetitorDialog
@@ -329,6 +460,25 @@ export default function Competitors({
                 onClose={() => setEditing(null)}
             />
         </PageBody>
+    );
+}
+
+function RadarSkeleton() {
+    return (
+        <div className="space-y-6" aria-busy="true">
+            <div className="grid gap-6 2xl:grid-cols-12">
+                <div className="shimmer h-80 rounded-2xl bg-muted/60 2xl:col-span-8" />
+                <div className="shimmer h-80 rounded-2xl bg-muted/60 2xl:col-span-4" />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                {[0, 1, 2, 3].map((i) => (
+                    <div
+                        key={i}
+                        className="shimmer aspect-[4/6] rounded-2xl bg-muted/60"
+                    />
+                ))}
+            </div>
+        </div>
     );
 }
 
