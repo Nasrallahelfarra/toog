@@ -33,4 +33,5 @@ return [
     'store_deleted' => 'Store “:name” and all its data were deleted.',
     'user_owns_stores' => 'This user owns stores; confirm deleting them too, or transfer them first.',
     'weights_required' => 'The weights must add up to more than zero.',
+    'collection_untitled' => 'Collection #:id',
 ];

@@ -17,7 +17,7 @@ class Refinements
         'sharpen_details' => 'Make fabric texture, stitching and embroidery sharper and more realistic without changing the design.',
         'simplify_pattern' => 'Simplify the pattern: reduce its density and visual noise while keeping the same motif and placement.',
         'luxury_finish' => 'Give it a premium high-end finish: refined colour grading, a subtle natural sheen on the fabric and an elegant composition.',
-        'model_shot' => 'Show the product worn by a model in modest Saudi styling, face cropped or out of frame, against a neutral studio background.',
+        'model_shot' => 'Show the product worn by a Saudi woman with distinctly Gulf Arab looks and warm olive-tan skin, in modest Saudi styling, face cropped or out of frame, against a neutral studio background.',
         'lifestyle' => 'Place the product in a warm contemporary Saudi home scene, such as a modern majlis, with natural window light.',
         'ad_space' => 'Recompose it as a social media ad with clean empty space for a caption on one side; do not add any text.',
     ];

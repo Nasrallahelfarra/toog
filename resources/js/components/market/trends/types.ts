@@ -100,9 +100,4 @@ export type Board = {
     } | null;
 };
 
-export type CountForms = {
-    one: string;
-    two: string;
-    few: string;
-    many: string;
-};
+export type { CountForms } from '@/hooks/use-count';
