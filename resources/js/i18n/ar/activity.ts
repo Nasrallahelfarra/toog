@@ -63,6 +63,7 @@ export const activity = {
         'data.sync_requested': 'طلب مزامنة البيانات',
         'data.sync_resumed': 'استأنف مزامنة البيانات',
         'integration.connected': 'ربط المتجر بزد',
+        'integration.store_renamed': 'حدّث اسم المتجر من زد',
         'integration.disconnected': 'ألغى ربط زد',
         'integration.checked': 'فحص ربط زد',
         'admin.store_activated': 'فعّل المتجر',

@@ -83,6 +83,8 @@ class ConnectionCheck
                 if (filled($store->platform_store_id) && (string) $profile['store']['id'] !== (string) $store->platform_store_id) {
                     throw new RuntimeException('Zid returned a different store. Reconnect before importing data.');
                 }
+                // A store renamed in Zid is renamed here too.
+                ZidStoreName::sync($store, $profile);
                 $add('profile', self::PASS, [
                     'store_name' => data_get($profile, 'user.store.title') ?? data_get($profile, 'store.title') ?? data_get($profile, 'user.store.name'),
                     'store_id' => data_get($profile, 'user.store.id') ?? data_get($profile, 'store.id') ?? $store->platform_store_id,

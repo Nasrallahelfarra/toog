@@ -13,6 +13,7 @@ export const settings = {
         title: 'بيانات المتجر',
         hint: 'تظهر في لوحة التحكم والتقارير',
         storeName: 'اسم المتجر',
+        nameFromZid: 'يُؤخذ من متجرك في زد ويتحدّث تلقائيًا؛ غيّره من لوحة زد.',
         domain: 'رابط المتجر',
         category: 'نشاط المتجر',
         categoryPlaceholder: 'مثال: أزياء محتشمة',

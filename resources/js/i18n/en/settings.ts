@@ -14,6 +14,7 @@ export const settings: typeof ar = {
         title: 'Store details',
         hint: 'Shown on the dashboard and in reports',
         storeName: 'Store name',
+        nameFromZid: 'Taken from your Zid store and kept up to date; change it in your Zid dashboard.',
         domain: 'Store URL',
         category: 'Store vertical',
         categoryPlaceholder: 'e.g. Modest fashion',
