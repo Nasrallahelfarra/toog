@@ -891,8 +891,8 @@ function GarmentPicker({
 }) {
     const { t, tr, locale } = useI18n();
     const d = t.designer.brief;
+    // Clothing sections only; the server leaves accessories and the like out.
     const mapped = categories.filter((c) => c.garment);
-    const unmapped = categories.filter((c) => !c.garment);
     const [others, setOthers] = useState(
         mapped.length === 0 || form.data.category === null,
     );
@@ -952,15 +952,6 @@ function GarmentPicker({
                             );
                         })}
                     </div>
-                    {unmapped.length > 0 && (
-                        <p className="text-[10px] leading-relaxed text-muted-foreground">
-                            {tr(d.unsupportedSections, {
-                                names: unmapped
-                                    .map((c) => c.name)
-                                    .join(locale === 'ar' ? '، ' : ', '),
-                            })}
-                        </p>
-                    )}
                     <button
                         type="button"
                         onClick={() => setOthers((v) => !v)}

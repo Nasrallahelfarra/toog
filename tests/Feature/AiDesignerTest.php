@@ -249,6 +249,10 @@ class AiDesignerTest extends TestCase
     {
         Queue::fake();
         $this->store->products()->create(['name' => 'فستان سهرة', 'external_id' => 'e1', 'category' => 'فساتين سهرة', 'price' => 500]);
+        // Not clothing: never offered as a section to design for.
+        foreach (['b1', 'b2', 'b3', 'b4', 'b5', 'b6'] as $id) {
+            $this->store->products()->create(['name' => 'Bag', 'external_id' => $id, 'category' => 'إكسسوارات نسائية', 'price' => 90]);
+        }
 
         $this->actingAs($this->store->owner)->get('/store/studio')
             ->assertInertia(fn (Assert $page) => $page
@@ -256,6 +260,7 @@ class AiDesignerTest extends TestCase
                 ->where('designer.categories.0.garment', 'abaya')
                 ->where('designer.categories.1.name', 'فساتين سهرة')
                 ->where('designer.categories.1.garment', 'dress_evening')
+                ->has('designer.categories', 2)
                 ->has('designer.vocabulary.modesty.open')
                 ->has('designer.vocabulary.renders.editorial'));
 

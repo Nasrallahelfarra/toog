@@ -102,10 +102,12 @@ class StudioController extends Controller
                 'vocabulary' => FashionVocabulary::forFrontend(),
                 'briefing' => DesignerController::briefing($store->id),
                 'brand_colors' => collect($store->brand_guide['colors'] ?? [])->map(fn ($hex) => $designs->nearestColor((string) $hex))->unique()->values()->all(),
-                // The store's own sections (synced from Zid), each with the garment it designs.
+                // The store's own clothing sections (synced from Zid), each with
+                // the garment it designs; accessories, bags and the like are left out.
                 'categories' => Product::query()->where('store_id', $store->id)->whereNotNull('category')->where('category', '!=', '')
                     ->selectRaw('category, COUNT(*) as products')->groupBy('category')->orderByDesc('products')->get()
                     ->map(fn ($row) => ['name' => $row->category, 'products' => (int) $row->products, 'garment' => FashionVocabulary::garmentFor($row->category)])
+                    ->filter(fn (array $c) => $c['garment'] !== null)
                     ->values()->all(),
             ],
             // The latest collections; one opened by link stays first.
