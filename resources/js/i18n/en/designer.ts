@@ -81,7 +81,6 @@ export const designer: typeof ar = {
         storeSections: 'Your store’s sections',
         productsCount: '{n} products',
         otherGarments: 'Other types',
-        unsupportedSections: 'Sections the designer can’t design yet: {names}',
         tier: 'Price tier',
         tiers: {
             economy: 'Economy',

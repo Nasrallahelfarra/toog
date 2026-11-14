@@ -65,7 +65,6 @@ export const designer = {
         storeSections: 'أقسام متجرك',
         productsCount: '{n} منتج',
         otherGarments: 'أنواع أخرى',
-        unsupportedSections: 'أقسام لا يصممها المصمم بعد: {names}',
         tier: 'الفئة السعرية',
         tiers: {
             economy: 'اقتصادي',
