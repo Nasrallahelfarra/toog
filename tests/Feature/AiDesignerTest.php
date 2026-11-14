@@ -315,6 +315,7 @@ class AiDesignerTest extends TestCase
         $this->assertStringContainsString('her face visible', $prompts[0]);
         $this->assertStringContainsString('a Saudi woman', $prompts[0]);
         $this->assertStringContainsString('Gulf Arab', $prompts[0]);
+        $this->assertStringContainsString('fair, luminous light skin', $prompts[0]);
         $this->assertStringContainsString('sheer white curtains', $prompts[0]);
         $this->assertStringNotContainsString('shayla', $prompts[0]);
         $this->assertStringContainsString('no nudity', $prompts[0]);
