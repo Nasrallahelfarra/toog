@@ -168,6 +168,29 @@ export const studio: typeof ar = {
         emptyTitle: 'The library is empty',
         emptyBody: 'Designs you generate in the studio appear here automatically.',
         goStudio: 'Open the studio',
+        views: {
+            designs: 'Designs',
+            collections: 'Collections',
+        },
+        collections: {
+            open: 'Open in the designer',
+            designs: 'Its designs',
+            approved: '{n} approved',
+            score: 'Average score {n}',
+            fabricPhoto: 'Your fabric',
+            search: 'Search collection names…',
+            emptyTitle: 'No finished collections yet',
+            emptyBody: 'Every collection from the AI designer appears here in full: its pictures, story and fabric.',
+            goDesigner: 'Open the AI designer',
+            filtered: 'Designs from “{title}”',
+            all: 'All collections',
+            count: {
+                one: '1 design',
+                two: '2 designs',
+                few: '{n} designs',
+                many: '{n} designs',
+            },
+        },
     },
 
     tags: {

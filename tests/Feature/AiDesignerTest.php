@@ -313,6 +313,8 @@ class AiDesignerTest extends TestCase
         $this->assertSame(['corset', 'one_shoulder', 'sleeveless', 'knee'], [$concept['silhouette'], $concept['neckline'], $concept['sleeve'], $concept['length']]);
         $this->assertSame('editorial', $concept['render']);
         $this->assertStringContainsString('her face visible', $prompts[0]);
+        $this->assertStringContainsString('a Saudi woman', $prompts[0]);
+        $this->assertStringContainsString('Gulf Arab', $prompts[0]);
         $this->assertStringContainsString('sheer white curtains', $prompts[0]);
         $this->assertStringNotContainsString('shayla', $prompts[0]);
         $this->assertStringContainsString('no nudity', $prompts[0]);

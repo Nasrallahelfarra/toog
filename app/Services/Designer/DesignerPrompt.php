@@ -13,15 +13,23 @@ use App\Support\Vocabulary;
  *
  * Modesty follows the brief: very modest and modest keep hair covered and
  * the cut loose or softly fitted; open is contemporary fashion (bare
- * shoulders, midi or knee lengths) — tasteful, never revealing. The model's
- * face is shown only when the merchant asks for it.
+ * shoulders, midi or knee lengths) — tasteful, never revealing. The model
+ * is a Saudi woman with clearly Gulf Arab features, so the merchant sees
+ * the design on her own customer; her face is shown only when asked for.
  */
 class DesignerPrompt
 {
+    /** Who wears the design: always recognisably a Saudi, Gulf Arab woman. */
+    private const MODEL = 'a Saudi woman in her mid-twenties with distinctly Gulf Arab (Khaleeji) looks';
+
+    /** Her face, when it is shown. */
+    private const FACE = 'warm olive-tan skin, large dark brown almond-shaped eyes, full dark defined eyebrows, '
+        .'soft Khaleeji-style makeup with lined eyes and nude lips';
+
     private const FRAMING = [
         'ghost' => 'A high-resolution e-commerce product photograph of the garment on an invisible ghost mannequin: front view, full length from shoulders to hem with both sleeves fully visible, natural 3D volume, no visible mannequin, body or hanger, plain light warm-grey seamless background, soft even studio lighting, subtle contact shadow.',
-        'on_model' => 'A full-length e-commerce photograph of a woman wearing the garment, standing in a calm natural pose, %s; hands relaxed; plain warm-neutral studio backdrop; soft diffused light.',
-        'editorial' => 'A full-length editorial fashion photograph of a woman wearing the garment in an elegant, bright interior: sheer white curtains, a slim white plinth with a sculptural gold object, a pale floor and soft natural daylight; a graceful relaxed pose, one hand lightly lifting the skirt; %s.',
+        'on_model' => 'A full-length e-commerce photograph of %1$s wearing the garment, standing in a calm natural pose, %2$s; hands relaxed; plain warm-neutral studio backdrop; soft diffused light.',
+        'editorial' => 'A full-length editorial fashion photograph of %1$s wearing the garment in an elegant, bright interior: sheer white curtains, a slim white plinth with a sculptural gold object, a pale floor and soft natural daylight; a graceful relaxed pose, one hand lightly lifting the skirt; %2$s.',
         'sketch' => 'A professional fashion design illustration of the garment on a slender faceless fashion croquis in a front-facing pose%s, fine ink lines with marker and watercolour shading on off-white paper, the fabric\'s colours and print rendered faithfully.',
         'flat' => 'A technical flat drawing in fashion tech-pack style, front and back views side by side, clean black line art on pure white, seams, darts, pleats and closures shown accurately, topstitching as dashed lines, no figure, no shading, no colour fill.',
     ];
@@ -43,13 +51,14 @@ class DesignerPrompt
         $embellishments = array_values(array_filter((array) ($concept['embellishments'] ?? []), fn ($e) => $e !== 'none'));
         $showFace = (bool) ($brief['show_face'] ?? false);
 
-        // The model: face shown or cropped at the chin; hair covered for the modest levels.
-        $hair = $covered ? 'hair and neck fully covered by a plain '.($colorName($colors[0] ?? 'black') ?? 'matching').' shayla' : 'hair styled sleek and elegant';
+        // The model: a Saudi woman, face shown or cropped at the chin; hair
+        // covered for the modest levels, long and dark otherwise.
+        $hair = $covered ? 'hair and neck fully covered by a plain '.($colorName($colors[0] ?? 'black') ?? 'matching').' shayla' : 'long glossy dark brown hair in soft sleek waves';
         $person = $showFace
-            ? "framed from head to toe with her face visible, a natural, calm and elegant expression, {$hair}"
-            : "framed from the chin down to the feet so the face is out of frame, {$hair}";
+            ? 'framed from head to toe with her face visible: '.self::FACE.", a natural, calm and elegant expression, {$hair}"
+            : "framed from the chin down to the feet so the face is out of frame, warm olive-tan skin, {$hair}";
         $framing = match ($render) {
-            'on_model', 'editorial' => sprintf(self::FRAMING[$render], $person),
+            'on_model', 'editorial' => sprintf(self::FRAMING[$render], self::MODEL, $person),
             'sketch' => sprintf(self::FRAMING['sketch'], $covered ? ', head and hair covered by a simple shayla' : ''),
             default => self::FRAMING[$render],
         };
@@ -105,7 +114,7 @@ class DesignerPrompt
 
         $quality = 'Show the whole garment; nothing cropped at the hem or sleeves. Accurate, buildable construction with realistic seams and hems. '
             .'No text, letters, Arabic or Latin script, logos, labels, tags or watermarks anywhere. No religious symbols, flags or national emblems. '
-            .($showFace && in_array($render, ['on_model', 'editorial'], true) ? 'A natural, realistic face and hands, with no distortion. ' : '')
+            .($showFace && in_array($render, ['on_model', 'editorial'], true) ? 'Her features must read clearly as Saudi and Gulf Arab, not European. A natural, realistic face and hands, with no distortion. ' : '')
             .($render === 'sketch' ? 'Polished fashion-illustration quality.' : ($render === 'flat' ? 'Clean technical drawing quality.' : 'Photorealistic commercial quality.'));
 
         return implode("\n", array_filter([$framing, $garmentLine, $details, $lining, $mood, $notes ? 'Designer notes: '.$notes : null, $fabricLine, $modestyLine, $quality]));

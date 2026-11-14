@@ -26,7 +26,6 @@ import {
     PulseList,
     RadarLink,
     SourcesBar,
-    useCount,
 } from '@/components/market/trends/board';
 import type { Board } from '@/components/market/trends/types';
 import { ChartLegend } from '@/components/mojo/chart';
@@ -37,6 +36,7 @@ import { SectionCard } from '@/components/mojo/section-card';
 import { toneClasses } from '@/components/mojo/tone';
 import type { Tone } from '@/components/mojo/tone';
 import { Button } from '@/components/ui/button';
+import { useCount } from '@/hooks/use-count';
 import { useI18n } from '@/hooks/use-i18n';
 import { cn } from '@/lib/utils';
 
