@@ -134,111 +134,136 @@ export default function Market({ board, reviews, lastAnalysis }: Props) {
 
             <SummaryNav board={board} />
 
-            <section id="opportunities" className="scroll-mt-24 space-y-4">
-                <SectionHead
-                    title={b.opportunities.title}
-                    hint={b.opportunities.hint}
-                    icon={Target}
-                />
-                {board.opportunities.length > 0 ? (
-                    <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                        {board.opportunities.map((item) => (
-                            <StaggerItem key={item.key}>
-                                <OpportunityCard item={item} />
-                            </StaggerItem>
-                        ))}
-                    </Stagger>
-                ) : (
-                    <EmptyLine text={b.opportunities.empty} />
-                )}
-            </section>
-
-            <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
-                <section id="focus" className="min-w-0 scroll-mt-24 space-y-4">
-                    <SectionHead
-                        title={b.focus.title}
-                        hint={b.focus.hint}
-                        icon={Flame}
-                    />
-                    {board.focus.length > 0 ? (
-                        <Stagger className="grid gap-4 sm:grid-cols-2">
-                            {board.focus.map((item) => (
-                                <StaggerItem key={item.key}>
-                                    <FocusCard item={item} />
-                                </StaggerItem>
-                            ))}
-                        </Stagger>
-                    ) : (
-                        <EmptyLine text={b.focus.empty} />
-                    )}
-                </section>
-
-                <SectionCard
-                    title={b.pulse.title}
-                    description={b.pulse.hint}
-                    icon={Activity}
-                    className="self-start"
-                >
-                    {board.pulse.length > 0 ? (
-                        <PulseList items={board.pulse} />
-                    ) : (
-                        <p className="py-6 text-center text-sm text-muted-foreground">
-                            {b.pulse.empty}
-                        </p>
-                    )}
-                </SectionCard>
-            </div>
-
-            <div className="grid gap-6 lg:grid-cols-2">
-                <div id="rising" className="scroll-mt-24">
-                    <SectionCard
-                        title={b.rising.title}
-                        description={b.rising.hint}
-                        icon={TrendingUp}
-                        className="h-full"
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
+                <div className="min-w-0 space-y-8">
+                    <section
+                        id="opportunities"
+                        className="scroll-mt-24 space-y-4"
                     >
-                        {board.mine_rising.length > 0 ? (
-                            <ul className="space-y-2.5">
-                                {board.mine_rising.map((item) => (
-                                    <MoverRow
+                        <SectionHead
+                            title={b.opportunities.title}
+                            hint={b.opportunities.hint}
+                            icon={Target}
+                        />
+                        {board.opportunities.length > 0 ? (
+                            <Stagger className="grid gap-4 md:grid-cols-2">
+                                {board.opportunities.map((item, i) => (
+                                    <StaggerItem
                                         key={item.key}
-                                        item={item}
-                                        kind="rising"
-                                        hasMarket={board.basis !== 'none'}
-                                    />
+                                        className={cn(
+                                            alone(
+                                                i,
+                                                board.opportunities.length,
+                                            ) && 'md:col-span-2',
+                                        )}
+                                    >
+                                        <OpportunityCard
+                                            item={item}
+                                            wide={alone(
+                                                i,
+                                                board.opportunities.length,
+                                            )}
+                                        />
+                                    </StaggerItem>
                                 ))}
-                            </ul>
+                            </Stagger>
                         ) : (
-                            <EmptyLine text={b.rising.empty} />
+                            <EmptyLine text={b.opportunities.empty} />
+                        )}
+                    </section>
+
+                    <section id="focus" className="scroll-mt-24 space-y-4">
+                        <SectionHead
+                            title={b.focus.title}
+                            hint={b.focus.hint}
+                            icon={Flame}
+                        />
+                        {board.focus.length > 0 ? (
+                            <Stagger className="grid gap-4 md:grid-cols-2">
+                                {board.focus.map((item, i) => (
+                                    <StaggerItem
+                                        key={item.key}
+                                        className={cn(
+                                            alone(i, board.focus.length) &&
+                                                'md:col-span-2',
+                                        )}
+                                    >
+                                        <FocusCard
+                                            item={item}
+                                            wide={alone(i, board.focus.length)}
+                                        />
+                                    </StaggerItem>
+                                ))}
+                            </Stagger>
+                        ) : (
+                            <EmptyLine text={b.focus.empty} />
+                        )}
+                    </section>
+
+                    <div id="rising" className="scroll-mt-24">
+                        <SectionCard
+                            title={b.rising.title}
+                            description={b.rising.hint}
+                            icon={TrendingUp}
+                        >
+                            {board.mine_rising.length > 0 ? (
+                                <ul className="space-y-2.5">
+                                    {board.mine_rising.map((item) => (
+                                        <MoverRow
+                                            key={item.key}
+                                            item={item}
+                                            kind="rising"
+                                            hasMarket={board.basis !== 'none'}
+                                        />
+                                    ))}
+                                </ul>
+                            ) : (
+                                <EmptyLine text={b.rising.empty} />
+                            )}
+                        </SectionCard>
+                    </div>
+
+                    <div id="cooling" className="scroll-mt-24">
+                        <SectionCard
+                            title={b.cooling.title}
+                            description={b.cooling.hint}
+                            icon={Snowflake}
+                        >
+                            {board.cooling.length > 0 ? (
+                                <ul className="space-y-2.5">
+                                    {board.cooling.map((item) => (
+                                        <MoverRow
+                                            key={item.key}
+                                            item={item}
+                                            kind="cooling"
+                                            hasMarket={board.basis !== 'none'}
+                                        />
+                                    ))}
+                                </ul>
+                            ) : (
+                                <EmptyLine text={b.cooling.empty} />
+                            )}
+                        </SectionCard>
+                    </div>
+                </div>
+
+                <aside className="space-y-6 xl:sticky xl:top-20">
+                    <SectionCard
+                        title={b.pulse.title}
+                        description={b.pulse.hint}
+                        icon={Activity}
+                    >
+                        {board.pulse.length > 0 ? (
+                            <PulseList items={board.pulse} />
+                        ) : (
+                            <p className="py-6 text-center text-sm text-muted-foreground">
+                                {b.pulse.empty}
+                            </p>
                         )}
                     </SectionCard>
-                </div>
-                <div id="cooling" className="scroll-mt-24">
-                    <SectionCard
-                        title={b.cooling.title}
-                        description={b.cooling.hint}
-                        icon={Snowflake}
-                        className="h-full"
-                    >
-                        {board.cooling.length > 0 ? (
-                            <ul className="space-y-2.5">
-                                {board.cooling.map((item) => (
-                                    <MoverRow
-                                        key={item.key}
-                                        item={item}
-                                        kind="cooling"
-                                        hasMarket={board.basis !== 'none'}
-                                    />
-                                ))}
-                            </ul>
-                        ) : (
-                            <EmptyLine text={b.cooling.empty} />
-                        )}
-                    </SectionCard>
-                </div>
+                    {board.basis !== 'none' && <RadarLink board={board} />}
+                </aside>
             </div>
-
-            {board.basis !== 'none' && <RadarLink board={board} />}
 
             <ReviewInsights reviews={reviews} />
 
@@ -248,6 +273,11 @@ export default function Market({ board, reviews, lastAnalysis }: Props) {
             </p>
         </PageBody>
     );
+}
+
+/** The last card of an odd row spans both columns, so no card sits alone beside a gap. */
+function alone(index: number, total: number): boolean {
+    return total % 2 === 1 && index === total - 1;
 }
 
 /** Four counts that jump to their section. */

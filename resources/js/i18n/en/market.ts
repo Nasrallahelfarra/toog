@@ -99,7 +99,7 @@ export const market: typeof ar = {
             marketLine: '{products} of clothing from {brands}, and {posts}',
             demand: '{n} with a public demand signal: a “best seller” label or a purchase count the store shows.',
             excluded:
-                '{n} left out because they are not clothing (shoes, toys, bags, accessories).',
+                '{n} left out because they are not womenswear (men’s, children’s, shoes, bags, accessories).',
             mine: 'Your Zid sales',
             mineLine:
                 '{units} sold between {from} and {to}, against {beforeFrom} – {beforeTo}.',
@@ -162,7 +162,9 @@ export const market: typeof ar = {
         postLift: 'Its posts {lift}× usual',
         newArrivals: '{n} new arrivals',
         crowded: 'Crowded at competitors',
-        oneBrand: 'One competitor only: check before scaling',
+        oneBrand: 'One competitor only',
+        oneBrandHint:
+            'The signal comes from a single competitor; check it before scaling up.',
         lastMonths: 'Last 3 months',
         monthsBefore: 'The 3 before',
         ofSales: '{pct} of your sales',

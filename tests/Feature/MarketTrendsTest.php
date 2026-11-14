@@ -13,6 +13,7 @@ use App\Models\Trend;
 use App\Models\User;
 use App\Services\Market\MarketTrends;
 use App\Services\Market\TrendDetector;
+use App\Support\FashionVocabulary;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -88,6 +89,9 @@ class MarketTrendsTest extends TestCase
         foreach (range(1, 4) as $i) {
             $this->listing($this->rival, "Sport sneakers {$i}", 'Sneakers', 'dusty_pink');
         }
+        // Men's clothing is not a women's store's market, even as a "set".
+        $this->listing($this->rival, 'Lounge Set Burgundy', 'Sets', 'burgundy', ['evidence' => ['description' => 'Relaxed men’s lounge set in soft cotton']]);
+        $this->listing($this->rival, 'طقم رجالي كحلي', 'أطقم', 'navy');
         // A seeded sample row says nothing once real scans exist.
         foreach (range(1, 6) as $i) {
             $this->listing($this->rival, "عباية خردلي {$i}", 'عبايات', 'mustard', ['is_best_seller' => true], real: false);
@@ -108,7 +112,7 @@ class MarketTrendsTest extends TestCase
 
         $this->assertSame('live', $board['basis']);
         $this->assertSame(11, $board['coverage']['products']);
-        $this->assertSame(4, $board['coverage']['excluded']);
+        $this->assertSame(6, $board['coverage']['excluded']);
         $this->assertSame(1, $board['coverage']['brands']);
         // 20 + 10 + 7 + 7 + 2 + 2 units a month over Aug–Oct.
         $this->assertSame(144, $board['coverage']['units']);
@@ -137,6 +141,14 @@ class MarketTrendsTest extends TestCase
         $this->assertSame(6, collect($board['pulse'])->firstWhere('key', 'color:dusty_pink')['market']['items']);
         // Black sells flat: a staple, not a verdict.
         $this->assertNotContains('color:black', collect(['opportunities', 'focus', 'mine_rising', 'cooling'])->flatMap($keys));
+    }
+
+    public function test_mens_and_childrens_clothing_is_recognised(): void
+    {
+        $this->assertTrue(FashionVocabulary::forMenOrKids('Sets', 'Classic Tee Set', 'Oversized tee for men'));
+        $this->assertTrue(FashionVocabulary::forMenOrKids('عبايات بناتي أطفال', 'عباية صغيرة'));
+        $this->assertFalse(FashionVocabulary::forMenOrKids('Dresses', 'Linen dress', 'Made for women, hand-made in Riyadh'));
+        $this->assertFalse(FashionVocabulary::forMenOrKids('عبايات', 'عباية كريب نسائية'));
     }
 
     public function test_seeded_samples_are_used_only_until_real_scans_exist(): void

@@ -186,7 +186,8 @@ class MarketTrends
         $firstSeen = $rows->groupBy('competitor_id')->map(fn (Collection $items) => $items->min('first_seen_at'));
 
         $products = $rows->map(function (CompetitorProduct $cp) use ($active, $firstSeen) {
-            $garment = FashionVocabulary::garmentFor($cp->category, $cp->name);
+            // Men's and children's clothing is not this store's market.
+            $garment = FashionVocabulary::forMenOrKids($cp->category, $cp->name, $cp->evidence['description'] ?? null) ? null : FashionVocabulary::garmentFor($cp->category, $cp->name);
             $signals = $this->signals->signals($cp, $firstSeen[$cp->competitor_id] ?? null);
             $sold = self::publishedSales($cp);
 

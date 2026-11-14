@@ -182,7 +182,8 @@ class TrendDetector
         $firstSeen = $rows->groupBy('competitor_id')->map(fn (Collection $items) => $items->min('first_seen_at'));
 
         $products = $rows
-            ->filter(fn (CompetitorProduct $p) => ! $fashion || FashionVocabulary::garmentFor($p->category, $p->name) !== null)
+            ->filter(fn (CompetitorProduct $p) => ! $fashion
+                || (FashionVocabulary::garmentFor($p->category, $p->name) !== null && ! FashionVocabulary::forMenOrKids($p->category, $p->name, $p->evidence['description'] ?? null)))
             ->map(fn (CompetitorProduct $p) => [
                 'features' => CompetitorSignals::features($p),
                 'recent' => in_array('new_arrival', $this->competitorSignals->signals($p, $firstSeen[$p->competitor_id] ?? null), true),

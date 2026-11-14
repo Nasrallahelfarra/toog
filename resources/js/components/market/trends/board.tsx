@@ -27,6 +27,11 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useI18n } from '@/hooks/use-i18n';
 import { cn } from '@/lib/utils';
 import type {
@@ -246,7 +251,20 @@ function MarketChips({
 
     return (
         <div className="flex flex-wrap gap-1.5">
-            {withBrands && market.brands > 0 && (
+            {withBrands && market.brands === 1 && (
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span>
+                            <Chip tone="warning">
+                                <Info className="size-3" />
+                                {b.oneBrand}
+                            </Chip>
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent>{b.oneBrandHint}</TooltipContent>
+                </Tooltip>
+            )}
+            {withBrands && market.brands > 1 && (
                 <Chip>
                     {tr(b.atBrands, {
                         brands: count(market.brands, b.count.competitors),
@@ -369,7 +387,7 @@ function ItemActions({ item, primary }: { item: TrendItem; primary: string }) {
     const { t } = useI18n();
 
     return (
-        <div className="mt-auto flex flex-wrap gap-2 pt-1">
+        <div className="mt-auto flex flex-wrap gap-2">
             <Button size="sm" variant="gold" asChild>
                 <Link href={item.design_href}>
                     <WandSparkles className="size-4" />
@@ -389,85 +407,152 @@ function ItemActions({ item, primary }: { item: TrendItem; primary: string }) {
 }
 
 const cardClass =
-    'flex h-full flex-col gap-4 rounded-2xl border border-border/70 bg-card p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-shadow hover:shadow-md';
+    'h-full rounded-2xl border border-border/70 bg-card p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-shadow hover:shadow-md';
 
-/** Strong at competitors, rare or absent in the store's catalog. */
-export function OpportunityCard({ item }: { item: TrendItem }) {
-    const { t } = useI18n();
-    const b = t.market.board;
-
+/**
+ * A card's facts and its pictures: stacked in a grid cell, side by side
+ * when the card spans the whole row.
+ */
+function CardLayout({
+    wide,
+    facts,
+    media,
+}: {
+    wide: boolean;
+    facts: ReactNode;
+    media: ReactNode;
+}) {
     return (
-        <article className={cardClass}>
-            <ItemHead item={item} />
-            <ShareBars market={item.market} mine={item.mine} />
-            {item.market && <MarketChips market={item.market} />}
-            {item.market?.brands === 1 && (
-                <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <Info className="size-3.5 shrink-0" />
-                    {b.oneBrand}
-                </p>
+        <article
+            className={cn(
+                cardClass,
+                wide
+                    ? 'grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] md:gap-8'
+                    : 'flex flex-col gap-4',
             )}
-            {!!item.market?.examples.length && (
-                <MarketExamples examples={item.market.examples} />
-            )}
-            <ItemActions item={item} primary={b.design} />
+        >
+            <div className="flex min-w-0 flex-col gap-4">{facts}</div>
+            <div className={cn('min-w-0', !wide && 'flex flex-1 flex-col')}>
+                {media}
+            </div>
         </article>
     );
 }
 
+/** Strong at competitors, rare or absent in the store's catalog. */
+export function OpportunityCard({
+    item,
+    wide = false,
+}: {
+    item: TrendItem;
+    wide?: boolean;
+}) {
+    const { t } = useI18n();
+    const b = t.market.board;
+    const actions = <ItemActions item={item} primary={b.design} />;
+
+    return (
+        <CardLayout
+            wide={wide}
+            facts={
+                <>
+                    <ItemHead item={item} />
+                    <ShareBars market={item.market} mine={item.mine} />
+                    {item.market && <MarketChips market={item.market} />}
+                    {wide && actions}
+                </>
+            }
+            media={
+                <>
+                    {!!item.market?.examples.length && (
+                        <MarketExamples examples={item.market.examples} />
+                    )}
+                    {!wide && <div className="mt-auto pt-4">{actions}</div>}
+                </>
+            }
+        />
+    );
+}
+
 /** Strong at competitors and rising in the store's own sales. */
-export function FocusCard({ item }: { item: TrendItem }) {
+export function FocusCard({
+    item,
+    wide = false,
+}: {
+    item: TrendItem;
+    wide?: boolean;
+}) {
     const { t, tr, percent } = useI18n();
     const count = useCount();
     const b = t.market.board;
     const market = item.market;
     const mine = item.mine;
 
+    const actions = <ItemActions item={item} primary={b.designMore} />;
+
     return (
-        <article className={cardClass}>
-            <ItemHead item={item} />
-            <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl bg-gold-soft/60 p-3">
-                    <div className="text-[11px] text-muted-foreground">
-                        {b.inMarket}
+        <CardLayout
+            wide={wide}
+            facts={
+                <>
+                    <ItemHead item={item} />
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-xl bg-gold-soft/60 p-3">
+                            <div className="text-[11px] text-muted-foreground">
+                                {b.inMarket}
+                            </div>
+                            <div className="num mt-1 text-xl font-semibold">
+                                {market?.pct !== null &&
+                                market?.pct !== undefined
+                                    ? percent(market.pct)
+                                    : market?.post_lift
+                                      ? `${market.post_lift}×`
+                                      : '—'}
+                            </div>
+                            {market && market.brands > 0 && (
+                                <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                                    {tr(b.atBrands, {
+                                        brands: count(
+                                            market.brands,
+                                            b.count.competitors,
+                                        ),
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                        <div className="rounded-xl bg-primary/6 p-3 dark:bg-primary/15">
+                            <div className="text-[11px] text-muted-foreground">
+                                {b.lastMonths}
+                            </div>
+                            <div className="num mt-1 text-xl font-semibold">
+                                {count(mine?.units ?? 0, b.count.units)}
+                            </div>
+                            <ChangePill
+                                change={mine?.change_pct ?? null}
+                                className="mt-1"
+                            />
+                        </div>
                     </div>
-                    <div className="num mt-1 text-xl font-semibold">
-                        {market?.pct !== null && market?.pct !== undefined
-                            ? percent(market.pct)
-                            : market?.post_lift
-                              ? `${market.post_lift}×`
-                              : '—'}
-                    </div>
-                    {market && market.brands > 0 && (
-                        <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                            {tr(b.atBrands, {
-                                brands: count(
-                                    market.brands,
-                                    b.count.competitors,
-                                ),
-                            })}
+                    {market && (
+                        <MarketChips market={market} withBrands={false} />
+                    )}
+                    {wide && actions}
+                </>
+            }
+            media={
+                <>
+                    {!!mine?.examples.length && (
+                        <MineExamples examples={mine.examples} />
+                    )}
+                    {wide && !!market?.examples.length && (
+                        <div className="mt-4">
+                            <MarketExamples examples={market.examples} />
                         </div>
                     )}
-                </div>
-                <div className="rounded-xl bg-primary/6 p-3 dark:bg-primary/15">
-                    <div className="text-[11px] text-muted-foreground">
-                        {b.lastMonths}
-                    </div>
-                    <div className="num mt-1 text-xl font-semibold">
-                        {count(mine?.units ?? 0, b.count.units)}
-                    </div>
-                    <ChangePill
-                        change={mine?.change_pct ?? null}
-                        className="mt-1"
-                    />
-                </div>
-            </div>
-            {market && <MarketChips market={market} withBrands={false} />}
-            {!!mine?.examples.length && (
-                <MineExamples examples={mine.examples} />
-            )}
-            <ItemActions item={item} primary={b.designMore} />
-        </article>
+                    {!wide && <div className="mt-auto pt-4">{actions}</div>}
+                </>
+            }
+        />
     );
 }
 
@@ -756,14 +841,14 @@ export function RadarLink({ board }: { board: Board }) {
     return (
         <Link
             href="/store/competitors"
-            className="group flex flex-col gap-4 rounded-2xl border border-border/70 bg-card p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-shadow hover:shadow-md sm:flex-row sm:items-center"
+            className="group flex flex-col gap-4 rounded-2xl border border-border/70 bg-card p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-shadow hover:shadow-md sm:flex-row sm:items-center xl:flex-col xl:items-stretch"
         >
             {top && (
                 <Visual
                     src={top.image_url}
                     garment={top.garment}
                     alt={top.competitor}
-                    className="aspect-[4/3] w-full shrink-0 rounded-xl sm:aspect-square sm:size-24"
+                    className="aspect-[4/3] w-full shrink-0 rounded-xl sm:aspect-square sm:size-24 xl:aspect-[16/10] xl:size-auto xl:w-full"
                 />
             )}
             <div className="min-w-0 flex-1 space-y-1.5">
