@@ -14,6 +14,8 @@ import { useI18n } from '@/hooks/use-i18n';
 type Props = {
     store: {
         name: string;
+        /** Connected to Zid: the name is Zid's and is not edited here. */
+        name_from_zid: boolean;
         domain: string | null;
         category: string | null;
         platform: string;
@@ -101,7 +103,8 @@ export default function GeneralSettings({ store }: Props) {
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <div className="grid gap-2">
                                     <Label htmlFor="name">{s.storeName}</Label>
-                                    <Input id="name" value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} required />
+                                    <Input id="name" value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} required disabled={store.name_from_zid} />
+                                    {store.name_from_zid && <p className="text-muted-foreground text-xs">{s.nameFromZid}</p>}
                                     <InputError message={form.errors.name} />
                                 </div>
                                 <div className="grid gap-2">

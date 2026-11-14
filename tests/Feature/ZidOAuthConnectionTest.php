@@ -69,6 +69,8 @@ class ZidOAuthConnectionTest extends TestCase
             && $request->hasHeader('X-Manager-Token', 'new-manager-token'));
         Bus::assertChained([SyncStoreData::class, CheckZidConnection::class]);
         $this->assertDatabaseHas('activity_logs', ['store_id' => $this->store->id, 'action' => 'integration.connected']);
+        // The store takes its Zid name as soon as it connects.
+        $this->assertSame('Real store', $this->store->name);
     }
 
     public function test_an_unverified_store_does_not_replace_credentials_or_start_an_import(): void

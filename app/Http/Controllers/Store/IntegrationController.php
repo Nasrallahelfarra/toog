@@ -9,6 +9,7 @@ use App\Models\SyncRun;
 use App\Services\Zid\ConnectionCheck;
 use App\Services\Zid\RevenueAudit;
 use App\Services\Zid\ZidClient;
+use App\Services\Zid\ZidStoreName;
 use App\Services\Zid\ZidSyncState;
 use App\Support\Activity;
 use App\Support\CurrentStore;
@@ -129,6 +130,8 @@ class IntegrationController extends Controller
             // store's refresh token when the OAuth response omits one.
             $store->forceFill(['platform_store_id' => (string) $profile['store']['id'], 'zid_refresh_token' => null]);
             ZidClient::storeTokens($store, $tokens);
+            // The store takes its Zid name straight away.
+            ZidStoreName::sync($store, $profile);
         } catch (Throwable $e) {
             report($e);
             $store->forceFill(['connection_status' => 'error'])->save();

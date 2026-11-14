@@ -66,6 +66,8 @@ class ZidConnectionCheckTest extends TestCase
             'app' => 'pass', 'authorized' => 'pass', 'token' => 'pass', 'profile' => 'pass', 'products' => 'pass',
             'orders' => 'pass', 'order_lines' => 'pass', 'imported' => 'pass', 'analysis' => 'pass',
         ], $this->statuses($result));
+        // A check also picks up the store's name in Zid.
+        $this->assertSame('متجري', $this->store->fresh()->name);
 
         // The orders request asks for the format that includes products.
         Http::assertSent(fn ($request) => str_contains($request->url(), 'managers/store/orders')

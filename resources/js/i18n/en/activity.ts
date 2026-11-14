@@ -64,6 +64,7 @@ export const activity: typeof ar = {
         'data.sync_requested': 'Requested a data sync',
         'data.sync_resumed': 'Resumed a data sync',
         'integration.connected': 'Connected the store to Zid',
+        'integration.store_renamed': 'Updated the store name from Zid',
         'integration.disconnected': 'Disconnected Zid',
         'integration.checked': 'Checked the Zid connection',
         'admin.store_activated': 'Activated the store',

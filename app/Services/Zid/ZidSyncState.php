@@ -3,6 +3,7 @@
 namespace App\Services\Zid;
 
 use App\Jobs\CheckZidConnection;
+use App\Jobs\RefreshZidStoreName;
 use App\Jobs\SyncStoreData;
 use App\Models\Store;
 use App\Models\SyncRun;
@@ -59,11 +60,9 @@ class ZidSyncState
                 throw new RuntimeException('Zid imports require a background queue worker.');
             }
             $job = new SyncStoreData($store, $userId, $run->id, (int) ($run->stats['step'] ?? 0));
-            if ($checkAfter) {
-                Bus::chain([$job, new CheckZidConnection($store->id)])->dispatch();
-            } else {
-                Bus::dispatch($job);
-            }
+            // After the import: the full connection check on a first
+            // connection, otherwise just the store's Zid name.
+            Bus::chain([$job, $checkAfter ? new CheckZidConnection($store->id) : new RefreshZidStoreName($store->id)])->dispatch();
         } catch (Throwable $e) {
             $this->fail($run->id, 'queue_failed');
             report($e);

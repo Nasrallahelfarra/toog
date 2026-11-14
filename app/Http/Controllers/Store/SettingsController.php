@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PlatformSetting;
 use App\Models\Store;
 use App\Services\Analytics\StorePerformance;
+use App\Services\Zid\ZidStoreName;
 use App\Support\Activity;
 use App\Support\CurrentStore;
 use Illuminate\Http\RedirectResponse;
@@ -34,6 +35,8 @@ class SettingsController extends Controller
         return Inertia::render('store/settings/general', [
             'store' => [
                 'name' => $store->name,
+                // A Zid store's name follows Zid and is not edited here.
+                'name_from_zid' => ZidStoreName::follows($store),
                 'domain' => $store->domain,
                 'category' => $store->category,
                 'platform' => $store->platform,
@@ -67,7 +70,7 @@ class SettingsController extends Controller
             $store->logo_path = null;
         }
 
-        $store->fill(Arr::only($data, ['name', 'domain', 'category']))->save();
+        $store->fill(Arr::only($data, ZidStoreName::follows($store) ? ['domain', 'category'] : ['name', 'domain', 'category']))->save();
 
         $this->logChanges($store, 'general', $before, $store->only(['name', 'domain', 'category', 'logo_path']));
 

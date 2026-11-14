@@ -163,6 +163,24 @@ class ZidClient
     }
 
     /**
+     * The store's name in Zid: `store.title` in managers/account/store
+     * (docs.zid.sa "Store"), a plain string; a localised object is read in
+     * Arabic first.
+     *
+     * @param  array<string, mixed>  $profile
+     */
+    public static function storeName(array $profile): ?string
+    {
+        $title = data_get($profile, 'store.title') ?? data_get($profile, 'user.store.title') ?? data_get($profile, 'store.name');
+        if (is_array($title)) {
+            $title = $title['ar'] ?? $title['en'] ?? reset($title);
+        }
+        $title = is_string($title) ? trim(preg_replace('/\s+/u', ' ', $title) ?? '') : '';
+
+        return $title !== '' ? mb_substr($title, 0, 120) : null;
+    }
+
+    /**
      * All products, page by page.
      *
      * @return Generator<int, array<string, mixed>>
