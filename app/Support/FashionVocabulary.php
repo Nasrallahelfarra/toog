@@ -336,6 +336,28 @@ class FashionVocabulary
     }
 
     /**
+     * A product made for men, boys or children, by its own name or
+     * category. A women's store does not compete with it, even when it is
+     * a "set" or a "dress" the garment words would match.
+     */
+    public static function forMenOrKids(?string ...$texts): bool
+    {
+        $haystack = mb_strtolower(implode(' ', array_filter($texts)));
+        if ($haystack === '') {
+            return false;
+        }
+
+        foreach (['رجال', 'شبابي', 'ولادي', 'أولاد', 'اولاد', 'أطفال', 'اطفال', 'طفل', 'مواليد', 'بيبي'] as $word) {
+            if (str_contains($haystack, $word)) {
+                return true;
+            }
+        }
+
+        // English words whole, so "women" never reads as "men".
+        return (bool) preg_match("/\\b(men|mens|men's|men’s|menswear|man|male|boy|boys|kid|kids|child|children|baby|babies|toddler|toddlers|junior|juniors)\\b/u", $haystack);
+    }
+
+    /**
      * Fabric metres as an estimate range, and a sewing complexity (1–3),
      * worked out in code from the design sheet, never by the model.
      *

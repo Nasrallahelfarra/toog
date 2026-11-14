@@ -97,7 +97,7 @@ export const market = {
             marketLine: '{products} من الملابس لدى {brands}، و{posts}',
             demand: 'منها {n} بإشارة طلب علنية: «الأكثر مبيعًا» أو عدد مشتريات يعرضه المتجر.',
             excluded:
-                'استُبعد {n} لأنها ليست ملابس (أحذية، ألعاب، حقائب، إكسسوارات).',
+                'استُبعد {n} لأنها ليست ملابس نسائية (رجالي، أطفال، أحذية، حقائب، إكسسوارات).',
             mine: 'مبيعاتك من زد',
             mineLine:
                 '{units} مباعة بين {from} و{to}، مقارنة بـ {beforeFrom} – {beforeTo}.',
@@ -160,7 +160,8 @@ export const market = {
         postLift: 'منشوراته ×{lift} من المعتاد',
         newArrivals: '{n} وصل حديثًا',
         crowded: 'مزدحم عند المنافسين',
-        oneBrand: 'من منافس واحد: تحقّق قبل التوسع',
+        oneBrand: 'منافس واحد فقط',
+        oneBrandHint: 'الإشارة من متجر منافس واحد؛ تحقّق منها قبل التوسع.',
         lastMonths: 'آخر 3 أشهر',
         monthsBefore: 'الـ3 قبلها',
         ofSales: '{pct} من مبيعاتك',
