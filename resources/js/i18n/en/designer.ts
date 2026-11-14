@@ -64,7 +64,24 @@ export const designer: typeof ar = {
         age: 'Age group',
         ages: { young: '18–25', adult: '25–40', mature: '40+' },
         modesty: 'Modesty',
-        modestyLevels: { strict: 'Very modest', standard: 'Modest' },
+        modestyLevels: {
+            strict: 'Very modest',
+            standard: 'Modest',
+            open: 'Contemporary',
+        },
+        modestyHints: {
+            strict: 'Fully covered and loose: wrist sleeves, floor length, a shayla on the model.',
+            standard:
+                'A softly fitted waist and midi lengths are fine; no slits or sheer areas over skin.',
+            open: 'Contemporary designs: one-shoulder or off-the-shoulder, sleeveless, midi or knee length, corsets — tasteful, never revealing.',
+        },
+        showFace: 'Show the model’s face',
+        showFaceHint:
+            'A natural, calm face; or the photo is cropped at the chin.',
+        storeSections: 'Your store’s sections',
+        productsCount: '{n} products',
+        otherGarments: 'Other types',
+        unsupportedSections: 'Sections the designer can’t design yet: {names}',
         tier: 'Price tier',
         tiers: {
             economy: 'Economy',

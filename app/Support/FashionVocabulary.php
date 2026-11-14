@@ -22,7 +22,7 @@ class FashionVocabulary
             'jalabiya' => ['ar' => 'جلابية', 'en' => 'Jalabiya', 'store_words' => ['جلابي', 'jalabiya', 'jalabia']],
             'kaftan' => ['ar' => 'قفطان', 'en' => 'Kaftan', 'store_words' => ['قفطان', 'قفاطين', 'kaftan', 'caftan']],
             'kimono' => ['ar' => 'كيمونو', 'en' => 'Kimono', 'store_words' => ['كيمون', 'kimono']],
-            'coord_set' => ['ar' => 'طقم قطعتين', 'en' => 'Co-ord set', 'store_words' => ['طقم', 'أطقم', 'set']],
+            'coord_set' => ['ar' => 'طقم قطعتين', 'en' => 'Co-ord set', 'store_words' => ['طقم', 'أطقم', 'اطقم', 'set']],
             'prayer_set' => ['ar' => 'جلال صلاة', 'en' => 'Prayer set', 'store_words' => ['جلال', 'صلاة', 'prayer']],
         ];
     }
@@ -98,6 +98,9 @@ class FashionVocabulary
             'tiered' => $s('طبقات', 'Tiered', 4.0),
             'shirt_dress' => $s('قميصي', 'Shirt dress', 2.8),
             'trapeze' => $s('ترابيز', 'Trapeze', 3.2),
+            'corset' => $s('كورسيه', 'Corset bodice', 3.4),
+            'peplum' => $s('بيبلوم بطبقات', 'Peplum with tiers', 3.6),
+            'fitted' => $s('ضيق محدد', 'Fitted', 2.6),
         ];
 
         return [
@@ -166,16 +169,24 @@ class FashionVocabulary
                 'mandarin' => $l('ياقة صينية', 'Mandarin collar'), 'shirt_collar' => $l('ياقة قميص', 'Shirt collar'),
                 'cowl' => $l('كاول', 'Cowl'), 'square' => $l('مربعة', 'Square'), 'keyhole' => $l('فتحة مفتاح', 'Keyhole'),
                 'hood' => $l('بقبعة', 'Hooded'),
+                'v_neck' => $l('V واضحة', 'V neck'),
+                'one_shoulder' => $l('كتف واحد', 'One shoulder'),
+                'off_shoulder' => $l('أكتاف مكشوفة', 'Off the shoulder'),
+                'sweetheart' => $l('قلب', 'Sweetheart'),
+                'halter' => $l('هالتر', 'Halter'),
             ],
             'sleeve' => [
                 'straight' => $l('مستقيم', 'Straight'), 'wide' => $l('واسع', 'Wide'), 'bell' => $l('جرس', 'Bell'),
                 'puff' => $l('منفوخ', 'Puff'), 'butterfly' => $l('فراشة', 'Butterfly'), 'cape' => $l('كاب', 'Cape'),
                 'bishop' => $l('بالون بأسورة', 'Bishop'), 'kimono' => $l('كيمونو', 'Kimono'), 'ruffle' => $l('كشكش', 'Ruffled'),
                 'cuffed' => $l('بكبك', 'Cuffed'),
+                'short' => $l('قصير', 'Short'),
+                'sleeveless' => $l('بدون أكمام', 'Sleeveless'),
             ],
             'length' => [
                 'floor' => $l('حتى الأرض', 'Floor length'), 'ankle' => $l('حتى الكاحل', 'Ankle length'),
                 'midi' => $l('ميدي', 'Midi'), 'tunic' => $l('تونيك', 'Tunic length'), 'train' => $l('بذيل', 'With a train'),
+                'knee' => $l('للركبة', 'Knee length'),
             ],
             'closure' => [
                 'open_front' => $l('مفتوحة من الأمام', 'Open front'), 'hidden_snaps' => $l('كبسات مخفية', 'Hidden snaps'),
@@ -206,10 +217,60 @@ class FashionVocabulary
     {
         return [
             'ghost' => ['ar' => 'على مانيكان', 'en' => 'Ghost mannequin', 'ratio' => '3:4'],
-            'on_model' => ['ar' => 'على عارضة محتشمة', 'en' => 'Modest on-model', 'ratio' => '3:4'],
+            'on_model' => ['ar' => 'على عارضة', 'en' => 'On a model', 'ratio' => '3:4'],
+            'editorial' => ['ar' => 'عارضة في ديكور أنيق', 'en' => 'Editorial on a model', 'ratio' => '3:4'],
             'sketch' => ['ar' => 'رسم أزياء', 'en' => 'Fashion sketch', 'ratio' => '3:4'],
             'flat' => ['ar' => 'رسم فني مسطّح', 'en' => 'Technical flat', 'ratio' => '1:1'],
         ];
+    }
+
+    /**
+     * How covered the designs are. Strict and standard follow Saudi modest
+     * wear; open is contemporary fashion (bare shoulders, midi or knee
+     * lengths, fitted lines) — still tasteful, never revealing.
+     *
+     * @return array<string, array{ar: string, en: string}>
+     */
+    public static function modesty(): array
+    {
+        return [
+            'strict' => ['ar' => 'محتشم جدًا', 'en' => 'Very modest'],
+            'standard' => ['ar' => 'محتشم', 'en' => 'Modest'],
+            'open' => ['ar' => 'عصري بلا قيود حشمة', 'en' => 'Contemporary, no modesty limits'],
+        ];
+    }
+
+    /**
+     * The construction keys a modesty level leaves out.
+     *
+     * @return array<string, list<string>>
+     */
+    public static function forbidden(string $modesty): array
+    {
+        return match ($modesty) {
+            'open' => [],
+            'standard' => [
+                'neckline' => ['v_neck', 'one_shoulder', 'off_shoulder', 'sweetheart', 'halter'],
+                'sleeve' => ['sleeveless'],
+                'length' => ['knee'],
+                'silhouette' => ['corset', 'fitted'],
+            ],
+            default => [
+                'neckline' => ['v_shallow', 'v_neck', 'one_shoulder', 'off_shoulder', 'sweetheart', 'halter'],
+                'sleeve' => ['sleeveless', 'short'],
+                'length' => ['midi', 'knee', 'tunic'],
+                'silhouette' => ['mermaid', 'corset', 'fitted'],
+            ],
+        };
+    }
+
+    /**
+     * The level a garment starts at: abayas, prayer sets and jalabiyas are
+     * very modest; dresses are modest; the merchant can open either.
+     */
+    public static function defaultModesty(string $garment): string
+    {
+        return in_array($garment, ['abaya', 'prayer_set', 'jalabiya'], true) ? 'strict' : 'standard';
     }
 
     /**
@@ -329,6 +390,7 @@ class FashionVocabulary
             'details' => self::details(),
             'renders' => self::renders(),
             'roles' => self::roles(),
+            'modesty' => self::modesty(),
         ];
     }
 

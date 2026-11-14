@@ -53,7 +53,19 @@ export const designer = {
         age: 'الفئة العمرية',
         ages: { young: '18–25', adult: '25–40', mature: '40+' },
         modesty: 'مستوى الحشمة',
-        modestyLevels: { strict: 'محتشم جدًا', standard: 'محتشم' },
+        modestyLevels: { strict: 'محتشم جدًا', standard: 'محتشم', open: 'عصري' },
+        modestyHints: {
+            strict: 'مغطى بالكامل وفضفاض: أكمام للرسغ وطول للأرض، وشيلة على العارضة.',
+            standard:
+                'خصر محدد بنعومة وطول ميدي مسموح، دون فتحات أو شفافية على الجسم.',
+            open: 'تصاميم عصرية: كتف واحد أو أكتاف مكشوفة، بلا أكمام، ميدي أو للركبة، كورسيه — بذوق راقٍ دون ابتذال.',
+        },
+        showFace: 'إظهار وجه العارضة',
+        showFaceHint: 'وجه طبيعي بملامح هادئة؛ أو تُقص الصورة عند الذقن.',
+        storeSections: 'أقسام متجرك',
+        productsCount: '{n} منتج',
+        otherGarments: 'أنواع أخرى',
+        unsupportedSections: 'أقسام لا يصممها المصمم بعد: {names}',
         tier: 'الفئة السعرية',
         tiers: {
             economy: 'اقتصادي',

@@ -7,6 +7,7 @@ use App\Jobs\GenerateDesignCollection;
 use App\Models\CompetitorProduct;
 use App\Models\DesignCollection;
 use App\Models\DesignerBriefing;
+use App\Models\Product;
 use App\Models\SocialPost;
 use App\Models\Store;
 use App\Services\Designer\DesignerAdvisor;
@@ -47,7 +48,9 @@ class DesignerController extends Controller
             'colors.*' => ['string', Rule::in(array_keys(Vocabulary::colors()))],
             'occasion' => ['required', Rule::in(array_keys(FashionVocabulary::occasions()))],
             'age' => ['nullable', Rule::in(['young', 'adult', 'mature'])],
-            'modesty' => ['nullable', Rule::in(['strict', 'standard'])],
+            'modesty' => ['nullable', Rule::in(array_keys(FashionVocabulary::modesty()))],
+            'show_face' => ['nullable', 'boolean'],
+            'category' => ['nullable', 'string', 'max:120'],
             'tier' => ['nullable', Rule::in(['economy', 'mid', 'premium', 'luxury'])],
             'creativity' => ['required', 'integer', 'min:1', 'max:5'],
             'count' => ['required', 'integer', 'min:1', 'max:4'],
@@ -83,7 +86,11 @@ class DesignerController extends Controller
                 'colors' => array_values(array_unique($data['colors'] ?? [])),
                 'occasion' => $data['occasion'],
                 'age' => $data['age'] ?? 'adult',
-                'modesty' => $data['modesty'] ?? (in_array($data['garment'], ['abaya', 'prayer_set', 'jalabiya'], true) ? 'strict' : 'standard'),
+                'modesty' => $data['modesty'] ?? FashionVocabulary::defaultModesty($data['garment']),
+                'show_face' => $request->boolean('show_face'),
+                // Only one of the store's own sections (synced from Zid).
+                'category' => filled($data['category'] ?? null) && Product::query()->where('store_id', $store->id)->where('category', $data['category'])->exists()
+                    ? $data['category'] : null,
                 'tier' => $data['tier'] ?? null,
                 'creativity' => (int) $data['creativity'],
                 'count' => (int) $data['count'],

@@ -91,7 +91,8 @@ class CollectionDesigner
 
         $roles = FashionVocabulary::roleMix((int) $brief['creativity'], (int) $brief['count'], $insights['competitor_hits'] !== []);
         $garment = $brief['garment'];
-        $allowed = $this->allowed($garment);
+        $brief['modesty'] ??= FashionVocabulary::defaultModesty($garment);
+        $allowed = $this->allowed($garment, $brief['modesty']);
 
         $result = $this->ai->json(
             operation: 'designer_collection',
@@ -103,7 +104,10 @@ class CollectionDesigner
                 .'borrowing attribute combinations and never one competitor product\'s look (change at least two of silhouette, pattern and colour); '
                 .'signature is the store\'s own bold or heritage-inspired piece. '
                 .'The merchant\'s fabric is the main fabric of every concept, so make concepts differ in cut and details, not in fabric. '
-                .'Every concept must be buildable by a Saudi workshop and respect the modesty level. '
+                .'Every concept must be buildable by a Saudi workshop and follow the brief\'s modesty level: strict is fully covered and loose; '
+                .'standard allows a softly fitted waist and midi lengths; open is contemporary fashion where bare shoulders or arms, one-shoulder or '
+                .'off-the-shoulder necklines, corset bodices and midi or knee lengths are welcome — always tasteful and elegant. '
+                .'When the brief names the merchant\'s store category, design for that section of their store. '
                 .'Use only the keys listed under allowed for every coded field. '
                 .'Any claim about sales, competitors or trends must cite evidence ids from the packet in evidence_ids; never invent numbers, sales or revenue. '
                 .'A competitor best-seller label is the merchant\'s own claim, and engagement is not sales. '
@@ -132,7 +136,7 @@ class CollectionDesigner
         foreach ($roles as $i => $role) {
             $concepts[] = $this->clean($raw[$i] ?? $this->fallback($brief, [$role], $insights)['concepts'][0], $role, $i, $brief, $packet, $allowed, $store);
         }
-        $concepts = $this->diversify($concepts, $garment);
+        $concepts = $this->diversify($concepts, $garment, $allowed);
 
         $collection->update([
             'brief' => $brief,
@@ -162,7 +166,7 @@ class CollectionDesigner
             }
 
             $this->updateConcept($collection, $i, ['status' => 'drawing', 'error' => null]);
-            $render = $this->prompts->render($brief['render'] ?? 'ghost', $concept);
+            $render = $this->prompts->render($brief['render'] ?? 'ghost', $concept, $brief['modesty'] ?? 'strict');
             $useFabric = $collection->fabric_image_path && $render !== 'flat' && Storage::disk('public')->exists($collection->fabric_image_path);
             $prompt = $this->prompts->build($brief, $concept, (bool) $useFabric);
 
@@ -393,18 +397,25 @@ class CollectionDesigner
             'finishing_en' => $this->text($raw['finishing_en'] ?? null),
             'design_notes_en' => mb_substr($this->text($raw['design_notes_en'] ?? null), 0, 300),
             'evidence' => $evidence,
-            'category' => $this->category($store, $garment),
+            // The store section the merchant picked, else the one matching the garment.
+            'category' => $brief['category'] ?? $this->category($store, $garment),
             'season' => FashionVocabulary::occasions()[$brief['occasion'] ?? 'daily']['season'] ?? 'all_year',
             'status' => 'pending',
             'error' => null,
         ];
 
-        // Modest by default: mermaid lines, midi lengths and shallow V necks
-        // only when the merchant chose the standard modesty level.
-        if (($brief['modesty'] ?? 'strict') === 'strict') {
-            $concept['length'] = in_array($concept['length'], ['midi', 'tunic'], true) && $garment !== 'coord_set' ? 'floor' : $concept['length'];
-            $concept['neckline'] = $concept['neckline'] === 'v_shallow' ? 'round' : $concept['neckline'];
-            $concept['silhouette'] = $concept['silhouette'] === 'mermaid' ? 'a_line' : $concept['silhouette'];
+        // Anything the modesty level leaves out falls back to a covered choice.
+        $forbidden = FashionVocabulary::forbidden($brief['modesty'] ?? 'strict');
+        $safe = ['neckline' => 'round', 'sleeve' => 'straight', 'length' => $garment === 'coord_set' ? 'ankle' : 'floor',
+            'silhouette' => collect($allowed['silhouette'])->first() ?? $concept['silhouette']];
+        foreach ($safe as $field => $fallback) {
+            if (in_array($concept[$field], $forbidden[$field] ?? [], true)) {
+                $concept[$field] = $fallback;
+            }
+        }
+        // Tunic length belongs to co-ord sets.
+        if ($concept['length'] === 'tunic' && $garment !== 'coord_set' && ($brief['modesty'] ?? 'strict') === 'strict') {
+            $concept['length'] = 'floor';
         }
 
         return [
@@ -419,12 +430,14 @@ class CollectionDesigner
      * sleeves are moved to an unused option for the garment.
      *
      * @param  list<array<string, mixed>>  $concepts
+     * @param  array<string, list<string>>  $allowed
      * @return list<array<string, mixed>>
      */
-    private function diversify(array $concepts, string $garment): array
+    private function diversify(array $concepts, string $garment, array $allowed): array
     {
-        $silhouettes = array_keys(FashionVocabulary::silhouettes()[$garment] ?? []);
-        $sleeves = array_keys(FashionVocabulary::details()['sleeve']);
+        // Only within what the modesty level allows.
+        $silhouettes = $allowed['silhouette'];
+        $sleeves = $allowed['sleeve'];
         $usedS = [];
         $usedV = [];
 
@@ -502,15 +515,17 @@ class CollectionDesigner
     /**
      * @return array<string, list<string>>
      */
-    private function allowed(string $garment): array
+    private function allowed(string $garment, string $modesty = 'strict'): array
     {
         $details = FashionVocabulary::details();
+        $forbidden = FashionVocabulary::forbidden($modesty);
+        $keep = fn (array $keys, string $field) => array_values(array_diff($keys, $forbidden[$field] ?? []));
 
         return [
-            'silhouette' => array_keys(FashionVocabulary::silhouettes()[$garment] ?? []),
-            'neckline' => array_keys($details['neckline']),
-            'sleeve' => array_keys($details['sleeve']),
-            'length' => array_keys($details['length']),
+            'silhouette' => $keep(array_keys(FashionVocabulary::silhouettes()[$garment] ?? []), 'silhouette'),
+            'neckline' => $keep(array_keys($details['neckline']), 'neckline'),
+            'sleeve' => $keep(array_keys($details['sleeve']), 'sleeve'),
+            'length' => $keep(array_keys($details['length']), 'length'),
             'closure' => array_keys($details['closure']),
             'embellishment' => array_keys($details['embellishment']),
             'placement' => array_keys($details['placement']),
@@ -568,6 +583,7 @@ class CollectionDesigner
             'occasion' => $brief['occasion'] ?? 'daily',
             'age' => $brief['age'] ?? 'adult',
             'modesty' => $brief['modesty'] ?? 'strict',
+            'store_category' => $brief['category'] ?? null,
             'creativity_1_to_5' => (int) $brief['creativity'],
             'price_tier' => $brief['tier'] ?? 'mid',
             'merchant_notes' => $brief['notes'] ?? null,
