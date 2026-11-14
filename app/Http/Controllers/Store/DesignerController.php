@@ -200,10 +200,16 @@ class DesignerController extends Controller
      */
     public static function inspire(Store $store, string $inspire): ?array
     {
+        $ar = app()->getLocale() === 'ar';
+
+        // An attribute from the market trends page: "attr:color:black".
+        if (preg_match('/^attr:(garment|color|pattern|material|style):([a-z_]+)$/', $inspire, $a)) {
+            return self::inspireAttribute($a[1], $a[2], $ar);
+        }
+
         if (! preg_match('/^(post|product):(\d+)$/', $inspire, $m)) {
             return null;
         }
-        $ar = app()->getLocale() === 'ar';
         $notes = $ar ? 'مستوحى من منافس: خذ الفكرة وغيّر عنصرين على الأقل (القصّة، النقشة أو اللون) بروح متجرك.'
             : 'Inspired by a competitor: take the idea and change at least two of cut, pattern or colour, in your own style.';
 
@@ -228,6 +234,42 @@ class DesignerController extends Controller
             'colors' => array_slice(array_values(array_filter((array) ($features['colors'] ?? []), 'is_string')), 0, 3),
             'pattern' => $features['pattern'] ?? null, 'notes' => $notes,
             'inspiration' => ['kind' => 'competitor', 'id' => $product->id, 'label' => $product->name, 'image_url' => $product->image_url]];
+    }
+
+    /**
+     * A brief seeded with one attribute value the market trends page
+     * pointed at; values outside the vocabulary are ignored.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function inspireAttribute(string $type, string $value, bool $ar): ?array
+    {
+        $known = match ($type) {
+            'garment' => isset(FashionVocabulary::garments()[$value]),
+            'color' => isset(Vocabulary::colors()[$value]),
+            'pattern' => isset(Vocabulary::patterns()[$value]),
+            'material' => isset(Vocabulary::materials()[$value]),
+            'style' => isset(Vocabulary::styles()[$value]),
+        };
+        if (! $known) {
+            return null;
+        }
+
+        $locale = $ar ? 'ar' : 'en';
+        $label = $type === 'garment'
+            ? FashionVocabulary::label('garments', $value, $locale)
+            : Vocabulary::label(['color' => 'colors', 'pattern' => 'patterns', 'material' => 'materials', 'style' => 'styles'][$type], $value, $locale);
+
+        return [
+            'garment' => $type === 'garment' ? $value : null,
+            'colors' => $type === 'color' ? [$value] : [],
+            'pattern' => $type === 'pattern' ? $value : null,
+            'style' => $type === 'style' ? $value : null,
+            'fabric' => $type === 'material' ? (collect(FashionVocabulary::fabrics())->search(fn (array $f, string $k) => $k === $value || $f['family'] === $value) ?: null) : null,
+            'notes' => $ar ? "من توجهات السوق: {$label}. صمّمه بروح متجرك وبما يناسب عميلاتك."
+                : "From market trends: {$label}. Design it in your store's spirit, for your customers.",
+            'inspiration' => ['kind' => 'gap', 'id' => "{$type}:{$value}", 'label' => (string) $label, 'image_url' => null],
+        ];
     }
 
     /**

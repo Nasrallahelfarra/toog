@@ -305,8 +305,9 @@ class ApifySocialScanTest extends TestCase
             ->where('selected.posts.0.engagement_rate', fn ($rate) => (float) $rate === 10.0)
             ->where('selected.posts.0.thumbnail_url', fn ($url) => str_contains($url, '/storage/social-posts/'))
             ->where('selected.posts.1.likes_hidden', true));
-        // Unmeasured posts do not drag the market average down.
+        // The market page reads the real scan only: the year-old post is out of its window.
         $this->get('/store/market')->assertInertia(fn (Assert $page) => $page
-            ->where('stats.avg_engagement', fn ($avg) => (float) $avg === 5.25));
+            ->where('board.basis', 'live')
+            ->where('board.coverage.posts', 2));
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Services\Market;
 
+use App\Models\Competitor;
 use App\Models\CompetitorProduct;
 use App\Models\Product;
 use App\Models\SocialPost;
@@ -9,18 +10,25 @@ use App\Models\Store;
 use App\Models\SyncRun;
 use App\Models\Trend;
 use App\Notifications\PlatformNotification;
+use App\Support\FashionVocabulary;
 use App\Support\Vocabulary;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * Recomputes the store's market trends (FR-2.5 – FR-2.7) from what
- * competitors list and post: how fast a colour / pattern / style / material
- * / season is growing (momentum), how widespread it already is
+ * Recomputes the store's market trends (FR-2.5 – FR-2.7) from what the
+ * active competitors list and post: how fast a colour / pattern / style /
+ * material / season is growing (momentum), how widespread it already is
  * (saturation), and whether the store already carries it (gap).
  *
+ * Only real scans count once the store has them (seeded samples are
+ * dropped and the old trends reset), clothing only in a fashion store.
+ * Growth compares what competitors add now (new arrivals, recent posts)
+ * with what they already carry, so a first crawl is a baseline, not a
+ * surge. Posts weigh by engagement against their account's usual.
+ *
  * Existing trends are smoothed rather than replaced, so one noisy scan
- * cannot flip a trend; a new rising trend triggers a notification.
+ * cannot flip a trend; a trend with no signals left cools and is finally
+ * removed. A new rising trend triggers a notification.
  */
 class TrendDetector
 {
@@ -36,7 +44,10 @@ class TrendDetector
     /** Baseline values that are never a "trend" on their own. */
     private const NEUTRAL = ['all_year', 'solid'];
 
-    public function __construct(private readonly FeatureExtractor $features) {}
+    public function __construct(
+        private readonly FeatureExtractor $features,
+        private readonly CompetitorSignals $competitorSignals,
+    ) {}
 
     /**
      * @return array{updated: int, created: list<string>}
@@ -47,12 +58,22 @@ class TrendDetector
 
         $this->features->enrich($store->id);
 
-        $signals = $this->signals($store);
-        $stats = $this->aggregate($signals);
-        $productTotal = max(1, CompetitorProduct::query()->where('store_id', $store->id)->count());
+        $active = Competitor::query()->where('store_id', $store->id)->where('is_active', true)->pluck('id')->all();
+        $live = MarketTrends::hasLiveData($store, $active);
         $catalog = Product::query()->where('store_id', $store->id)->get();
 
+        // The first analysis on real scans starts clean: trends built from
+        // sample data say nothing about this store's market.
+        if ($live && ! $this->ranOnLiveData($store)) {
+            Trend::query()->where('store_id', $store->id)->delete();
+        }
+
+        $signals = $this->signals($store, $active, $live, MarketTrends::isFashion($catalog));
+        $stats = $this->aggregate($signals);
+        $productTotal = max(1, $signals->where('product', true)->count());
+
         $existing = Trend::query()->where('store_id', $store->id)->get()->keyBy(fn (Trend $t) => "{$t->type}|{$t->value}");
+        $seen = [];
         $updated = 0;
         $created = [];
 
@@ -66,6 +87,7 @@ class TrendDetector
             if (! $label || in_array($value, self::NEUTRAL, true)) {
                 continue;
             }
+            $seen[$key] = true;
 
             // Growth compares the value's share of its type in the last 30
             // days with its share in the 60 days before, so overall market
@@ -109,6 +131,18 @@ class TrendDetector
             }
         }
 
+        // A trend with no signals left cools down, and goes once it is cold.
+        foreach ($existing->except(array_keys($seen)) as $trend) {
+            $momentum = (int) round($trend->momentum * 0.7);
+            if ($momentum < 15) {
+                $trend->delete();
+
+                continue;
+            }
+            $growth = max(-80, round(min((float) $trend->growth, 0) - 10, 1));
+            $trend->update(['momentum' => $momentum, 'growth' => $growth, 'status' => $this->status($growth)]);
+        }
+
         // Gap analysis (FR-2.6): does the store already carry each trend?
         foreach (Trend::query()->where('store_id', $store->id)->get() as $trend) {
             $trend->update(['in_catalog' => $catalog->contains(fn (Product $p) => $this->productHas($p, $trend))]);
@@ -118,38 +152,70 @@ class TrendDetector
             $this->notify($store, $trend->fresh());
         }
 
-        $run->update(['status' => 'completed', 'finished_at' => now(), 'stats' => ['updated' => $updated, 'created' => count($created), 'signals' => $signals->count()]]);
+        $run->update(['status' => 'completed', 'finished_at' => now(), 'stats' => [
+            'updated' => $updated, 'created' => count($created), 'signals' => $signals->count(), 'basis' => $live ? 'live' : 'sample',
+        ]]);
 
         return ['updated' => $updated, 'created' => array_map(fn (Trend $t) => $t->name_en, $created)];
     }
 
     /**
-     * Weighted observations: competitor listings (best sellers count double)
-     * and social posts (weighted by reach and engagement).
+     * Weighted observations. Competitor listings seen in the last 45 days
+     * (best sellers count double): a genuinely new arrival is "recent", the
+     * rest of the catalog is the baseline. Posts of the last 90 days, by
+     * engagement against their own account's usual.
      *
-     * @return Collection<int, array{features: array<string, mixed>, date: Carbon, weight: float, platform: string|null, product: bool}>
+     * @param  list<int>  $active
+     * @return Collection<int, array{features: array<string, mixed>, recent: bool, weight: float, platform: string|null, product: bool}>
      */
-    private function signals(Store $store): Collection
+    private function signals(Store $store, array $active, bool $live, bool $fashion): Collection
     {
-        $products = CompetitorProduct::query()->with('competitor:id,platform')->where('store_id', $store->id)->get()
+        if ($active === []) {
+            return collect();
+        }
+
+        $rows = CompetitorProduct::query()->with('competitor:id,platform')->where('store_id', $store->id)
+            ->whereIn('competitor_id', $active)
+            ->when($live, fn ($q) => $q->whereNotNull('evidence'))
+            ->where(fn ($q) => $q->whereNull('last_seen_at')->orWhere('last_seen_at', '>=', now()->subDays(45)))
+            ->get();
+        $firstSeen = $rows->groupBy('competitor_id')->map(fn (Collection $items) => $items->min('first_seen_at'));
+
+        $products = $rows
+            ->filter(fn (CompetitorProduct $p) => ! $fashion || FashionVocabulary::garmentFor($p->category, $p->name) !== null)
             ->map(fn (CompetitorProduct $p) => [
-                'features' => $p->features ?? [],
-                'date' => $p->first_seen_at ?? $p->created_at,
+                'features' => CompetitorSignals::features($p),
+                'recent' => in_array('new_arrival', $this->competitorSignals->signals($p, $firstSeen[$p->competitor_id] ?? null), true),
                 'weight' => $p->is_best_seller ? 2.0 : 1.0,
                 'platform' => $p->competitor?->platform,
                 'product' => true,
             ]);
 
-        $posts = SocialPost::query()->where('store_id', $store->id)->get()
-            ->map(fn (SocialPost $p) => [
-                'features' => $p->features ?? [],
-                'date' => $p->posted_at ?? $p->created_at,
-                'weight' => 1 + min(3, $p->views / 250_000) + (float) $p->engagement_rate / 5,
-                'platform' => $p->platform,
-                'product' => false,
-            ]);
+        $posts = SocialPost::query()->where('store_id', $store->id)
+            ->whereIn('competitor_id', $active)
+            ->when($live, fn ($q) => $q->whereNotNull('evidence'))
+            ->where(fn ($q) => $q->whereNull('posted_at')->orWhere('posted_at', '>=', now()->subDays(90)))
+            ->get();
+        $lifts = $this->competitorSignals->lifts($posts);
 
-        return $products->concat($posts)->filter(fn ($s) => $s['date'] && $s['date']->greaterThan(now()->subDays(90)))->values();
+        $posts = $posts->map(fn (SocialPost $p) => [
+            'features' => $p->features ?: $this->features->fromText((string) $p->caption),
+            'recent' => (bool) ($p->posted_at ?? $p->created_at)?->greaterThan(now()->subDays(30)),
+            'weight' => max(0.5, min(4.0, (float) ($lifts[$p->id]['lift'] ?? 1.0))),
+            'platform' => $p->platform,
+            'product' => false,
+        ]);
+
+        return $products->concat($posts)->values();
+    }
+
+    /**
+     * Whether an earlier analysis already ran on real scans.
+     */
+    private function ranOnLiveData(Store $store): bool
+    {
+        return SyncRun::query()->where('store_id', $store->id)->where('type', 'trend_analysis')->where('status', 'completed')
+            ->get(['stats'])->contains(fn (SyncRun $r) => ($r->stats['basis'] ?? null) === 'live');
     }
 
     /**
@@ -159,7 +225,6 @@ class TrendDetector
     private function aggregate(Collection $signals): Collection
     {
         $stats = [];
-        $cutoff = now()->subDays(30);
 
         foreach ($signals as $signal) {
             foreach (self::FIELDS as $field => [$type]) {
@@ -168,7 +233,7 @@ class TrendDetector
                 foreach (array_filter($values) as $value) {
                     $key = "{$type}|{$value}";
                     $stats[$key] ??= ['recent' => 0.0, 'older' => 0.0, 'count' => 0, 'products' => 0, 'platforms' => []];
-                    $stats[$key][$signal['date']->greaterThan($cutoff) ? 'recent' : 'older'] += $signal['weight'];
+                    $stats[$key][$signal['recent'] ? 'recent' : 'older'] += $signal['weight'];
                     $stats[$key]['count']++;
                     $stats[$key]['products'] += (int) $signal['product'];
 

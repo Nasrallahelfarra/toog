@@ -3,42 +3,10 @@ import type { market as ar } from '../ar/market';
 export const market: typeof ar = {
     title: 'Market trends',
     description:
-        'What is trending with your competitors and on social media in Saudi Arabia — and what your catalog is missing.',
+        'What sells at your competitors against what sells in your store: from their listed products, their posts and your Zid sales.',
     refresh: 'Refresh analysis',
     lastAnalysis: 'Last analysed {time}',
     neverAnalyzed: 'Not analysed yet',
-
-    stats: {
-        rising: 'Rising trends',
-        gaps: 'Gap opportunities',
-        competitors: 'Active competitors',
-        engagement: 'Avg. engagement',
-        tracked: 'products tracked',
-    },
-
-    filters: {
-        type: 'Type',
-        platform: 'Platform',
-        status: 'Status',
-        allTypes: 'All types',
-        allPlatforms: 'All platforms',
-        allStatuses: 'All statuses',
-    },
-
-    types: {
-        color: 'Colour',
-        pattern: 'Pattern',
-        style: 'Style',
-        shape: 'Shape',
-        material: 'Material',
-        theme: 'Season & occasion',
-    },
-
-    status: {
-        rising: 'Rising',
-        stable: 'Stable',
-        declining: 'Declining',
-    },
 
     platforms: {
         website: 'Store website (auto detect)',
@@ -51,47 +19,10 @@ export const market: typeof ar = {
         snapchat: 'Snapchat',
     },
 
-    trends: 'Trends',
-    trendsHint:
-        'Momentum measures how fast an idea is spreading; saturation, how common it already is among competitors.',
-    momentum: 'Momentum',
-    growth: 'Growth',
-    saturation: 'Saturation',
-    inCatalog: 'In your catalog',
-    notInCatalog: 'Missing from your catalog',
-    noTrends: 'No matching trends',
-    noTrendsHint:
-        'Change the filters, or refresh the analysis after scanning competitors.',
-
-    map: 'Opportunity map',
-    mapHint: 'High momentum with low saturation means a better opportunity.',
-    opportunityZone: 'Opportunity zone',
-
-    gaps: 'Gap opportunities',
-    gapsHint:
-        'Design elements rising in the market that your catalog does not carry yet.',
-    noGaps: 'Your catalog covers every rising trend right now',
-    evaluateIdea: 'Evaluate an idea',
-    designIdea: 'Design an idea',
-
-    activity: 'Competitor activity',
-    activityHint:
-        'New products, price drops and best sellers at your competitors.',
-    noActivity: 'No competitor activity in the last 30 days',
-    kinds: {
-        new: 'New product',
-        price_drop: 'Price drop',
-        best_seller: 'Best seller',
-    },
-
-    posts: 'Top-performing content',
-    postsHint: 'Competitors’ best posts on Instagram, TikTok and Facebook.',
-    noPosts: 'No posts tracked',
     views: 'views',
     likes: 'likes',
     shares: 'shares',
     comments: 'comments',
-    engagement: 'Engagement',
 
     reviews: 'Customer reviews',
     reviewsHint:
@@ -126,6 +57,127 @@ export const market: typeof ar = {
     },
     publicDataNote:
         'Monitoring uses publicly available data only, within each platform’s terms and Saudi regulations.',
+
+    board: {
+        nav: {
+            opportunities: 'Untapped opportunities',
+            focus: 'Focus on',
+            rising: 'Rising in your sales',
+            cooling: 'Cooling in your sales',
+        },
+        sources: {
+            market: 'The market',
+            marketLine: '{products} of clothing from {brands}, and {posts}',
+            demand: '{n} with a public demand signal: a “best seller” label or a purchase count the store shows.',
+            excluded:
+                '{n} left out because they are not clothing (shoes, toys, bags, accessories).',
+            mine: 'Your Zid sales',
+            mineLine:
+                '{units} sold between {from} and {to}, against {beforeFrom} – {beforeTo}.',
+            noSales:
+                'No sales linked yet; connect your store to Zid to compare your own sales.',
+            scanned: 'Competitors last checked {time}',
+            method: 'How we read it',
+            methodBody:
+                'A value’s market share is weighted by each store’s public demand signals (best-seller labels, the purchase counts it shows, homepage placement). Posts are measured against the same account’s usual engagement, and engagement is interest, not sales. Your sales are measured as each value’s share of all units, so a season such as Ramadan does not make everything look like it is rising. Revenue is never used.',
+            sample: 'This page shows sample data. Add your real competitors to base the analysis on their stores and accounts.',
+            none: 'No competitors yet, so the page shows your own sales only.',
+            manage: 'Manage competitors',
+        },
+        opportunities: {
+            title: 'Opportunities: strong at your competitors, missing from your catalog',
+            hint: 'A clear share of your competitors’ range, or posts beating their usual engagement, and rare or absent in your store.',
+            empty: 'No clear gap: your catalog covers what stands out at your competitors right now.',
+        },
+        focus: {
+            title: 'Focus on: strong in the market and rising in your sales',
+            hint: 'Two signals agree: competitors push it and your sales of it are rising. Prioritise extensions and stock.',
+            empty: 'Nothing is rising in both the market and your sales right now.',
+        },
+        rising: {
+            title: 'Rising in your sales',
+            hint: 'Its share of your units grew in the last 3 months against the 3 before.',
+            empty: 'No clear rise in your sales right now.',
+        },
+        cooling: {
+            title: 'Cooling in your sales',
+            hint: 'Its share of your sales fell and you still hold stock of it.',
+            empty: 'No notable decline in your sales.',
+        },
+        pulse: {
+            title: 'Market pulse',
+            hint: 'What your competitors carry most right now, and whether you carry it.',
+            youHave: 'You carry it',
+            youDont: 'Not in your catalog',
+            youRare: 'Rare in your catalog',
+            empty: 'Not enough competitor data yet.',
+        },
+        radar: {
+            title: 'What drives engagement at your competitors',
+            body: 'Posts that beat their account’s usual, why they engaged, and their best products: all on the competitor radar.',
+            hot: '{n} beat their account’s usual by 2× or more',
+            top: '{lift}× {competitor}’s usual',
+            open: 'Open the competitor radar',
+        },
+        types: {
+            garment: 'Garment',
+            color: 'Colour',
+            pattern: 'Pattern',
+            material: 'Material',
+            style: 'Style',
+        },
+        inMarket: 'of competitors’ range',
+        inCatalog: 'of your catalog',
+        atBrands: 'At {brands}',
+        demand: '{n} with a demand signal',
+        postLift: 'Its posts {lift}× usual',
+        newArrivals: '{n} new arrivals',
+        crowded: 'Crowded at competitors',
+        oneBrand: 'One competitor only: check before scaling',
+        lastMonths: 'Last 3 months',
+        monthsBefore: 'The 3 before',
+        ofSales: '{pct} of your sales',
+        catalogLine: '{products} in your catalog · {inStock} in stock',
+        inStock: '{units} in stock',
+        alsoMarket: 'Strong at competitors too',
+        notMarket: 'Not prominent at competitors',
+        coolingMarket:
+            'Still present at competitors; review presentation and price before clearing.',
+        coolingAlone: 'Reorder less and sell through current stock.',
+        purchases: '{n} purchases shown',
+        bestSeller: 'Best seller',
+        topSellers: 'Your best sellers',
+        competitorExamples: 'Examples from competitors',
+        design: 'Design with it',
+        designMore: 'Design an extension',
+        evaluate: 'Evaluate an idea',
+        count: {
+            competitors: {
+                one: '1 competitor',
+                two: '2 competitors',
+                few: '{n} competitors',
+                many: '{n} competitors',
+            },
+            products: {
+                one: '1 product',
+                two: '2 products',
+                few: '{n} products',
+                many: '{n} products',
+            },
+            units: {
+                one: '1 unit',
+                two: '2 units',
+                few: '{n} units',
+                many: '{n} units',
+            },
+            posts: {
+                one: '1 post',
+                two: '2 posts',
+                few: '{n} posts',
+                many: '{n} posts',
+            },
+        },
+    },
 
     competitors: {
         workspace: {
