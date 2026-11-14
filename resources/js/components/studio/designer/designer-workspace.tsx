@@ -48,8 +48,12 @@ export function DesignerWorkspace({
     const urgent =
         insights?.alerts.filter((a) => a.severity !== 'info').length ?? 0;
 
+    // Start on the store's largest section the designer can design.
+    const firstSection = designer.categories.find((c) => c.garment) ?? null;
     const form = useForm<BriefForm>({
-        garment: 'abaya',
+        garment: firstSection?.garment ?? 'abaya',
+        category: firstSection?.name ?? null,
+        show_face: false,
         fabric: null,
         fabric_image: null,
         fabric_from: null,
@@ -74,6 +78,10 @@ export function DesignerWorkspace({
         form.setData((data) => ({
             ...data,
             garment: p.garment ?? data.garment,
+            category: p.garment
+                ? (designer.categories.find((c) => c.garment === p.garment)
+                      ?.name ?? null)
+                : data.category,
             fabric: p.fabric ?? data.fabric,
             colors: p.colors?.length ? p.colors.slice(0, 4) : data.colors,
             occasion: p.occasion ?? data.occasion,
@@ -89,6 +97,9 @@ export function DesignerWorkspace({
         form.setData((data) => ({
             ...data,
             garment: c.brief.garment,
+            category: c.brief.category ?? null,
+            modesty: c.brief.modesty ?? null,
+            show_face: c.brief.show_face ?? false,
             fabric: c.brief.fabric,
             fabric_image: null,
             fabric_from: c.fabric_image_url ? c.id : null,
@@ -144,6 +155,7 @@ export function DesignerWorkspace({
                 <div className="xl:sticky xl:top-4 xl:max-h-[calc(100svh-2rem)] xl:self-start xl:overflow-y-auto xl:pb-2">
                     <BriefPanel
                         form={form}
+                        categories={designer.categories}
                         vocabulary={designer.vocabulary}
                         aiLive={aiLive}
                         pulse={pulse}

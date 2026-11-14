@@ -20,6 +20,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Spinner } from '@/components/ui/spinner';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useI18n } from '@/hooks/use-i18n';
 import { useVocabulary } from '@/hooks/use-vocabulary';
@@ -30,6 +31,8 @@ import type {
     GarmentKey,
     Inspiration,
     RenderKey,
+    Modesty,
+    StoreCategory,
 } from './types';
 
 export type BriefForm = {
@@ -41,7 +44,10 @@ export type BriefForm = {
     colors: string[];
     occasion: string;
     age: 'young' | 'adult' | 'mature';
-    modesty: 'strict' | 'standard' | null;
+    modesty: Modesty | null;
+    /** One of the store's own sections, when the garment comes from it. */
+    category: string | null;
+    show_face: boolean;
     tier: 'economy' | 'mid' | 'premium' | 'luxury' | null;
     creativity: number;
     count: number;
@@ -66,9 +72,11 @@ export function BriefPanel({
     onSubmit,
     reusedFabricUrl,
     onClearReused,
+    categories = [],
 }: {
     form: InertiaFormProps<BriefForm>;
     vocabulary: FashionVocabulary;
+    categories?: StoreCategory[];
     aiLive: boolean;
     pulse: number;
     onSubmit: () => void;
@@ -82,6 +90,11 @@ export function BriefPanel({
         form.data.fabric || form.data.fabric_image || form.data.fabric_from,
     );
     const minutes = Math.max(1, Math.round(form.data.count * 0.6 + 0.5));
+    const modesty: Modesty =
+        form.data.modesty ??
+        (['abaya', 'prayer_set', 'jalabiya'].includes(form.data.garment)
+            ? 'strict'
+            : 'standard');
 
     return (
         <form
@@ -219,38 +232,26 @@ export function BriefPanel({
                 </Field>
 
                 <Field label={d.garment} pulse={pulse}>
-                    <div className="grid grid-cols-4 gap-2">
-                        {(Object.keys(vocabulary.garments) as GarmentKey[]).map(
-                            (key) => {
-                                const active = form.data.garment === key;
+                    <GarmentPicker
+                        form={form}
+                        vocabulary={vocabulary}
+                        categories={categories}
+                    />
+                </Field>
 
-                                return (
-                                    <button
-                                        key={key}
-                                        type="button"
-                                        aria-pressed={active}
-                                        onClick={() =>
-                                            form.setData('garment', key)
-                                        }
-                                        className={cn(
-                                            'flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border px-1 pt-2.5 pb-2 text-[11px] leading-tight transition-all',
-                                            active
-                                                ? 'border-gold bg-gold-soft/60 text-foreground ring-2 ring-gold/25'
-                                                : 'text-muted-foreground hover:border-foreground/25 hover:text-foreground',
-                                        )}
-                                    >
-                                        <GarmentIcon
-                                            garment={key}
-                                            className="h-9 w-8"
-                                        />
-                                        <span className="text-center">
-                                            {name(vocabulary.garments[key])}
-                                        </span>
-                                    </button>
-                                );
-                            },
-                        )}
-                    </div>
+                <Field
+                    label={d.modesty}
+                    hint={d.modestyHints[modesty]}
+                    pulse={pulse}
+                >
+                    <Segmented
+                        options={['strict', 'standard', 'open']}
+                        labels={d.modestyLevels}
+                        value={modesty}
+                        onChange={(v) =>
+                            form.setData('modesty', v as BriefForm['modesty'])
+                        }
+                    />
                 </Field>
 
                 <Field label={d.occasion} pulse={pulse}>
@@ -338,6 +339,27 @@ export function BriefPanel({
                     </Field>
                 </div>
 
+                {(form.data.render === 'on_model' ||
+                    form.data.render === 'editorial') && (
+                    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5">
+                        <span className="min-w-0">
+                            <span className="block text-xs font-semibold">
+                                {d.showFace}
+                            </span>
+                            <span className="block text-[11px] leading-relaxed text-muted-foreground">
+                                {d.showFaceHint}
+                            </span>
+                        </span>
+                        <Switch
+                            checked={form.data.show_face}
+                            onCheckedChange={(v) =>
+                                form.setData('show_face', v)
+                            }
+                            aria-label={d.showFace}
+                        />
+                    </label>
+                )}
+
                 <MoreOptions form={form} />
 
                 {!aiLive && (
@@ -400,23 +422,6 @@ function MoreOptions({ form }: { form: InertiaFormProps<BriefForm> }) {
                         value={form.data.age}
                         onChange={(v) =>
                             form.setData('age', v as BriefForm['age'])
-                        }
-                    />
-                </Field>
-                <Field label={d.modesty}>
-                    <Segmented
-                        options={['strict', 'standard']}
-                        labels={d.modestyLevels}
-                        value={
-                            form.data.modesty ??
-                            (['abaya', 'prayer_set', 'jalabiya'].includes(
-                                form.data.garment,
-                            )
-                                ? 'strict'
-                                : 'standard')
-                        }
-                        onChange={(v) =>
-                            form.setData('modesty', v as BriefForm['modesty'])
                         }
                     />
                 </Field>
@@ -867,6 +872,145 @@ function Segmented({
                     {labels?.[o] ?? o}
                 </button>
             ))}
+        </div>
+    );
+}
+
+/**
+ * What to design: the store's own sections first (synced from Zid), each
+ * with the garment it maps to, then every other garment type.
+ */
+function GarmentPicker({
+    form,
+    vocabulary,
+    categories,
+}: {
+    form: InertiaFormProps<BriefForm>;
+    vocabulary: FashionVocabulary;
+    categories: StoreCategory[];
+}) {
+    const { t, tr, locale } = useI18n();
+    const d = t.designer.brief;
+    const mapped = categories.filter((c) => c.garment);
+    const unmapped = categories.filter((c) => !c.garment);
+    const [others, setOthers] = useState(
+        mapped.length === 0 || form.data.category === null,
+    );
+    const pick = (garment: GarmentKey, category: string | null) =>
+        form.setData((data) => ({ ...data, garment, category }));
+
+    return (
+        <div className="space-y-3">
+            {mapped.length > 0 && (
+                <div className="space-y-1.5">
+                    <p className="text-[11px] text-muted-foreground">
+                        {d.storeSections}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                        {mapped.map((c) => {
+                            const active = form.data.category === c.name;
+
+                            return (
+                                <button
+                                    key={c.name}
+                                    type="button"
+                                    aria-pressed={active}
+                                    onClick={() => pick(c.garment!, c.name)}
+                                    className={cn(
+                                        'flex cursor-pointer items-center gap-2.5 rounded-xl border px-2.5 py-2 text-start transition-all',
+                                        active
+                                            ? 'border-gold bg-gold-soft/60 ring-2 ring-gold/25'
+                                            : 'hover:border-foreground/25',
+                                    )}
+                                >
+                                    <GarmentIcon
+                                        garment={c.garment!}
+                                        className={cn(
+                                            'h-8 w-7 shrink-0',
+                                            active
+                                                ? 'text-foreground'
+                                                : 'text-muted-foreground',
+                                        )}
+                                    />
+                                    <span className="min-w-0">
+                                        <span className="block truncate text-xs font-medium">
+                                            {c.name}
+                                        </span>
+                                        <span className="block truncate text-[10px] text-muted-foreground">
+                                            {tr(d.productsCount, {
+                                                n: c.products,
+                                            })}{' '}
+                                            ·{' '}
+                                            {
+                                                vocabulary.garments[c.garment!][
+                                                    locale
+                                                ]
+                                            }
+                                        </span>
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {unmapped.length > 0 && (
+                        <p className="text-[10px] leading-relaxed text-muted-foreground">
+                            {tr(d.unsupportedSections, {
+                                names: unmapped
+                                    .map((c) => c.name)
+                                    .join(locale === 'ar' ? '، ' : ', '),
+                            })}
+                        </p>
+                    )}
+                    <button
+                        type="button"
+                        onClick={() => setOthers((v) => !v)}
+                        aria-expanded={others}
+                        className="flex cursor-pointer items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                    >
+                        {d.otherGarments}
+                        <ChevronDown
+                            className={cn(
+                                'size-3.5 transition-transform',
+                                others && 'rotate-180',
+                            )}
+                        />
+                    </button>
+                </div>
+            )}
+            {others && (
+                <div className="grid grid-cols-4 gap-2">
+                    {(Object.keys(vocabulary.garments) as GarmentKey[]).map(
+                        (key) => {
+                            const active =
+                                form.data.garment === key &&
+                                form.data.category === null;
+
+                            return (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    aria-pressed={active}
+                                    onClick={() => pick(key, null)}
+                                    className={cn(
+                                        'flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border px-1 pt-2.5 pb-2 text-[11px] leading-tight transition-all',
+                                        active
+                                            ? 'border-gold bg-gold-soft/60 text-foreground ring-2 ring-gold/25'
+                                            : 'text-muted-foreground hover:border-foreground/25 hover:text-foreground',
+                                    )}
+                                >
+                                    <GarmentIcon
+                                        garment={key}
+                                        className="h-9 w-8"
+                                    />
+                                    <span className="text-center">
+                                        {vocabulary.garments[key][locale]}
+                                    </span>
+                                </button>
+                            );
+                        },
+                    )}
+                </div>
+            )}
         </div>
     );
 }

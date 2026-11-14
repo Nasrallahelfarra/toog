@@ -2,6 +2,15 @@ import type { Recommendation } from '@/components/evaluation/types';
 
 type Label = { ar: string; en: string };
 
+export type Modesty = 'strict' | 'standard' | 'open';
+
+/** One of the store's own sections, with the garment it designs (null: not supported yet). */
+export type StoreCategory = {
+    name: string;
+    products: number;
+    garment: GarmentKey | null;
+};
+
 export type GarmentKey =
     | 'abaya'
     | 'dress_daily'
@@ -11,7 +20,7 @@ export type GarmentKey =
     | 'kimono'
     | 'coord_set'
     | 'prayer_set';
-export type RenderKey = 'ghost' | 'on_model' | 'sketch' | 'flat';
+export type RenderKey = 'ghost' | 'on_model' | 'editorial' | 'sketch' | 'flat';
 export type RoleKey =
     | 'safe_bet'
     | 'trend_twist'
@@ -49,6 +58,7 @@ export type FashionVocabulary = {
     >;
     renders: Record<RenderKey, Label & { ratio: string }>;
     roles: Record<RoleKey, Label>;
+    modesty: Record<Modesty, Label>;
 };
 
 export type Inspiration = {
@@ -281,7 +291,10 @@ export type Brief = {
     colors: string[];
     occasion: string;
     age: 'young' | 'adult' | 'mature';
-    modesty: 'strict' | 'standard';
+    modesty: Modesty;
+    /** The store section (from Zid) the collection is for. */
+    category: string | null;
+    show_face: boolean;
     tier: 'economy' | 'mid' | 'premium' | 'luxury' | null;
     creativity: number;
     count: number;
@@ -317,4 +330,5 @@ export type DesignerProps = {
     vocabulary: FashionVocabulary;
     briefing: Briefing;
     brand_colors: string[];
+    categories: StoreCategory[];
 };

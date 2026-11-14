@@ -245,6 +245,82 @@ class AiDesignerTest extends TestCase
         $this->assertNotNull($collection->fresh());
     }
 
+    public function test_the_brief_designs_for_the_store_sections_synced_from_zid(): void
+    {
+        Queue::fake();
+        $this->store->products()->create(['name' => 'فستان سهرة', 'external_id' => 'e1', 'category' => 'فساتين سهرة', 'price' => 500]);
+
+        $this->actingAs($this->store->owner)->get('/store/studio')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('designer.categories.0.name', 'عبايات')
+                ->where('designer.categories.0.garment', 'abaya')
+                ->where('designer.categories.1.name', 'فساتين سهرة')
+                ->where('designer.categories.1.garment', 'dress_evening')
+                ->has('designer.vocabulary.modesty.open')
+                ->has('designer.vocabulary.renders.editorial'));
+
+        $brief = ['garment' => 'dress_evening', 'fabric' => 'satin', 'occasion' => 'evening', 'creativity' => 3, 'count' => 1, 'render' => 'editorial'];
+        $this->post('/store/studio/collections', [...$brief, 'category' => 'فساتين سهرة', 'modesty' => 'open', 'show_face' => true])->assertSessionHasNoErrors();
+        $this->post('/store/studio/collections', [...$brief, 'category' => 'Not my section'])->assertSessionHasNoErrors();
+
+        [$first, $second] = DesignCollection::query()->orderBy('id')->get()->all();
+        $this->assertSame('فساتين سهرة', $first->brief['category']);
+        $this->assertSame('open', $first->brief['modesty']);
+        $this->assertTrue($first->brief['show_face']);
+        $this->assertNull($second->brief['category'], 'only the store\'s own sections');
+        $this->assertSame('standard', $second->brief['modesty']);
+    }
+
+    public function test_the_contemporary_level_keeps_open_designs_and_shows_the_face(): void
+    {
+        config(['mojo.ai.provider' => 'gemini', 'mojo.ai.gemini.api_key' => 'test-key', 'mojo.ai.gemini.text_model' => 'test-text', 'mojo.ai.gemini.image_model' => 'test-image']);
+        $image = imagecreatetruecolor(30, 40);
+        ob_start();
+        imagepng($image);
+        $png = ob_get_clean();
+        $plan = ['title_ar' => 'سهرة', 'title_en' => 'Evening', 'story_ar' => '', 'story_en' => '', 'concepts' => [[
+            'role' => 'safe_bet', 'name_ar' => 'فستان بكتف واحد', 'name_en' => 'One-shoulder dress', 'pitch_ar' => '', 'pitch_en' => '',
+            'silhouette' => 'corset', 'neckline' => 'one_shoulder', 'sleeve' => 'sleeveless', 'length' => 'knee', 'closure' => 'back_zip',
+            'placement' => 'hem', 'pattern' => 'solid', 'style' => 'luxury', 'rationale_ar' => '', 'rationale_en' => '', 'risk_ar' => '', 'risk_en' => '',
+            'finishing_ar' => '', 'finishing_en' => '', 'design_notes_en' => 'Tiered peplum hem', 'colors' => ['burgundy'], 'embellishments' => ['none'], 'evidence_ids' => [],
+        ]]];
+        $prompts = [];
+        Http::swap(new Factory);
+        Http::fake(function ($request) use ($plan, $png, &$prompts) {
+            if (str_contains($request->url(), 'test-image:')) {
+                $parts = $request['contents'][0]['parts'];
+                $prompts[] = end($parts)['text'];
+
+                return Http::response(['candidates' => [['content' => ['parts' => [['inlineData' => ['mimeType' => 'image/png', 'data' => base64_encode($png)]]]]]]]);
+            }
+
+            return Http::response(['candidates' => [['content' => ['parts' => [['text' => json_encode($plan)]]]]], 'usageMetadata' => ['promptTokenCount' => 1, 'candidatesTokenCount' => 1]]);
+        });
+        $collect = fn (string $modesty) => DesignCollection::query()->create(['store_id' => $this->store->id, 'user_id' => $this->store->owner_id, 'status' => 'pending', 'brief' => [
+            'garment' => 'dress_evening', 'fabric' => 'satin', 'colors' => ['burgundy'], 'occasion' => 'evening', 'creativity' => 3, 'count' => 1,
+            'render' => 'editorial', 'modesty' => $modesty, 'show_face' => true, 'notes' => null, 'inspiration' => null, 'tier' => null, 'age' => 'adult', 'category' => null,
+        ]]);
+
+        $open = $collect('open');
+        app(CollectionDesigner::class)->run($open);
+        $concept = $open->fresh()->concepts[0];
+        $this->assertSame('ready', $concept['status'], (string) ($concept['error'] ?? $open->fresh()->error));
+        $this->assertSame(['corset', 'one_shoulder', 'sleeveless', 'knee'], [$concept['silhouette'], $concept['neckline'], $concept['sleeve'], $concept['length']]);
+        $this->assertSame('editorial', $concept['render']);
+        $this->assertStringContainsString('her face visible', $prompts[0]);
+        $this->assertStringContainsString('sheer white curtains', $prompts[0]);
+        $this->assertStringNotContainsString('shayla', $prompts[0]);
+        $this->assertStringContainsString('no nudity', $prompts[0]);
+
+        // The same design at the very modest level is covered, and drawn on a ghost mannequin.
+        $strict = $collect('strict');
+        app(CollectionDesigner::class)->run($strict);
+        $concept = $strict->fresh()->concepts[0];
+        $this->assertSame(['round', 'straight', 'floor'], [$concept['neckline'], $concept['sleeve'], $concept['length']]);
+        $this->assertNotSame('corset', $concept['silhouette']);
+        $this->assertStringContainsString('shayla', $prompts[1]);
+    }
+
     public function test_a_brief_needs_a_fabric_photo_or_type(): void
     {
         $this->actingAs($this->store->owner)->post('/store/studio/collections', [
