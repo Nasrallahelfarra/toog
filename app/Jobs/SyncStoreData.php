@@ -167,6 +167,9 @@ class SyncStoreData implements ShouldQueue
         } catch (Throwable $e) {
             report($e);
         }
+
+        // Reviews link to the products just imported.
+        ImportZidReviews::dispatch($this->store->id, $this->userId);
     }
 
     public function failed(?Throwable $exception): void

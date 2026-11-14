@@ -39,6 +39,9 @@ class ZidClient
 
     public const ORDERS_PATH = 'managers/store/orders';
 
+    /** docs.zid.sa "List Reviews": the store's product reviews (products.read). */
+    public const REVIEWS_PATH = 'managers/store/reviews/product';
+
     public const PER_PAGE = 50;
 
     /** The documented maximum; halves the requests of a long order import. */
@@ -198,6 +201,21 @@ class ZidClient
             'date_attribute' => $attribute, 'date_from' => $since->format('Y-m-d\TH:i:s.vO'),
             'order_by' => 'created_at', 'sort_by' => 'asc',
         ], ['orders', 'results', 'data'], $page);
+    }
+
+    /**
+     * One page of the store's product reviews, newest first.
+     *
+     * @return array{items: list<array<string, mixed>>, has_next: bool, fingerprint: string, meta: array<string, mixed>}
+     *
+     * @throws ZidApiException
+     * @throws ZidRateLimited
+     */
+    public function reviewPage(int $page): array
+    {
+        return $this->page(self::REVIEWS_PATH, [
+            'page_size' => self::PER_PAGE, 'order_by' => 'created_at', 'sort_by' => 'DESC',
+        ], ['reviews', 'results', 'data'], $page);
     }
 
     /**

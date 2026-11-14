@@ -27,6 +27,35 @@ export const market: typeof ar = {
     reviews: 'Customer reviews',
     reviewsHint:
         'Arabic (including Saudi dialect) and English reviews, analysed.',
+    reviewsZid:
+        'Your customers’ reviews on Zid, analysed in Arabic (including Saudi dialect) and English.',
+    reviewSync: {
+        update: 'Update from Zid',
+        readAt: 'Last read from Zid {time}',
+        reading: 'Reading reviews from Zid…',
+        failed: 'Could not read reviews from Zid: {reason}',
+        reasons: {
+            authorization_failed:
+                'Zid did not grant access; reconnect the app from Settings.',
+            rate_limited: 'Zid asked us to wait; it will retry automatically.',
+            zid_rejected: 'Zid rejected the request.',
+            import_failed:
+                'Something went wrong while reading; try again later.',
+        },
+        sample: 'Sample reviews',
+        sampleHint:
+            'Sample reviews for display only, replaced by your customers’ reviews once your store is connected to Zid.',
+        empty: 'No written reviews in your Zid store yet.',
+        connect: 'Connect your store to Zid to read your customers’ reviews.',
+        average: 'Average rating',
+        verified: 'Verified buyer',
+        count: {
+            one: '1 review',
+            two: '2 reviews',
+            few: '{n} reviews',
+            many: '{n} reviews',
+        },
+    },
     analyze: 'Analyse with AI',
     pendingReviews: '{count} reviews waiting for analysis',
     allAnalyzed: 'All reviews analysed',

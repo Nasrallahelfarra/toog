@@ -52,7 +52,7 @@ class SentimentAnalyzer
     public function analyzePending(Store $store, int $limit = 40, ?int $userId = null): int
     {
         $reviews = CustomerReview::query()
-            ->where('store_id', $store->id)
+            ->shownFor($store)
             ->whereNull('analyzed_at')
             ->limit($limit)
             ->get();

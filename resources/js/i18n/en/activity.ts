@@ -2,7 +2,8 @@ import type { activity as ar } from '../ar/activity';
 
 export const activity: typeof ar = {
     title: 'Activity log',
-    description: 'Every key action in the store: product uploads, decisions, recommendation overrides and settings changes.',
+    description:
+        'Every key action in the store: product uploads, decisions, recommendation overrides and settings changes.',
     user: 'User',
     action: 'Action',
     allUsers: 'All users',
@@ -56,6 +57,7 @@ export const activity: typeof ar = {
         'calendar.deleted': 'Deleted an occasion',
         'market.trends_refreshed': 'Refreshed the trend analysis',
         'market.reviews_analyzed': 'Analysed customer reviews',
+        'market.reviews_synced': 'Updated customer reviews from Zid',
         'batch.created': 'Started a batch evaluation',
         'data.features_extraction': 'Extracted product attributes',
         'data.reclassified': 'Reclassified product performance',
@@ -65,7 +67,8 @@ export const activity: typeof ar = {
         'integration.disconnected': 'Disconnected Zid',
         'integration.checked': 'Checked the Zid connection',
         'admin.store_activated': 'Activated the store',
-        'admin.store_revenue_visibility': 'Changed revenue visibility for the store',
+        'admin.store_revenue_visibility':
+            'Changed revenue visibility for the store',
         'admin.store_suspended': 'Suspended the store',
         'admin.store_updated': 'Edited store details',
         'admin.store_created': 'Created the store',

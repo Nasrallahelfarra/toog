@@ -14,6 +14,8 @@ return [
     'scan_failed' => 'Scan failed: :message',
     'trends_refreshing' => 'Refreshing the trend analysis…',
     'reviews_analyzing' => 'Analysing customer reviews…',
+    'reviews_syncing' => 'Reading your customer reviews from Zid…',
+    'reviews_need_zid' => 'Connect your store to Zid first to read your customer reviews.',
     'event_saved' => 'Event saved.',
     'event_deleted' => 'Event deleted.',
     'notifications_read' => 'All notifications marked as read.',
