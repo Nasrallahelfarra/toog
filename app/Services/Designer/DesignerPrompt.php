@@ -23,7 +23,7 @@ class DesignerPrompt
     private const MODEL = 'a Saudi woman in her mid-twenties with distinctly Gulf Arab (Khaleeji) looks';
 
     /** Her face, when it is shown. */
-    private const FACE = 'warm olive-tan skin, large dark brown almond-shaped eyes, full dark defined eyebrows, '
+    private const FACE = 'fair, luminous light skin, large dark brown almond-shaped eyes, full dark defined eyebrows, '
         .'soft Khaleeji-style makeup with lined eyes and nude lips';
 
     private const FRAMING = [
@@ -56,7 +56,7 @@ class DesignerPrompt
         $hair = $covered ? 'hair and neck fully covered by a plain '.($colorName($colors[0] ?? 'black') ?? 'matching').' shayla' : 'long glossy dark brown hair in soft sleek waves';
         $person = $showFace
             ? 'framed from head to toe with her face visible: '.self::FACE.", a natural, calm and elegant expression, {$hair}"
-            : "framed from the chin down to the feet so the face is out of frame, warm olive-tan skin, {$hair}";
+            : "framed from the chin down to the feet so the face is out of frame, fair light skin, {$hair}";
         $framing = match ($render) {
             'on_model', 'editorial' => sprintf(self::FRAMING[$render], self::MODEL, $person),
             'sketch' => sprintf(self::FRAMING['sketch'], $covered ? ', head and hair covered by a simple shayla' : ''),
