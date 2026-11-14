@@ -170,8 +170,10 @@ class ReportBuilder
         $competitors = Competitor::query()->where('store_id', $store->id)->withCount(['products', 'posts'])->get();
         $newProducts = CompetitorProduct::query()->with('competitor:id,name')
             ->where('store_id', $store->id)->whereBetween('first_seen_at', [$from, $to->endOfDay()])->latest('first_seen_at')->get();
-        $reviews = CustomerReview::query()->where('store_id', $store->id)->whereNotNull('analyzed_at')
-            ->whereBetween('created_at', [$from, $to->endOfDay()])->get();
+        $reviews = CustomerReview::query()->shownFor($store)->whereNotNull('analyzed_at')
+            ->where(fn ($q) => $q->whereBetween('reviewed_at', [$from, $to->endOfDay()])
+                ->orWhere(fn ($q) => $q->whereNull('reviewed_at')->whereBetween('created_at', [$from, $to->endOfDay()])))
+            ->get();
         $positive = $reviews->count() ? round($reviews->where('sentiment', 'positive')->count() / $reviews->count() * 100) : null;
 
         $summary = [

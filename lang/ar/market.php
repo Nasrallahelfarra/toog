@@ -14,6 +14,8 @@ return [
     'scan_failed' => 'تعذّر الفحص: :message',
     'trends_refreshing' => 'جارٍ تحديث تحليل التوجهات…',
     'reviews_analyzing' => 'جارٍ تحليل آراء العملاء…',
+    'reviews_syncing' => 'جارٍ قراءة تقييمات عملائك من زد…',
+    'reviews_need_zid' => 'اربط متجرك بزد أولًا لقراءة تقييمات عملائك.',
     'event_saved' => 'تم حفظ المناسبة.',
     'event_deleted' => 'تم حذف المناسبة.',
     'notifications_read' => 'تم تحديد جميع التنبيهات كمقروءة.',

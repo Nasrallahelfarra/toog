@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('market', [MarketController::class, 'index'])->name('market');
 Route::post('market/trends/refresh', [MarketController::class, 'refreshTrends'])->name('market.refresh');
 Route::post('market/reviews/analyze', [MarketController::class, 'analyzeReviews'])->name('market.analyze');
+Route::post('market/reviews/sync', [MarketController::class, 'syncReviews'])->name('market.reviews.sync');
 
 Route::get('competitors', [CompetitorController::class, 'index'])->name('competitors.index');
 Route::post('competitors', [CompetitorController::class, 'store'])->name('competitors.store');

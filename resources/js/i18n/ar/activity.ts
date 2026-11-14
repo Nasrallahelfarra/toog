@@ -1,7 +1,8 @@
 // Translations for the "activity" module (store audit trail, FR-6.7).
 export const activity = {
     title: 'سجل النشاط',
-    description: 'كل الإجراءات الرئيسية في المتجر: رفع المنتجات، والقرارات، وتجاوز التوصيات، وتغيير الإعدادات.',
+    description:
+        'كل الإجراءات الرئيسية في المتجر: رفع المنتجات، والقرارات، وتجاوز التوصيات، وتغيير الإعدادات.',
     user: 'المستخدم',
     action: 'الإجراء',
     allUsers: 'كل المستخدمين',
@@ -55,6 +56,7 @@ export const activity = {
         'calendar.deleted': 'حذف مناسبة',
         'market.trends_refreshed': 'حدّث تحليل التوجهات',
         'market.reviews_analyzed': 'حلّل آراء العملاء',
+        'market.reviews_synced': 'حدّث تقييمات العملاء من زد',
         'batch.created': 'أنشأ تقييمًا جماعيًا',
         'data.features_extraction': 'استخلص سمات المنتجات',
         'data.reclassified': 'أعاد تصنيف أداء المنتجات',

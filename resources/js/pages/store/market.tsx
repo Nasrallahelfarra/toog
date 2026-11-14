@@ -1,6 +1,7 @@
 import { Link, router } from '@inertiajs/react';
 import {
     Activity,
+    BadgeCheck,
     Flame,
     MessageCircle,
     Radar,
@@ -8,8 +9,10 @@ import {
     ShieldCheck,
     Snowflake,
     Sparkles,
+    Star,
     Target,
     TrendingUp,
+    TriangleAlert,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -23,6 +26,7 @@ import {
     PulseList,
     RadarLink,
     SourcesBar,
+    useCount,
 } from '@/components/market/trends/board';
 import type { Board } from '@/components/market/trends/types';
 import { ChartLegend } from '@/components/mojo/chart';
@@ -44,13 +48,23 @@ type Review = {
     topics: string[];
     source: string;
     language: string | null;
+    product: string | null;
+    verified: boolean;
+    date: string | null;
 };
 
 type Props = {
     board: Board;
     reviews: {
+        source: 'zid' | 'sample' | 'none';
         total: number;
         pending: number;
+        average_rating: number | null;
+        sync: {
+            status: 'queued' | 'running' | 'completed' | 'failed';
+            at: string | null;
+            error: string | null;
+        } | null;
         sentiment: { positive: number; neutral: number; negative: number };
         topics: {
             positive: Record<string, number>;
@@ -332,8 +346,10 @@ const sentimentColor = {
 };
 
 function ReviewInsights({ reviews }: { reviews: Props['reviews'] }) {
-    const { t, tr, number } = useI18n();
-    const [busy, setBusy] = useState(false);
+    const { t, tr, number, relative } = useI18n();
+    const count = useCount();
+    const s = t.market.reviewSync;
+    const [busy, setBusy] = useState<'analyze' | 'sync' | null>(null);
     const analyzed =
         reviews.sentiment.positive +
         reviews.sentiment.neutral +
@@ -346,41 +362,126 @@ function ReviewInsights({ reviews }: { reviews: Props['reviews'] }) {
     const positiveShare = analyzed
         ? Math.round((reviews.sentiment.positive / analyzed) * 100)
         : 0;
+    const reading =
+        reviews.sync !== null &&
+        (reviews.sync.status === 'running' || reviews.sync.status === 'queued');
 
-    const analyze = () =>
+    const post = (url: string, kind: 'analyze' | 'sync') =>
         router.post(
-            '/store/market/reviews/analyze',
+            url,
             {},
             {
                 preserveScroll: true,
-                onStart: () => setBusy(true),
-                onFinish: () => setBusy(false),
+                onStart: () => setBusy(kind),
+                onFinish: () => setBusy(null),
             },
         );
 
     return (
         <SectionCard
-            title={t.market.reviews}
-            description={t.market.reviewsHint}
+            title={
+                <span className="flex flex-wrap items-center gap-2">
+                    {t.market.reviews}
+                    {reviews.source === 'sample' && (
+                        <span className="rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-medium text-warning">
+                            {s.sample}
+                        </span>
+                    )}
+                </span>
+            }
+            description={
+                <>
+                    {reviews.source === 'zid'
+                        ? t.market.reviewsZid
+                        : reviews.source === 'sample'
+                          ? s.sampleHint
+                          : t.market.reviewsHint}
+                    {reviews.sync && (
+                        <span
+                            className={cn(
+                                'mt-0.5 flex items-center gap-1',
+                                reviews.sync.error && 'text-warning',
+                            )}
+                        >
+                            {reviews.sync.error ? (
+                                <TriangleAlert className="size-3.5 shrink-0" />
+                            ) : (
+                                <RefreshCw
+                                    className={cn(
+                                        'size-3 shrink-0',
+                                        reading && 'animate-spin',
+                                    )}
+                                />
+                            )}
+                            {reviews.sync.error
+                                ? tr(s.failed, {
+                                      reason:
+                                          s.reasons[
+                                              reviews.sync
+                                                  .error as keyof typeof s.reasons
+                                          ] ?? s.reasons.import_failed,
+                                  })
+                                : reading
+                                  ? s.reading
+                                  : tr(s.readAt, {
+                                        time: relative(reviews.sync.at),
+                                    })}
+                        </span>
+                    )}
+                </>
+            }
             icon={MessageCircle}
             action={
-                <Button
-                    size="sm"
-                    variant={reviews.pending > 0 ? 'gold' : 'outline'}
-                    onClick={analyze}
-                    disabled={busy || reviews.pending === 0}
-                >
-                    <Sparkles
-                        className={cn('size-4', busy && 'animate-pulse')}
-                    />
-                    {t.market.analyze}
-                </Button>
+                <>
+                    {reviews.sync && (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                                post('/store/market/reviews/sync', 'sync')
+                            }
+                            disabled={busy !== null || reading}
+                        >
+                            <RefreshCw
+                                className={cn(
+                                    'size-4',
+                                    busy === 'sync' && 'animate-spin',
+                                )}
+                            />
+                            {s.update}
+                        </Button>
+                    )}
+                    <Button
+                        size="sm"
+                        variant={reviews.pending > 0 ? 'gold' : 'outline'}
+                        onClick={() =>
+                            post('/store/market/reviews/analyze', 'analyze')
+                        }
+                        disabled={busy !== null || reviews.pending === 0}
+                    >
+                        <Sparkles
+                            className={cn(
+                                'size-4',
+                                busy === 'analyze' && 'animate-pulse',
+                            )}
+                        />
+                        {t.market.analyze}
+                    </Button>
+                </>
             }
         >
             {reviews.total === 0 ? (
                 <EmptyState
                     icon={MessageCircle}
-                    title={t.market.noReviews}
+                    title={
+                        reviews.source === 'zid'
+                            ? reading
+                                ? s.reading
+                                : s.empty
+                            : reviews.source === 'none'
+                              ? s.connect
+                              : t.market.noReviews
+                    }
                     className="py-8"
                 />
             ) : (
@@ -422,6 +523,18 @@ function ReviewInsights({ reviews }: { reviews: Props['reviews'] }) {
                                 color: sentimentColor[d.key],
                             }))}
                         />
+                        {reviews.average_rating !== null && (
+                            <div className="flex flex-col items-center gap-0.5 text-xs text-muted-foreground">
+                                <span>{s.average}</span>
+                                <span className="flex items-center gap-1.5">
+                                    <span className="num text-base font-semibold text-foreground">
+                                        {number(reviews.average_rating, 1)}
+                                    </span>
+                                    <Stars rating={reviews.average_rating} />
+                                </span>
+                                <span>{count(reviews.total, s.count)}</span>
+                            </div>
+                        )}
                         <p
                             className={cn(
                                 'text-xs',
@@ -461,6 +574,21 @@ function ReviewInsights({ reviews }: { reviews: Props['reviews'] }) {
                                     key={review.id}
                                     className="rounded-xl bg-muted/40 px-3 py-2.5"
                                 >
+                                    <div className="mb-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                                        {review.rating !== null && (
+                                            <Stars rating={review.rating} />
+                                        )}
+                                        {review.product && (
+                                            <span className="min-w-0 truncate font-medium text-foreground/80">
+                                                {review.product}
+                                            </span>
+                                        )}
+                                        {review.date && (
+                                            <span className="ms-auto shrink-0">
+                                                {relative(review.date)}
+                                            </span>
+                                        )}
+                                    </div>
                                     <p
                                         className="text-sm leading-relaxed"
                                         dir="auto"
@@ -500,13 +628,17 @@ function ReviewInsights({ reviews }: { reviews: Props['reviews'] }) {
                                                 ] ?? topic}
                                             </span>
                                         ))}
-                                        <span className="ms-auto text-muted-foreground">
-                                            {t.market.sources[
-                                                review.source as
-                                                    | 'store'
-                                                    | 'competitor'
-                                            ] ?? review.source}
-                                        </span>
+                                        {review.verified && (
+                                            <span className="ms-auto inline-flex items-center gap-1 text-success">
+                                                <BadgeCheck className="size-3.5" />
+                                                {s.verified}
+                                            </span>
+                                        )}
+                                        {review.source === 'competitor' && (
+                                            <span className="ms-auto text-muted-foreground">
+                                                {t.market.sources.competitor}
+                                            </span>
+                                        )}
                                     </div>
                                 </li>
                             ))}
@@ -515,6 +647,28 @@ function ReviewInsights({ reviews }: { reviews: Props['reviews'] }) {
                 </div>
             )}
         </SectionCard>
+    );
+}
+
+/** Five stars, filled to the rounded rating. */
+function Stars({ rating }: { rating: number }) {
+    return (
+        <span
+            className="inline-flex shrink-0 items-center gap-px text-gold"
+            aria-label={`${rating} / 5`}
+        >
+            {[1, 2, 3, 4, 5].map((i) => (
+                <Star
+                    key={i}
+                    className={cn(
+                        'size-3',
+                        i <= Math.round(rating)
+                            ? 'fill-current'
+                            : 'text-muted-foreground/30',
+                    )}
+                />
+            ))}
+        </span>
     );
 }
 
