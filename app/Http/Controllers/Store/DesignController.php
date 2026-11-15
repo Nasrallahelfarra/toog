@@ -143,7 +143,7 @@ class DesignController extends Controller
             'garment' => FashionVocabulary::label('garments', $brief['garment'] ?? null, $locale),
             'garment_key' => $brief['garment'] ?? null,
             'occasion' => FashionVocabulary::label('occasions', $brief['occasion'] ?? null, $locale),
-            'fabric' => FashionVocabulary::label('fabrics', $brief['fabric'] ?? null, $locale),
+            'fabric' => trim((string) ($brief['fabric_custom'] ?? '')) ?: FashionVocabulary::label('fabrics', $brief['fabric'] ?? null, $locale),
             'fabric_image_url' => $c->fabric_image_path ? $disk->url($c->fabric_image_path) : null,
             'images' => $ready->take(4)->map(fn (array $concept) => [
                 'url' => $disk->url($concept['image_path']),

@@ -53,6 +53,8 @@ export function CollectionView({
     const brief = collection.brief;
     const fabric = brief.fabric ? vocabulary.fabrics[brief.fabric] : null;
     const fabricName = brief.fabric_custom ?? fabric?.[locale] ?? null;
+    // The picture showed no garment: retrying would read it the same way.
+    const notGarment = collection.error === 'reference_not_garment';
     const canCompare =
         Boolean(collection.reference_image_url) &&
         collection.concepts.some((x) => x.status === 'ready' && x.image_url);
@@ -174,15 +176,18 @@ export function CollectionView({
                         </div>
                     </div>
                     {!active && (
-                        <div className="flex shrink-0 gap-1.5">
+                        <div className="flex flex-wrap gap-1.5">
                             {canCompare && (
                                 <Button
                                     size="sm"
                                     variant="gold"
                                     onClick={() => setComparing(true)}
+                                    aria-label={c.compare}
                                 >
                                     <Columns2 className="size-3.5" />
-                                    {c.compare}
+                                    <span className="hidden sm:inline">
+                                        {c.compare}
+                                    </span>
                                 </Button>
                             )}
                             <Button
@@ -222,10 +227,12 @@ export function CollectionView({
 
             {active && <Progress collection={collection} />}
 
-            {brief.reference_missing && (
+            {(brief.reference_missing || brief.reference_unread) && (
                 <div className="mx-5 mt-5 flex items-center gap-2 rounded-xl bg-warning-soft px-4 py-2.5 text-xs text-warning sm:mx-6">
                     <AlertTriangle className="size-4 shrink-0" />
-                    {c.referenceMissing}
+                    {brief.reference_missing
+                        ? c.referenceMissing
+                        : c.referenceUnread}
                 </div>
             )}
 
@@ -234,22 +241,24 @@ export function CollectionView({
                     <div className="mx-5 mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger sm:mx-6">
                         <span className="flex items-center gap-2">
                             <AlertTriangle className="size-4 shrink-0" />
-                            {c.failed}
+                            {notGarment ? c.referenceNotGarment : c.failed}
                         </span>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                                router.post(
-                                    `/store/studio/collections/${collection.id}/retry`,
-                                    {},
-                                    { preserveScroll: true },
-                                )
-                            }
-                        >
-                            <RefreshCw className="size-3.5" />
-                            {c.retry}
-                        </Button>
+                        {!notGarment && (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                    router.post(
+                                        `/store/studio/collections/${collection.id}/retry`,
+                                        {},
+                                        { preserveScroll: true },
+                                    )
+                                }
+                            >
+                                <RefreshCw className="size-3.5" />
+                                {c.retry}
+                            </Button>
+                        )}
                     </div>
                 )}
 

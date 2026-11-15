@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Designer\CollectionDesigner;
 use App\Services\Designer\DesignerPrompt;
 use App\Services\Market\PublicWebClient;
+use App\Support\InlineImage;
 use GuzzleHttp\Psr7\Response as Psr7Response;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
@@ -122,7 +123,7 @@ class DesignLikeThisTest extends TestCase
             'concepts' => [
                 $concept([]),
                 // A variant that tries two changes keeps only the first allowed one.
-                $concept(['role' => 'match_variant', 'silhouette' => 'column', 'closure' => 'hidden_buttons', 'variant_of_en' => 'hidden buttons instead of the zip']),
+                $concept(['role' => 'match_variant', 'silhouette' => 'column', 'length' => 'ankle', 'sleeve' => 'straight', 'closure' => 'hidden_buttons', 'variant_of_en' => 'hidden buttons instead of the zip']),
             ]];
     }
 
@@ -173,10 +174,14 @@ class DesignLikeThisTest extends TestCase
         $this->assertStringNotContainsString('Sadeim', $first['name_en'].$first['name_ar']);
         $this->assertSame("C:{$this->piece->id}", $first['evidence'][0]['id']);
 
-        // The variant keeps the cut and changes one thing only.
+        // The variant keeps the cut and changes one thing only; the planner's
+        // own modesty fix is not that change, and is still listed for the prompt.
         $second = $collection->concepts[1];
         $this->assertSame('a_line', $second['silhouette']);
         $this->assertSame('hidden_buttons', $second['closure']);
+        $this->assertSame(['ankle', 'straight'], [$second['length'], $second['sleeve']]);
+        $this->assertCount(4, $second['modesty_changes']);
+        $this->assertStringContainsString('lengthen the hem to ankle length', end($this->images[1])['text']);
 
         // Each image call: Image 1 (the piece), Image 2 (the fabric), then the prompt.
         $parts = $this->images[0];
@@ -218,7 +223,60 @@ class DesignLikeThisTest extends TestCase
         app(CollectionDesigner::class)->run($collection);
 
         $this->assertSame('failed', $collection->fresh()->status);
+        $this->assertSame(CollectionDesigner::NOT_A_GARMENT, $collection->fresh()->error);
         $this->assertSame([], $this->images);
+    }
+
+    public function test_an_unread_piece_is_designed_as_inspiration_not_copied(): void
+    {
+        $this->piecePicture();
+        config(['mojo.ai.provider' => 'gemini', 'mojo.ai.gemini.api_key' => 'test-key', 'mojo.ai.gemini.text_model' => 'test-text', 'mojo.ai.gemini.image_model' => 'test-image']);
+        Http::swap(new Factory);
+        Http::fake(function ($request) {
+            if (str_contains($request->url(), 'test-image:')) {
+                $this->images[] = $request['contents'][0]['parts'];
+
+                return Http::response(['candidates' => [['content' => ['parts' => [['inlineData' => ['mimeType' => 'image/png', 'data' => base64_encode($this->png)]]]]]]]);
+            }
+
+            // The planner (and the fabric reading) fail.
+            return Http::response(['error' => ['message' => 'unavailable']], 400);
+        });
+        $collection = $this->collection(['notes' => DesignerPrompt::matchNote('ar')]);
+
+        app(CollectionDesigner::class)->run($collection);
+        $collection->refresh();
+
+        $this->assertSame('inspired', $collection->brief['inspiration']['match']);
+        $this->assertTrue($collection->brief['reference_unread']);
+        $this->assertNull($collection->brief['notes'], 'the copy note goes with the copy');
+        foreach ($this->images as $parts) {
+            $this->assertStringNotContainsString('Image 1', end($parts)['text']);
+        }
+    }
+
+    public function test_an_inspired_brief_drops_the_copy_note_and_odd_input_is_refused(): void
+    {
+        Queue::fake();
+        $owner = $this->store->owner;
+        $brief = ['garment' => 'dress_evening', 'fabric' => 'satin', 'occasion' => 'evening', 'creativity' => 3, 'count' => 2, 'render' => 'ghost',
+            'notes' => DesignerPrompt::matchNote('ar'),
+            'inspiration' => ['kind' => 'competitor', 'id' => (string) $this->piece->id, 'label' => 'x', 'match' => 'inspired']];
+
+        $this->actingAs($owner)->post('/store/studio/collections', $brief)->assertSessionHasNoErrors();
+        $this->assertNull(DesignCollection::query()->sole()->brief['notes']);
+
+        $this->post('/store/studio/designer/options', ['type' => 'fabric', 'label' => ['x' => 'تويد']])->assertSessionHasErrors('label');
+    }
+
+    public function test_a_picture_with_huge_dimensions_is_never_decoded(): void
+    {
+        // A tiny PNG whose header claims 30000 x 30000 pixels.
+        $png = $this->png;
+        $huge = substr($png, 0, 16).pack('N', 30000).pack('N', 30000).substr($png, 24);
+
+        $this->assertNull(InlineImage::jpeg($huge));
+        $this->assertNull(InlineImage::fromBytes($huge));
     }
 
     public function test_the_brief_keeps_the_copy_mode_and_the_store_fabric(): void

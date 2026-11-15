@@ -10,8 +10,11 @@ use Illuminate\Support\Facades\Storage;
  */
 class InlineImage
 {
-    /** Larger files are not read at all. */
-    public const MAX_BYTES = 8_000_000;
+    /** Larger files are not read at all (the upload limit, 8 MB). */
+    public const MAX_BYTES = 8 * 1024 * 1024;
+
+    /** Larger pictures are never decoded: a small file can claim huge dimensions. */
+    public const MAX_PIXELS = 40_000_000;
 
     /**
      * @return array{mime: string, data: string}|null
@@ -35,7 +38,7 @@ class InlineImage
             return null;
         }
         $info = @getimagesizefromstring($bytes);
-        if (! $info || ! in_array($info['mime'], ['image/jpeg', 'image/png', 'image/webp'], true)) {
+        if (! $info || ! in_array($info['mime'], ['image/jpeg', 'image/png', 'image/webp'], true) || $info[0] * $info[1] > self::MAX_PIXELS) {
             return null;
         }
 
@@ -53,7 +56,7 @@ class InlineImage
     public static function jpeg(string $bytes, int $maxSide = 1024): ?string
     {
         $info = @getimagesizefromstring($bytes);
-        if (! $info || ! in_array($info['mime'], ['image/jpeg', 'image/png', 'image/webp'], true)) {
+        if (! $info || ! in_array($info['mime'], ['image/jpeg', 'image/png', 'image/webp'], true) || $info[0] * $info[1] > self::MAX_PIXELS) {
             return null;
         }
 
@@ -62,6 +65,9 @@ class InlineImage
 
     private static function downscale(string $bytes, int $width, int $height, int $maxSide): ?string
     {
+        if ($width * $height > self::MAX_PIXELS) {
+            return null;
+        }
         if (! function_exists('imagecreatefromstring') || ! ($src = @imagecreatefromstring($bytes))) {
             return null;
         }

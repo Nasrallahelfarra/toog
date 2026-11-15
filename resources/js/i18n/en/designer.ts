@@ -284,6 +284,10 @@ export const designer: typeof ar = {
         compareTitle: 'The original and your designs',
         compareHint:
             'The original first, then each design at the same size, so you can check they match.',
+        referenceUnread:
+            'The original piece’s design couldn’t be read, so this collection is inspired by it rather than a close copy.',
+        referenceNotGarment:
+            'The picture doesn’t show a garment that can be designed. Pick another product or post on the competitor radar.',
         referenceMissing:
             'The original piece’s picture couldn’t be loaded, so it was designed from its description only.',
         copied: 'Like the original design',
@@ -302,7 +306,7 @@ export const designer: typeof ar = {
         original: 'Original',
         yours: 'Your design',
         changes: 'What changed from the original for modesty',
-        noChanges: 'Nothing: the design matches the original.',
+        noChanges: 'No modesty changes were needed.',
         specs: 'Specification',
         why: 'Why this design?',
         noEvidence:

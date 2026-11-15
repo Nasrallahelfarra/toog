@@ -44,7 +44,7 @@ class DesignerPrompt
         .'Where a reference key is not allowed at the brief\'s modesty level, use the nearest allowed key and change nothing else for modesty. '
         .'Never use the competitor\'s product or brand name. design_notes_en (at most 80 words) is what this concept keeps from Image 1 and its one change.';
 
-    private const MATCH = 'Create a NEW product photograph of the garment in Image 1 — not an edit of Image 1. Reproduce its design exactly: silhouette and volume, neckline and collar, '
+    private const MATCH = 'Create a NEW %s of the garment in Image 1 — not an edit of Image 1. Reproduce its design exactly: silhouette and volume, neckline and collar, '
         .'sleeve shape and cuff, length and hem shape, seam lines, panels, yokes, pleats, gathers, tiers and layers, closure, and the type, placement and density of every embellishment. '
         .'Image 1 is the source of truth for construction; the design sheet below describes it in words — where they differ, follow Image 1, except for the required changes, which always win.';
 
@@ -167,7 +167,11 @@ class DesignerPrompt
             };
 
             return implode("\n", array_filter([
-                self::MATCH,
+                sprintf(self::MATCH, match ($render) {
+                    'sketch' => 'fashion design illustration',
+                    'flat' => 'technical flat drawing',
+                    default => 'product photograph',
+                }),
                 $framing,
                 'Design sheet (describes Image 1): '.substr($garmentLine, strlen('The garment: ')).' '.$details.($construction !== '' ? ' Construction: '.$construction : ''),
                 $variant !== '' ? "This version differs from Image 1 in one way only: {$variant}." : null,
