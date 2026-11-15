@@ -22,11 +22,20 @@ import { Slider } from '@/components/ui/slider';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { useCount } from '@/hooks/use-count';
 import { useI18n } from '@/hooks/use-i18n';
 import { useVocabulary } from '@/hooks/use-vocabulary';
 import { cn } from '@/lib/utils';
+import {
+    FabricChips,
+    OPTION_LIMITS,
+    RemoveButton,
+    SectionComposer,
+    removeSection,
+} from './brief-options';
 import { GarmentIcon } from './garment-icons';
 import type {
+    CustomFabric,
     FashionVocabulary,
     GarmentKey,
     Inspiration,
@@ -73,10 +82,12 @@ export function BriefPanel({
     reusedFabricUrl,
     onClearReused,
     categories = [],
+    customFabrics = [],
 }: {
     form: InertiaFormProps<BriefForm>;
     vocabulary: FashionVocabulary;
     categories?: StoreCategory[];
+    customFabrics?: CustomFabric[];
     aiLive: boolean;
     pulse: number;
     onSubmit: () => void;
@@ -84,11 +95,32 @@ export function BriefPanel({
     onClearReused?: () => void;
 }) {
     const { t, tr, locale } = useI18n();
+    const count = useCount();
     const d = t.designer.brief;
     const name = (entry: { ar: string; en: string }) => entry[locale];
     const ready = Boolean(
         form.data.fabric || form.data.fabric_image || form.data.fabric_from,
     );
+    // A competitor piece is copied unless the merchant asks for inspiration only.
+    const copyable =
+        form.data.inspiration?.kind === 'competitor' ||
+        form.data.inspiration?.kind === 'social';
+    const copying =
+        copyable && (form.data.inspiration?.match ?? 'close') === 'close';
+    const builtIn = form.data.fabric
+        ? vocabulary.fabrics[form.data.fabric]
+        : null;
+    const custom = customFabrics.find((c) => c.key === form.data.fabric);
+    const fabricHint = builtIn
+        ? tr(d.selectedFabric, {
+              name: name(builtIn),
+              drape: locale === 'ar' ? builtIn.drape_ar : builtIn.drape_en,
+          })
+        : custom?.base && vocabulary.fabrics[custom.base]
+          ? tr(d.customFabric.baseHint, {
+                base: name(vocabulary.fabrics[custom.base]),
+            })
+          : d.fabricTypeHint;
     const minutes = Math.max(1, Math.round(form.data.count * 0.6 + 0.5));
     const modesty: Modesty =
         form.data.modesty ??
@@ -120,39 +152,82 @@ export function BriefPanel({
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: 'auto' }}
                             exit={{ opacity: 0, height: 0 }}
-                            className="flex items-center gap-3 overflow-hidden rounded-xl bg-gold-soft p-2.5"
+                            className="space-y-2.5 overflow-hidden rounded-xl bg-gold-soft p-2.5"
                         >
-                            {form.data.inspiration.image_url ? (
-                                <img
-                                    src={form.data.inspiration.image_url}
-                                    alt=""
-                                    className="size-10 shrink-0 rounded-lg object-cover"
-                                />
-                            ) : (
-                                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-gold/20 text-gold-foreground dark:text-gold">
-                                    <Sparkles className="size-4" />
-                                </span>
-                            )}
-                            <div className="min-w-0 flex-1 text-xs leading-relaxed">
-                                <span className="block text-[11px] text-muted-foreground">
-                                    {d.inspiredBy}
-                                </span>
-                                <span className="line-clamp-1 font-medium">
-                                    {form.data.inspiration.label}
-                                </span>
+                            <div className="flex items-center gap-3">
+                                {form.data.inspiration.image_url ? (
+                                    <img
+                                        src={form.data.inspiration.image_url}
+                                        alt=""
+                                        className="size-10 shrink-0 rounded-lg object-cover"
+                                    />
+                                ) : (
+                                    <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-gold/20 text-gold-foreground dark:text-gold">
+                                        <Sparkles className="size-4" />
+                                    </span>
+                                )}
+                                <div className="min-w-0 flex-1 text-xs leading-relaxed">
+                                    <span className="block text-[11px] text-muted-foreground">
+                                        {d.inspiredBy}
+                                    </span>
+                                    <span className="line-clamp-1 font-medium">
+                                        {form.data.inspiration.label}
+                                    </span>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-8"
+                                    onClick={() =>
+                                        form.setData('inspiration', null)
+                                    }
+                                    aria-label={d.clearInspiration}
+                                >
+                                    <X className="size-4" />
+                                </Button>
                             </div>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="size-8"
-                                onClick={() =>
-                                    form.setData('inspiration', null)
-                                }
-                                aria-label={d.clearInspiration}
-                            >
-                                <X className="size-4" />
-                            </Button>
+                            {copyable && (
+                                <div className="space-y-1.5">
+                                    <p className="text-[11px] font-medium text-muted-foreground">
+                                        {d.match.label}
+                                    </p>
+                                    <Segmented
+                                        options={['close', 'inspired']}
+                                        labels={{
+                                            close: d.match.close,
+                                            inspired: d.match.inspired,
+                                        }}
+                                        value={copying ? 'close' : 'inspired'}
+                                        onChange={(v) =>
+                                            form.setData((data) => ({
+                                                ...data,
+                                                inspiration: data.inspiration
+                                                    ? {
+                                                          ...data.inspiration,
+                                                          match: v as
+                                                              | 'close'
+                                                              | 'inspired',
+                                                      }
+                                                    : null,
+                                                // A copy comes in at most three versions.
+                                                count:
+                                                    v === 'close'
+                                                        ? Math.min(
+                                                              data.count,
+                                                              3,
+                                                          )
+                                                        : data.count,
+                                            }))
+                                        }
+                                    />
+                                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                                        {copying
+                                            ? d.match.closeHint
+                                            : d.match.inspiredHint}
+                                    </p>
+                                </div>
+                            )}
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -177,57 +252,12 @@ export function BriefPanel({
                     <InputError message={form.errors.fabric_image} />
                 </Field>
 
-                <Field
-                    label={d.fabricType}
-                    hint={d.fabricTypeHint}
-                    pulse={pulse}
-                >
-                    <div className="flex flex-wrap gap-1.5">
-                        {Object.entries(vocabulary.fabrics).map(
-                            ([key, fabric]) => {
-                                const active = form.data.fabric === key;
-
-                                return (
-                                    <button
-                                        key={key}
-                                        type="button"
-                                        title={
-                                            locale === 'ar'
-                                                ? fabric.drape_ar
-                                                : fabric.drape_en
-                                        }
-                                        aria-pressed={active}
-                                        onClick={() =>
-                                            form.setData(
-                                                'fabric',
-                                                active ? null : key,
-                                            )
-                                        }
-                                        className={cn(
-                                            'inline-flex cursor-pointer items-center gap-1 rounded-full border px-3 py-1.5 text-xs transition-all',
-                                            active
-                                                ? 'border-navy bg-navy text-white dark:text-background'
-                                                : 'text-foreground/80 hover:border-foreground/30',
-                                        )}
-                                    >
-                                        {name(fabric)}
-                                        {fabric.sheer && (
-                                            <span
-                                                className={cn(
-                                                    'text-[10px]',
-                                                    active
-                                                        ? 'opacity-70'
-                                                        : 'text-muted-foreground',
-                                                )}
-                                            >
-                                                · {d.sheer}
-                                            </span>
-                                        )}
-                                    </button>
-                                );
-                            },
-                        )}
-                    </div>
+                <Field label={d.fabricType} hint={fabricHint} pulse={pulse}>
+                    <FabricChips
+                        form={form}
+                        vocabulary={vocabulary}
+                        customFabrics={customFabrics}
+                    />
                     <InputError message={form.errors.fabric} />
                 </Field>
 
@@ -279,43 +309,47 @@ export function BriefPanel({
                     />
                 </Field>
 
-                <Field label={d.creativity}>
-                    <div className="space-y-3 pt-1">
-                        <Slider
-                            min={1}
-                            max={5}
-                            step={1}
-                            value={[form.data.creativity]}
-                            onValueChange={([v]) =>
-                                form.setData('creativity', v)
-                            }
-                            dir={locale === 'ar' ? 'rtl' : 'ltr'}
-                            aria-label={d.creativity}
-                        />
-                        <div className="flex justify-between text-[10px] text-muted-foreground">
-                            {d.creativityStops.map((stop, i) => (
-                                <span
-                                    key={stop}
-                                    className={cn(
-                                        'transition-colors',
-                                        form.data.creativity === i + 1 &&
-                                            'font-semibold text-foreground',
-                                    )}
-                                >
-                                    {stop}
-                                </span>
-                            ))}
+                {!copying && (
+                    <Field label={d.creativity}>
+                        <div className="space-y-3 pt-1">
+                            <Slider
+                                min={1}
+                                max={5}
+                                step={1}
+                                value={[form.data.creativity]}
+                                onValueChange={([v]) =>
+                                    form.setData('creativity', v)
+                                }
+                                dir={locale === 'ar' ? 'rtl' : 'ltr'}
+                                aria-label={d.creativity}
+                            />
+                            <div className="flex justify-between text-[10px] text-muted-foreground">
+                                {d.creativityStops.map((stop, i) => (
+                                    <span
+                                        key={stop}
+                                        className={cn(
+                                            'transition-colors',
+                                            form.data.creativity === i + 1 &&
+                                                'font-semibold text-foreground',
+                                        )}
+                                    >
+                                        {stop}
+                                    </span>
+                                ))}
+                            </div>
+                            <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs leading-relaxed">
+                                {d.creativityHints[form.data.creativity - 1]}
+                            </p>
                         </div>
-                        <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs leading-relaxed">
-                            {d.creativityHints[form.data.creativity - 1]}
-                        </p>
-                    </div>
-                </Field>
+                    </Field>
+                )}
 
                 <div className="grid gap-5 sm:grid-cols-[auto_1fr]">
                     <Field label={d.count}>
                         <Segmented
-                            options={['1', '2', '3', '4']}
+                            options={
+                                copying ? ['1', '2', '3'] : ['1', '2', '3', '4']
+                            }
                             value={String(form.data.count)}
                             onChange={(v) => form.setData('count', Number(v))}
                             ltr
@@ -385,7 +419,13 @@ export function BriefPanel({
                     </Button>
                     <p className="text-center text-[11px] text-muted-foreground">
                         {ready
-                            ? tr(d.estimate, { n: form.data.count, m: minutes })
+                            ? tr(d.estimateLine, {
+                                  designs: count(
+                                      form.data.count,
+                                      d.counts.designs,
+                                  ),
+                                  minutes: count(minutes, d.counts.minutes),
+                              })
                             : d.needFabric}
                     </p>
                 </div>
@@ -534,7 +574,7 @@ function FabricDrop({
                     size="icon"
                     className="size-8 self-start text-muted-foreground"
                     onClick={onClearReused}
-                    aria-label="remove"
+                    aria-label={t.designer.brief.removeFabricPhoto}
                 >
                     <Trash2 className="size-4" />
                 </Button>
@@ -585,7 +625,7 @@ function FabricDrop({
                     size="icon"
                     className="size-8 self-start text-muted-foreground"
                     onClick={() => onChange(null)}
-                    aria-label="remove"
+                    aria-label={t.designer.brief.removeFabricPhoto}
                 >
                     <Trash2 className="size-4" />
                 </Button>
@@ -697,6 +737,7 @@ function ColorPicker({
     value: string[];
     onChange: (colors: string[]) => void;
 }) {
+    const { t } = useI18n();
     const { options } = useVocabulary();
     const [open, setOpen] = useState(false);
     const toggle = (key: string) =>
@@ -726,7 +767,7 @@ function ColorPicker({
                                 style={{ backgroundColor: option?.hex }}
                             />
                             {option?.label ?? key}
-                            <X className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                            <X className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 pointer-coarse:opacity-100" />
                         </button>
                     );
                 })}
@@ -735,6 +776,8 @@ function ColorPicker({
                         type="button"
                         onClick={() => setOpen((v) => !v)}
                         aria-expanded={open}
+                        aria-label={t.designer.brief.addColor}
+                        title={t.designer.brief.addColor}
                         className="flex size-7 cursor-pointer items-center justify-center rounded-full border border-dashed text-muted-foreground hover:border-foreground/30 hover:text-foreground"
                     >
                         <Plus className="size-3.5" />
@@ -854,6 +897,7 @@ function Segmented({
 }) {
     return (
         <div
+            role="radiogroup"
             className="flex rounded-xl bg-muted p-1"
             dir={ltr ? 'ltr' : undefined}
         >
@@ -861,6 +905,8 @@ function Segmented({
                 <button
                     key={o}
                     type="button"
+                    role="radio"
+                    aria-checked={value === o}
                     onClick={() => onChange(o)}
                     className={cn(
                         'relative min-w-9 flex-1 cursor-pointer rounded-lg px-2 py-1.5 text-xs font-medium whitespace-nowrap transition-colors',
@@ -890,68 +936,167 @@ function GarmentPicker({
     categories: StoreCategory[];
 }) {
     const { t, tr, locale } = useI18n();
+    const count = useCount();
     const d = t.designer.brief;
+    const s = d.customSection;
     // Clothing sections only; the server leaves accessories and the like out.
     const mapped = categories.filter((c) => c.garment);
+    const customCount = mapped.filter((c) => c.source === 'custom').length;
     const [others, setOthers] = useState(
         mapped.length === 0 || form.data.category === null,
     );
+    const [composing, setComposing] = useState(false);
+    const [notice, setNotice] = useState<string | null>(null);
     const pick = (garment: GarmentKey, category: string | null) =>
         form.setData((data) => ({ ...data, garment, category }));
+    const otherSelected =
+        !others && form.data.category === null
+            ? vocabulary.garments[form.data.garment]?.[locale]
+            : null;
 
     return (
         <div className="space-y-3">
-            {mapped.length > 0 && (
-                <div className="space-y-1.5">
-                    <p className="text-[11px] text-muted-foreground">
-                        {d.storeSections}
+            <div className="space-y-1.5">
+                <p className="text-[11px] text-muted-foreground">
+                    {d.storeSections}
+                </p>
+                {mapped.length === 0 && !composing && (
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        {s.empty}
                     </p>
-                    <div className="grid grid-cols-2 gap-2">
-                        {mapped.map((c) => {
-                            const active = form.data.category === c.name;
-
-                            return (
-                                <button
-                                    key={c.name}
-                                    type="button"
-                                    aria-pressed={active}
-                                    onClick={() => pick(c.garment!, c.name)}
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                    {mapped.map((c) => {
+                        const active = form.data.category === c.name;
+                        const card = (
+                            <button
+                                key={c.name}
+                                type="button"
+                                aria-pressed={active}
+                                onClick={() => pick(c.garment!, c.name)}
+                                className={cn(
+                                    'flex w-full cursor-pointer items-center gap-2.5 rounded-xl border px-2.5 py-2 text-start transition-all',
+                                    active
+                                        ? 'border-gold bg-gold-soft/60 ring-2 ring-gold/25'
+                                        : 'hover:border-foreground/25',
+                                )}
+                            >
+                                <GarmentIcon
+                                    garment={c.garment!}
                                     className={cn(
-                                        'flex cursor-pointer items-center gap-2.5 rounded-xl border px-2.5 py-2 text-start transition-all',
+                                        'h-8 w-7 shrink-0',
                                         active
-                                            ? 'border-gold bg-gold-soft/60 ring-2 ring-gold/25'
-                                            : 'hover:border-foreground/25',
+                                            ? 'text-foreground'
+                                            : 'text-muted-foreground',
                                     )}
-                                >
-                                    <GarmentIcon
-                                        garment={c.garment!}
-                                        className={cn(
-                                            'h-8 w-7 shrink-0',
-                                            active
-                                                ? 'text-foreground'
-                                                : 'text-muted-foreground',
-                                        )}
-                                    />
-                                    <span className="min-w-0">
-                                        <span className="block truncate text-xs font-medium">
-                                            {c.name}
-                                        </span>
-                                        <span className="block truncate text-[10px] text-muted-foreground">
-                                            {tr(d.productsCount, {
-                                                n: c.products,
-                                            })}{' '}
-                                            ·{' '}
-                                            {
-                                                vocabulary.garments[c.garment!][
-                                                    locale
-                                                ]
-                                            }
-                                        </span>
+                                />
+                                <span className="min-w-0">
+                                    <span className="block truncate text-xs font-medium">
+                                        {c.name}
                                     </span>
-                                </button>
-                            );
-                        })}
-                    </div>
+                                    <span className="block truncate text-[10px] text-muted-foreground">
+                                        {c.source === 'custom' ? (
+                                            <span className="text-gold-foreground dark:text-gold">
+                                                {s.custom}
+                                            </span>
+                                        ) : (
+                                            count(c.products, d.counts.products)
+                                        )}{' '}
+                                        ·{' '}
+                                        {
+                                            vocabulary.garments[c.garment!][
+                                                locale
+                                            ]
+                                        }
+                                    </span>
+                                </span>
+                            </button>
+                        );
+
+                        return c.source === 'custom' ? (
+                            <div key={c.name} className="group relative">
+                                {card}
+                                <RemoveButton
+                                    label={tr(d.remove, { name: c.name })}
+                                    onClick={() =>
+                                        removeSection(c, {
+                                            wasSelected: active,
+                                            onRemoved: () => {
+                                                if (active) {
+                                                    form.setData(
+                                                        'category',
+                                                        null,
+                                                    );
+                                                    setOthers(true);
+                                                }
+                                            },
+                                            onRestored: () =>
+                                                pick(c.garment!, c.name),
+                                            labels: {
+                                                removed: tr(d.removed, {
+                                                    name: c.name,
+                                                }),
+                                                undo: d.undo,
+                                            },
+                                        })
+                                    }
+                                />
+                            </div>
+                        ) : (
+                            card
+                        );
+                    })}
+                    <AnimatePresence initial={false}>
+                        {composing ? (
+                            <SectionComposer
+                                key="composer"
+                                vocabulary={vocabulary}
+                                categories={categories}
+                                onAdded={(section) => {
+                                    pick(section.garment, section.name);
+                                    setComposing(false);
+                                    setNotice(null);
+                                }}
+                                onExisting={(section) => {
+                                    pick(section.garment!, section.name);
+                                    setComposing(false);
+                                    setNotice(
+                                        tr(s.exists, { name: section.name }),
+                                    );
+                                }}
+                                onCancel={() => setComposing(false)}
+                            />
+                        ) : (
+                            <button
+                                key="add"
+                                type="button"
+                                disabled={customCount >= OPTION_LIMITS.section}
+                                title={
+                                    customCount >= OPTION_LIMITS.section
+                                        ? s.limit
+                                        : s.add
+                                }
+                                onClick={() => {
+                                    setComposing(true);
+                                    setNotice(null);
+                                }}
+                                className="flex min-h-[52px] cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed text-[11px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <Plus className="size-3.5" />
+                                {s.add}
+                            </button>
+                        )}
+                    </AnimatePresence>
+                </div>
+                {notice && (
+                    <p
+                        aria-live="polite"
+                        className="text-[11px] text-muted-foreground"
+                    >
+                        {notice}
+                    </p>
+                )}
+                {mapped.length > 0 && (
                     <button
                         type="button"
                         onClick={() => setOthers((v) => !v)}
@@ -959,6 +1104,11 @@ function GarmentPicker({
                         className="flex cursor-pointer items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
                     >
                         {d.otherGarments}
+                        {otherSelected && (
+                            <span className="font-normal text-foreground/80">
+                                · {otherSelected}
+                            </span>
+                        )}
                         <ChevronDown
                             className={cn(
                                 'size-3.5 transition-transform',
@@ -966,8 +1116,8 @@ function GarmentPicker({
                             )}
                         />
                     </button>
-                </div>
-            )}
+                )}
+            </div>
             {others && (
                 <div className="grid grid-cols-4 gap-2">
                     {(Object.keys(vocabulary.garments) as GarmentKey[]).map(

@@ -41,13 +41,7 @@ class GeminiProvider implements AiProvider
 
     public function json(string $system, string $prompt, array $schema, array $images = []): AiResponse
     {
-        $parts = [];
-
-        foreach ($images as $image) {
-            $parts[] = ['inlineData' => ['mimeType' => $image['mime'], 'data' => $image['data']]];
-        }
-
-        $parts[] = ['text' => $prompt];
+        $parts = $this->parts($images, $prompt);
 
         $body = $this->generate($this->textModel(), [
             'systemInstruction' => ['parts' => [['text' => $system]]],
@@ -74,15 +68,9 @@ class GeminiProvider implements AiProvider
         return new AiResponse($data, $this->textModel(), $in, $out);
     }
 
-    public function image(string $prompt, ?array $source = null, string $aspectRatio = '1:1'): AiImageResponse
+    public function image(string $prompt, array $references = [], string $aspectRatio = '1:1'): AiImageResponse
     {
-        $parts = [];
-
-        if ($source) {
-            $parts[] = ['inlineData' => ['mimeType' => $source['mime'], 'data' => $source['data']]];
-        }
-
-        $parts[] = ['text' => $prompt];
+        $parts = $this->parts($references, $prompt);
 
         $body = $this->generate($this->imageModel(), [
             'contents' => [['role' => 'user', 'parts' => $parts]],
@@ -158,5 +146,27 @@ class GeminiProvider implements AiProvider
             (int) ($usage['promptTokenCount'] ?? 0),
             (int) ($usage['candidatesTokenCount'] ?? 0) + (int) ($usage['thoughtsTokenCount'] ?? 0),
         ];
+    }
+
+    /**
+     * Each image, introduced by its label when it has one, then the prompt.
+     *
+     * @param  list<array{mime: string, data: string, label?: string}>  $images
+     * @return list<array<string, mixed>>
+     */
+    private function parts(array $images, string $prompt): array
+    {
+        $parts = [];
+
+        foreach ($images as $image) {
+            if (filled($image['label'] ?? null)) {
+                $parts[] = ['text' => $image['label']];
+            }
+            $parts[] = ['inlineData' => ['mimeType' => $image['mime'], 'data' => $image['data']]];
+        }
+
+        $parts[] = ['text' => $prompt];
+
+        return $parts;
     }
 }

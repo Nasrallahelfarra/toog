@@ -34,4 +34,13 @@ return [
     'user_owns_stores' => 'هذا المستخدم يملك متاجر؛ أكّد حذفها معه أو انقل ملكيتها أولًا.',
     'weights_required' => 'يجب أن يكون مجموع الأوزان أكبر من صفر.',
     'collection_untitled' => 'مجموعة رقم :id',
+    'designer_option_label_required' => 'اكتب الاسم أولًا.',
+    'designer_option_label_short' => 'الاسم قصير جدًا؛ حرفان على الأقل.',
+    'designer_option_label_long' => 'الاسم طويل؛ 40 حرفًا على الأكثر.',
+    'designer_option_garment_required' => 'اختر نوع القطعة التي يصممها المصمم لهذا القسم.',
+    'designer_option_exists' => '«:name» موجود في القائمة.',
+    'designer_option_limit' => 'وصلت للحد الأقصى (:count)؛ احذف واحدًا لتضيف غيره.',
+    'designer_option_letters' => 'استخدم حروفًا عربية أو إنجليزية.',
+    'designer_fabric_unknown' => 'هذا القماش لم يعد في قائمتك؛ اختر قماشًا آخر.',
+    'designer_reference_not_garment' => 'الصورة لا تُظهر قطعة ملابس يمكن تصميمها؛ اختر منتجًا أو منشورًا آخر.',
 ];

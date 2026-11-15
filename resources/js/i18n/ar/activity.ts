@@ -57,6 +57,8 @@ export const activity = {
         'market.trends_refreshed': 'حدّث تحليل التوجهات',
         'market.reviews_analyzed': 'حلّل آراء العملاء',
         'market.reviews_synced': 'حدّث تقييمات العملاء من زد',
+        'designer.option_added': 'أضاف قماشًا أو قسمًا في المصمم',
+        'designer.option_removed': 'حذف قماشًا أو قسمًا من المصمم',
         'batch.created': 'أنشأ تقييمًا جماعيًا',
         'data.features_extraction': 'استخلص سمات المنتجات',
         'data.reclassified': 'أعاد تصنيف أداء المنتجات',

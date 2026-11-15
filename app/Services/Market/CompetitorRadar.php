@@ -7,6 +7,7 @@ use App\Models\CompetitorProduct;
 use App\Models\Product;
 use App\Models\SocialPost;
 use App\Models\Store;
+use App\Services\Designer\DesignerPrompt;
 use App\Support\FashionVocabulary;
 use App\Support\Vocabulary;
 use Carbon\CarbonImmutable;
@@ -168,9 +169,8 @@ class CompetitorRadar
                 'pattern' => $tags['pattern'],
                 'style' => $tags['style'],
                 'occasion' => $this->occasion($tags['occasion']),
-                'notes' => $this->say('مستوحى من منشور حقق تفاعلًا فوق معتاد صاحبه: خذ الفكرة وغيّر عنصرين على الأقل.',
-                    'Inspired by a post that beat its account\'s usual engagement: take the idea and change at least two elements.'),
-                'inspiration' => ['kind' => 'social', 'id' => $p->id, 'label' => $name, 'image_url' => self::image($p)],
+                'notes' => DesignerPrompt::matchNote($this->locale),
+                'inspiration' => ['kind' => 'social', 'id' => $p->id, 'label' => $name, 'image_url' => self::image($p), 'match' => 'close'],
             ],
         ];
     }

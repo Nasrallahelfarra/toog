@@ -7,10 +7,12 @@ use App\Jobs\GenerateDesignCollection;
 use App\Models\CompetitorProduct;
 use App\Models\DesignCollection;
 use App\Models\DesignerBriefing;
+use App\Models\DesignerOption;
 use App\Models\Product;
 use App\Models\SocialPost;
 use App\Models\Store;
 use App\Services\Designer\DesignerAdvisor;
+use App\Services\Designer\DesignerPrompt;
 use App\Services\Market\CompetitorRadar;
 use App\Services\Market\PostTagger;
 use App\Support\Activity;
@@ -19,8 +21,10 @@ use App\Support\FashionVocabulary;
 use App\Support\Vocabulary;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 /**
@@ -41,7 +45,8 @@ class DesignerController extends Controller
 
         $data = $request->validate([
             'garment' => ['required', Rule::in(array_keys(FashionVocabulary::garments()))],
-            'fabric' => ['nullable', 'required_without_all:fabric_image,fabric_from', Rule::in(array_keys(FashionVocabulary::fabrics()))],
+            // A built-in fabric, or one the store added ("custom:{id}").
+            'fabric' => ['nullable', 'required_without_all:fabric_image,fabric_from', 'string', 'max:40'],
             'fabric_image' => ['nullable', 'image', 'max:8192'],
             'fabric_from' => ['nullable', 'integer'],
             'colors' => ['nullable', 'array', 'max:4'],
@@ -61,12 +66,19 @@ class DesignerController extends Controller
             'inspiration.id' => ['required_with:inspiration', 'string', 'max:80'],
             'inspiration.label' => ['nullable', 'string', 'max:160'],
             'inspiration.image_url' => ['nullable', 'string', 'max:2048'],
+            // close: reproduce the piece; inspired: take the idea only.
+            'inspiration.match' => ['nullable', Rule::in(['close', 'inspired'])],
         ], [
             'fabric.required_without_all' => __('mojo.designer_fabric_required'),
         ]);
 
+        [$fabric, $fabricCustom] = $this->fabric($store, $data['fabric'] ?? null);
+
+        // A competitor piece is copied unless the merchant asks for inspiration only.
+        $copyable = isset($data['inspiration']) && in_array($data['inspiration']['kind'], ['competitor', 'social'], true);
         $inspiration = isset($data['inspiration']) ? [
-            ...$data['inspiration'],
+            ...Arr::except($data['inspiration'], ['match']),
+            'match' => $copyable ? ($data['inspiration']['match'] ?? 'close') : 'inspired',
             'evidence_id' => self::INSPIRATION[$data['inspiration']['kind']].':'.$data['inspiration']['id'],
         ] : null;
 
@@ -82,15 +94,19 @@ class DesignerController extends Controller
             'fabric_image_path' => $fabricPath,
             'brief' => [
                 'garment' => $data['garment'],
-                'fabric' => $data['fabric'] ?? null,
+                'fabric' => $fabric,
+                // The merchant's own fabric, by name; it behaves like `fabric` when that is set.
+                'fabric_custom' => $fabricCustom,
                 'colors' => array_values(array_unique($data['colors'] ?? [])),
                 'occasion' => $data['occasion'],
                 'age' => $data['age'] ?? 'adult',
                 'modesty' => $data['modesty'] ?? FashionVocabulary::defaultModesty($data['garment']),
                 'show_face' => $request->boolean('show_face'),
-                // Only one of the store's own sections (synced from Zid).
-                'category' => filled($data['category'] ?? null) && Product::query()->where('store_id', $store->id)->where('category', $data['category'])->exists()
-                    ? $data['category'] : null,
+                // Only one of the store's own sections (from Zid or added by hand).
+                'category' => filled($data['category'] ?? null) && (
+                    Product::query()->where('store_id', $store->id)->where('category', $data['category'])->exists()
+                    || DesignerOption::query()->where('store_id', $store->id)->where('type', DesignerOption::SECTION)->where('label', $data['category'])->exists()
+                ) ? $data['category'] : null,
                 'tier' => $data['tier'] ?? null,
                 'creativity' => (int) $data['creativity'],
                 'count' => (int) $data['count'],
@@ -102,7 +118,7 @@ class DesignerController extends Controller
 
         GenerateDesignCollection::dispatch($collection->id);
 
-        Activity::log('designer.collection_requested', $collection, ['garment' => $data['garment'], 'count' => (int) $data['count']]);
+        Activity::log('designer.collection_requested', $collection, ['garment' => $data['garment'], 'count' => (int) $data['count'], 'match' => $inspiration['match'] ?? null]);
         Inertia::flash('toast', ['type' => 'info', 'message' => __('mojo.designer_queued')]);
 
         return to_route('store.studio.index', ['mode' => 'designer', 'collection' => $collection->id]);
@@ -167,6 +183,28 @@ class DesignerController extends Controller
     }
 
     /**
+     * The brief's fabric: a built-in key, or a store fabric ("custom:{id}")
+     * kept by name with the built-in fabric it is a kind of.
+     *
+     * @return array{0: string|null, 1: string|null}
+     */
+    private function fabric(Store $store, ?string $key): array
+    {
+        if ($key === null || isset(FashionVocabulary::fabrics()[$key])) {
+            return [$key, null];
+        }
+
+        $option = preg_match('/^custom:(\d+)$/', $key, $m)
+            ? DesignerOption::query()->where('store_id', $store->id)->where('type', DesignerOption::FABRIC)->find((int) $m[1])
+            : null;
+        if (! $option) {
+            throw ValidationException::withMessages(['fabric' => __('mojo.designer_fabric_unknown')]);
+        }
+
+        return [DesignerOptionController::fabricBase($option->label), $option->label];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public static function present(DesignCollection $c): array
@@ -179,6 +217,8 @@ class DesignerController extends Controller
             'error' => $c->error,
             'brief' => $c->brief,
             'fabric_image_url' => $c->fabric_image_path ? $disk->url($c->fabric_image_path) : null,
+            // The piece a "design like this" collection reproduces, for side-by-side review.
+            'reference_image_url' => $c->reference_image_path ? $disk->url($c->reference_image_path) : null,
             'title_ar' => $c->title_ar,
             'title_en' => $c->title_en,
             'story_ar' => $c->story_ar,
@@ -210,8 +250,8 @@ class DesignerController extends Controller
         if (! preg_match('/^(post|product):(\d+)$/', $inspire, $m)) {
             return null;
         }
-        $notes = $ar ? 'مستوحى من منافس: خذ الفكرة وغيّر عنصرين على الأقل (القصّة، النقشة أو اللون) بروح متجرك.'
-            : 'Inspired by a competitor: take the idea and change at least two of cut, pattern or colour, in your own style.';
+        // "Design like this" reproduces the piece in the merchant's fabric.
+        $notes = DesignerPrompt::matchNote($ar ? 'ar' : 'en');
 
         if ($m[1] === 'post') {
             $post = SocialPost::query()->where('store_id', $store->id)->with('competitor:id,name')->find((int) $m[2]);
@@ -221,7 +261,7 @@ class DesignerController extends Controller
             $tags = app(PostTagger::class)->tag($post);
 
             return ['garment' => $tags['garment'], 'colors' => array_slice($tags['colors'], 0, 3), 'pattern' => $tags['pattern'], 'notes' => $notes,
-                'inspiration' => ['kind' => 'social', 'id' => $post->id, 'label' => $post->competitor?->name ?? '—', 'image_url' => CompetitorRadar::image($post)]];
+                'inspiration' => ['kind' => 'social', 'id' => $post->id, 'label' => $post->competitor?->name ?? '—', 'image_url' => CompetitorRadar::image($post), 'match' => 'close']];
         }
 
         $product = CompetitorProduct::query()->where('store_id', $store->id)->find((int) $m[2]);
@@ -233,7 +273,7 @@ class DesignerController extends Controller
         return ['garment' => FashionVocabulary::garmentFor($product->category, $product->name),
             'colors' => array_slice(array_values(array_filter((array) ($features['colors'] ?? []), 'is_string')), 0, 3),
             'pattern' => $features['pattern'] ?? null, 'notes' => $notes,
-            'inspiration' => ['kind' => 'competitor', 'id' => $product->id, 'label' => $product->name, 'image_url' => $product->image_url]];
+            'inspiration' => ['kind' => 'competitor', 'id' => $product->id, 'label' => $product->name, 'image_url' => $product->image_url, 'match' => 'close']];
     }
 
     /**

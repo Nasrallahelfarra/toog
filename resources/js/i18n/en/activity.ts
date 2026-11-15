@@ -58,6 +58,8 @@ export const activity: typeof ar = {
         'market.trends_refreshed': 'Refreshed the trend analysis',
         'market.reviews_analyzed': 'Analysed customer reviews',
         'market.reviews_synced': 'Updated customer reviews from Zid',
+        'designer.option_added': 'Added a fabric or section in the designer',
+        'designer.option_removed': 'Removed a fabric or section from the designer',
         'batch.created': 'Started a batch evaluation',
         'data.features_extraction': 'Extracted product attributes',
         'data.reclassified': 'Reclassified product performance',

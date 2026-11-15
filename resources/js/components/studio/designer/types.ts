@@ -9,6 +9,18 @@ export type StoreCategory = {
     name: string;
     products: number;
     garment: GarmentKey | null;
+    /** Synced from Zid, or added by the merchant in the studio. */
+    source: 'zid' | 'custom';
+    /** The custom section's id, to remove it. */
+    id: number | null;
+};
+
+/** A fabric the merchant added; `base` is the built-in fabric it is a kind of. */
+export type CustomFabric = {
+    id: number;
+    key: string;
+    label: string;
+    base: string | null;
 };
 
 export type GarmentKey =
@@ -25,7 +37,9 @@ export type RoleKey =
     | 'safe_bet'
     | 'trend_twist'
     | 'competitor_gap'
-    | 'signature';
+    | 'signature'
+    | 'match'
+    | 'match_variant';
 export type SourceKey =
     | 'own_sales'
     | 'competitors'
@@ -66,6 +80,8 @@ export type Inspiration = {
     id: string | number;
     label: string;
     image_url: string | null;
+    /** A competitor piece: copy it (close) or take the idea only (inspired). */
+    match?: 'close' | 'inspired';
 };
 
 /** What an insight hands to the brief when the merchant picks "design this". */
@@ -270,6 +286,12 @@ export type Concept = {
     evidence: Evidence[];
     category: string;
     season: string;
+    /** A copied piece: what modesty changed, key by key. */
+    modesty_changes?: {
+        field: 'neckline' | 'sleeve' | 'length' | 'silhouette';
+        from: string;
+        to: string;
+    }[];
     production: {
         meters_min: number;
         meters_max: number;
@@ -288,6 +310,10 @@ export type Concept = {
 export type Brief = {
     garment: GarmentKey;
     fabric: string | null;
+    /** The merchant's own fabric, by name (`fabric` is the built-in one it is a kind of). */
+    fabric_custom?: string | null;
+    /** A copied piece whose picture could not be loaded. */
+    reference_missing?: boolean;
     colors: string[];
     occasion: string;
     age: 'young' | 'adult' | 'mature';
@@ -317,6 +343,8 @@ export type Collection = {
     error: string | null;
     brief: Brief;
     fabric_image_url: string | null;
+    /** The piece a "design like this" collection reproduces. */
+    reference_image_url: string | null;
     title_ar: string | null;
     title_en: string | null;
     story_ar: string | null;
@@ -331,4 +359,5 @@ export type DesignerProps = {
     briefing: Briefing;
     brand_colors: string[];
     categories: StoreCategory[];
+    custom_fabrics: CustomFabric[];
 };

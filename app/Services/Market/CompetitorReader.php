@@ -7,8 +7,8 @@ use App\Models\SocialPost;
 use App\Models\Store;
 use App\Services\Ai\Ai;
 use App\Support\FashionVocabulary;
+use App\Support\InlineImage;
 use App\Support\Vocabulary;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * The AI reading of the radar: for the strongest posts, what product is
@@ -290,26 +290,6 @@ class CompetitorReader
      */
     private function image(?string $path): ?array
     {
-        $disk = Storage::disk('public');
-        if (! $path || ! $disk->exists($path) || $disk->size($path) > 8_000_000) {
-            return null;
-        }
-        $bytes = (string) $disk->get($path);
-        $info = @getimagesizefromstring($bytes);
-        if (! $info || ! in_array($info['mime'], ['image/jpeg', 'image/png', 'image/webp'], true)) {
-            return null;
-        }
-        if (max($info[0], $info[1]) > 1024 && function_exists('imagecreatefromstring') && ($src = @imagecreatefromstring($bytes))) {
-            $scale = 1024 / max($info[0], $info[1]);
-            $dst = imagescale($src, (int) round($info[0] * $scale), (int) round($info[1] * $scale));
-            if ($dst) {
-                ob_start();
-                imagejpeg($dst, null, 85);
-
-                return ['mime' => 'image/jpeg', 'data' => base64_encode((string) ob_get_clean())];
-            }
-        }
-
-        return ['mime' => $info['mime'], 'data' => base64_encode($bytes)];
+        return InlineImage::fromDisk($path, 1024);
     }
 }

@@ -1,0 +1,240 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Actions\Stores\CreateStore;
+use App\Models\Competitor;
+use App\Models\CompetitorProduct;
+use App\Models\DesignCollection;
+use App\Models\DesignerOption;
+use App\Models\Store;
+use App\Models\User;
+use App\Services\Designer\CollectionDesigner;
+use App\Services\Designer\DesignerPrompt;
+use App\Services\Market\PublicWebClient;
+use GuzzleHttp\Psr7\Response as Psr7Response;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Factory;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
+use Inertia\Testing\AssertableInertia as Assert;
+use RuntimeException;
+use Tests\TestCase;
+
+/**
+ * "Design like this": the competitor piece is reproduced in the merchant's
+ * fabric. The planner and the image model see the piece (Image 1) and the
+ * fabric (Image 2); modesty changes are the nearest allowed keys, listed.
+ */
+class DesignLikeThisTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private Store $store;
+
+    private CompetitorProduct $piece;
+
+    private string $png;
+
+    /** @var list<array<string, mixed>> */
+    private array $planner = [];
+
+    /** @var list<array<string, mixed>> */
+    private array $images = [];
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config(['inertia.ssr.enabled' => false, 'mojo.ai.provider' => 'fake']);
+        Storage::fake('public');
+        $this->store = app(CreateStore::class)->handle(User::factory()->create(), ['name' => 'Dar Lama']);
+        $rival = Competitor::query()->create(['store_id' => $this->store->id, 'name' => 'Sadeim', 'platform' => 'salla', 'url' => 'https://sadeim.example', 'is_active' => true]);
+        $this->piece = CompetitorProduct::query()->create(['store_id' => $this->store->id, 'competitor_id' => $rival->id, 'external_id' => '555',
+            'name' => 'فستان سهرة أوف شولدر', 'category' => 'فساتين سهرة', 'price' => 739, 'image_url' => 'https://cdn.sadeim.example/dress.jpg',
+            'url' => 'https://sadeim.example/p/555', 'features' => ['colors' => ['dusty_pink']], 'first_seen_at' => now()->subDays(5), 'last_seen_at' => now()]);
+
+        $image = imagecreatetruecolor(30, 40);
+        ob_start();
+        imagepng($image);
+        $this->png = (string) ob_get_clean();
+    }
+
+    private function live(array $plan): void
+    {
+        config(['mojo.ai.provider' => 'gemini', 'mojo.ai.gemini.api_key' => 'test-key', 'mojo.ai.gemini.text_model' => 'test-text', 'mojo.ai.gemini.image_model' => 'test-image']);
+        Http::swap(new Factory);
+        Http::fake(function ($request) use ($plan) {
+            $parts = $request['contents'][0]['parts'];
+            if (str_contains($request->url(), 'test-image:')) {
+                $this->images[] = $parts;
+
+                return Http::response(['candidates' => [['content' => ['parts' => [['inlineData' => ['mimeType' => 'image/png', 'data' => base64_encode($this->png)]]]]]]]);
+            }
+            $system = $request['systemInstruction']['parts'][0]['text'] ?? '';
+            if (str_contains($system, 'textile expert')) {
+                $read = ['colors' => ['ivory'], 'pattern' => 'solid', 'print_scale' => 'medium', 'sheen' => 'high', 'opacity' => 'opaque',
+                    'drape' => 'fluid', 'fabric_guess' => 'satin', 'confidence' => 0.9, 'motif_note_en' => ''];
+
+                return Http::response(['candidates' => [['content' => ['parts' => [['text' => json_encode($read)]]]]], 'usageMetadata' => ['promptTokenCount' => 1, 'candidatesTokenCount' => 1]]);
+            }
+            $this->planner[] = ['system' => $system, 'parts' => $parts, 'schema' => $request['generationConfig']['responseJsonSchema'] ?? []];
+
+            return Http::response(['candidates' => [['content' => ['parts' => [['text' => json_encode($plan)]]]]], 'usageMetadata' => ['promptTokenCount' => 1, 'candidatesTokenCount' => 1]]);
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $brief
+     */
+    private function collection(array $brief = []): DesignCollection
+    {
+        Storage::disk('public')->put('design-sources/fabric.png', $this->png);
+
+        return DesignCollection::query()->create(['store_id' => $this->store->id, 'user_id' => $this->store->owner_id, 'status' => 'pending',
+            'fabric_image_path' => 'design-sources/fabric.png', 'brief' => [
+                'garment' => 'dress_evening', 'fabric' => 'satin', 'colors' => ['dusty_pink'], 'occasion' => 'evening', 'creativity' => 3, 'count' => 2,
+                'render' => 'ghost', 'modesty' => 'strict', 'show_face' => false, 'notes' => null, 'tier' => null, 'age' => 'adult', 'category' => null,
+                'inspiration' => ['kind' => 'competitor', 'id' => $this->piece->id, 'label' => $this->piece->name, 'image_url' => 'http://127.0.0.1/never.jpg',
+                    'match' => 'close', 'evidence_id' => "C:{$this->piece->id}"],
+                ...$brief,
+            ]]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function plan(): array
+    {
+        $concept = fn (array $over) => [
+            'role' => 'match', 'name_ar' => 'فستان Sadeim الوردي', 'name_en' => 'Sadeim rose gown', 'pitch_ar' => '', 'pitch_en' => '',
+            'silhouette' => 'mermaid', 'neckline' => 'off_shoulder', 'sleeve' => 'sleeveless', 'length' => 'knee', 'closure' => 'back_zip',
+            'placement' => 'neckline', 'pattern' => 'solid', 'style' => 'luxury', 'rationale_ar' => '', 'rationale_en' => '', 'risk_ar' => '', 'risk_en' => '',
+            'finishing_ar' => '', 'finishing_en' => '', 'design_notes_en' => 'Draped off-shoulder band', 'variant_of_en' => '',
+            'colors' => ['ivory'], 'embellishments' => ['crystals'], 'evidence_ids' => [], ...$over,
+        ];
+
+        return ['title_ar' => 'مثل القطعة', 'title_en' => 'Like the piece', 'story_ar' => '', 'story_en' => '', 'fabric_en' => '',
+            'ref_garment' => 'dress_evening', 'ref_silhouette' => 'mermaid', 'ref_neckline' => 'off_shoulder', 'ref_sleeve' => 'sleeveless',
+            'ref_length' => 'knee', 'ref_closure' => 'back_zip', 'ref_placement' => 'neckline', 'ref_embellishments' => ['crystals'],
+            'ref_construction_en' => 'Fitted bodice with a draped off-shoulder band, flared hem from the knee.', 'ref_visible' => 'full', 'ref_is_garment' => true,
+            'concepts' => [
+                $concept([]),
+                // A variant that tries two changes keeps only the first allowed one.
+                $concept(['role' => 'match_variant', 'silhouette' => 'column', 'closure' => 'hidden_buttons', 'variant_of_en' => 'hidden buttons instead of the zip']),
+            ]];
+    }
+
+    private function piecePicture(): void
+    {
+        $this->mock(PublicWebClient::class, fn ($mock) => $mock->shouldReceive('get')->once()
+            ->withArgs(fn (string $url) => $url === 'https://cdn.sadeim.example/dress.jpg')
+            ->andReturn(new Response(new Psr7Response(200, ['Content-Type' => 'image/png'], $this->png))));
+    }
+
+    public function test_design_like_this_prefills_a_close_copy(): void
+    {
+        $this->actingAs($this->store->owner)->get("/store/studio?mode=designer&inspire=product:{$this->piece->id}")
+            ->assertInertia(fn (Assert $page) => $page->where('designerPrefill.inspiration.match', 'close')
+                ->where('designerPrefill.notes', fn (string $notes) => str_contains($notes, 'صمّم مثل هذه القطعة') && ! str_contains($notes, 'عنصرين')));
+    }
+
+    public function test_the_piece_is_read_and_drawn_from_two_labelled_images(): void
+    {
+        $this->piecePicture();
+        $this->live($this->plan());
+        $collection = $this->collection();
+
+        app(CollectionDesigner::class)->run($collection);
+        $collection->refresh();
+
+        // The piece is copied next to the collection; the browser's URL was never fetched.
+        $this->assertNotNull($collection->reference_image_path);
+        Storage::disk('public')->assertExists($collection->reference_image_path);
+        $this->assertSame('completed', $collection->status, (string) $collection->error);
+
+        // The planner saw the piece (Image 1) then the fabric (Image 2), in match mode.
+        $planner = $this->planner[0];
+        $this->assertStringContainsString('MATCH MODE', $planner['system']);
+        $this->assertSame(DesignerPrompt::LABEL_DESIGN, $planner['parts'][0]['text']);
+        $this->assertArrayHasKey('inlineData', $planner['parts'][1]);
+        $this->assertSame(DesignerPrompt::LABEL_FABRIC, $planner['parts'][2]['text']);
+        $this->assertArrayHasKey('inlineData', $planner['parts'][3]);
+        $this->assertArrayHasKey('ref_construction_en', $planner['schema']['properties']);
+        $this->assertStringNotContainsString('"enum"', json_encode($planner['schema']));
+
+        // Strict modesty: only the nearest covered keys, each recorded.
+        $first = $collection->concepts[0];
+        $this->assertSame(['a_line', 'boat', 'straight', 'ankle'], [$first['silhouette'], $first['neckline'], $first['sleeve'], $first['length']]);
+        $this->assertCount(4, $first['modesty_changes']);
+        $this->assertSame(['crystals'], $first['embellishments']);
+        // The competitor's name never ends up in the merchant's design.
+        $this->assertStringNotContainsString('Sadeim', $first['name_en'].$first['name_ar']);
+        $this->assertSame("C:{$this->piece->id}", $first['evidence'][0]['id']);
+
+        // The variant keeps the cut and changes one thing only.
+        $second = $collection->concepts[1];
+        $this->assertSame('a_line', $second['silhouette']);
+        $this->assertSame('hidden_buttons', $second['closure']);
+
+        // Each image call: Image 1 (the piece), Image 2 (the fabric), then the prompt.
+        $parts = $this->images[0];
+        $this->assertCount(2, array_filter($parts, fn (array $p) => isset($p['inlineData'])));
+        $this->assertSame(DesignerPrompt::LABEL_DESIGN, $parts[0]['text']);
+        $this->assertSame(DesignerPrompt::LABEL_FABRIC, $parts[2]['text']);
+        $prompt = end($parts)['text'];
+        $this->assertStringContainsString('NEW product photograph', $prompt);
+        $this->assertStringContainsString('Remove every logo', $prompt);
+        $this->assertStringContainsString('Required changes from Image 1', $prompt);
+        $this->assertStringContainsString('add straight sleeves', $prompt);
+        $this->assertStringContainsString('fabric of Image 2', $prompt);
+        $this->assertStringContainsString('hidden buttons instead of the zip', end($this->images[1])['text']);
+    }
+
+    public function test_a_piece_without_a_picture_falls_back_to_inspiration(): void
+    {
+        $this->mock(PublicWebClient::class, fn ($mock) => $mock->shouldReceive('get')->andThrow(new RuntimeException('blocked')));
+        $this->live($this->plan());
+        $collection = $this->collection();
+
+        app(CollectionDesigner::class)->run($collection);
+        $collection->refresh();
+
+        $this->assertSame('inspired', $collection->brief['inspiration']['match']);
+        $this->assertTrue($collection->brief['reference_missing']);
+        $this->assertNull($collection->reference_image_path);
+        $this->assertStringNotContainsString('MATCH MODE', $this->planner[0]['system']);
+        // Only the fabric, as before.
+        $this->assertCount(1, array_filter($this->images[0], fn (array $p) => isset($p['inlineData'])));
+    }
+
+    public function test_a_picture_that_shows_no_garment_fails_the_collection(): void
+    {
+        $this->piecePicture();
+        $this->live(['ref_is_garment' => false, ...array_diff_key($this->plan(), ['ref_is_garment' => true])]);
+        $collection = $this->collection();
+
+        app(CollectionDesigner::class)->run($collection);
+
+        $this->assertSame('failed', $collection->fresh()->status);
+        $this->assertSame([], $this->images);
+    }
+
+    public function test_the_brief_keeps_the_copy_mode_and_the_store_fabric(): void
+    {
+        Queue::fake();
+        $fabric = DesignerOption::query()->create(['store_id' => $this->store->id, 'type' => 'fabric', 'label' => 'شيفون مطرز بالترتر', 'normalized' => 'شيفون مطرز بالترتر']);
+        $brief = ['garment' => 'dress_evening', 'occasion' => 'evening', 'creativity' => 3, 'count' => 2, 'render' => 'ghost',
+            'inspiration' => ['kind' => 'competitor', 'id' => (string) $this->piece->id, 'label' => 'x', 'image_url' => 'http://127.0.0.1/x.jpg']];
+
+        $this->actingAs($this->store->owner)->post('/store/studio/collections', [...$brief, 'fabric' => "custom:{$fabric->id}"])->assertSessionHasNoErrors();
+        $this->post('/store/studio/collections', [...$brief, 'fabric' => 'custom:999999'])->assertSessionHasErrors('fabric');
+        $this->post('/store/studio/collections', [...$brief, 'fabric' => 'satin', 'inspiration' => [...$brief['inspiration'], 'match' => 'nonsense']])->assertSessionHasErrors('inspiration.match');
+
+        $saved = DesignCollection::query()->sole()->brief;
+        $this->assertSame('close', $saved['inspiration']['match']);
+        $this->assertSame('chiffon', $saved['fabric']);
+        $this->assertSame('شيفون مطرز بالترتر', $saved['fabric_custom']);
+    }
+}

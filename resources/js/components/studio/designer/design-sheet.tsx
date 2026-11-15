@@ -2,6 +2,7 @@ import { Link } from '@inertiajs/react';
 import {
     AlertTriangle,
     ClipboardCheck,
+    Columns2,
     Download,
     ExternalLink,
     Images,
@@ -81,7 +82,10 @@ export function DesignSheet({
                   React.ReactNode,
               ][])
             : []),
-        [s.fields.fabric, fabric ? fabric[locale] : '—'],
+        [
+            s.fields.fabric,
+            collection.brief.fabric_custom ?? (fabric ? fabric[locale] : '—'),
+        ],
         [s.lining, s.linings[concept.lining]],
         [s.fields.colors, <ColorChips key="c" colors={concept.colors} />],
         [s.fields.pattern, label('patterns', concept.pattern)],
@@ -104,7 +108,14 @@ export function DesignSheet({
             <DialogContent className="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-6xl">
                 <div className="grid max-h-[92vh] overflow-y-auto md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:overflow-hidden">
                     <div className="relative flex flex-col bg-muted/50 md:max-h-[92vh] md:overflow-y-auto">
-                        {concept.image_url ? (
+                        {collection.reference_image_url && concept.image_url ? (
+                            <SideBySide
+                                original={collection.reference_image_url}
+                                design={concept.image_url}
+                                name={field(concept, 'name')}
+                                square={concept.render === 'flat'}
+                            />
+                        ) : concept.image_url ? (
                             <img
                                 src={concept.image_url}
                                 alt={field(concept, 'name')}
@@ -185,6 +196,16 @@ export function DesignSheet({
                                     ))}
                                 </dl>
                             </Block>
+
+                            {collection.reference_image_url && (
+                                <Block title={s.changes} icon={Columns2}>
+                                    <ModestyChanges
+                                        concept={concept}
+                                        garment={garment}
+                                        vocabulary={vocabulary}
+                                    />
+                                </Block>
+                            )}
 
                             <Block title={s.why} icon={ScanSearch}>
                                 {field(concept, 'rationale') && (
@@ -424,5 +445,111 @@ function Fact({
                 </div>
             )}
         </div>
+    );
+}
+
+/** The original piece and the design made from it, at the same size. */
+function SideBySide({
+    original,
+    design,
+    name,
+    square,
+}: {
+    original: string;
+    design: string;
+    name: string;
+    square: boolean;
+}) {
+    const { t } = useI18n();
+    const s = t.designer.sheet;
+    const ratio = square ? 'aspect-square' : 'aspect-[3/4]';
+
+    return (
+        <div className="grid grid-cols-2 gap-1 bg-border/60">
+            {[
+                {
+                    src: original,
+                    label: s.original,
+                    alt: s.original,
+                    gold: true,
+                },
+                { src: design, label: s.yours, alt: name, gold: false },
+            ].map((image) => (
+                <figure key={image.label} className="relative bg-muted">
+                    <img
+                        src={image.src}
+                        alt={image.alt}
+                        className={cn('w-full object-cover object-top', ratio)}
+                    />
+                    <figcaption
+                        className={cn(
+                            'absolute start-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-sm',
+                            image.gold
+                                ? 'bg-gold text-gold-foreground'
+                                : 'bg-card/90 text-foreground backdrop-blur',
+                        )}
+                    >
+                        {image.label}
+                    </figcaption>
+                </figure>
+            ))}
+        </div>
+    );
+}
+
+/**
+ * What the modesty level changed on a copied design, key by key: the
+ * original crossed out, then what replaced it.
+ */
+export function ModestyChanges({
+    concept,
+    garment,
+    vocabulary,
+    compact = false,
+}: {
+    concept: Concept;
+    garment: Collection['brief']['garment'];
+    vocabulary: FashionVocabulary;
+    compact?: boolean;
+}) {
+    const { t, locale } = useI18n();
+    const s = t.designer.sheet;
+    const changes = concept.modesty_changes ?? [];
+    const label = (field: string, key: string) =>
+        field === 'silhouette'
+            ? (vocabulary.silhouettes[garment]?.[key]?.[locale] ?? key)
+            : (vocabulary.details[
+                  field as keyof FashionVocabulary['details']
+              ]?.[key]?.[locale] ?? key);
+
+    if (changes.length === 0) {
+        return (
+            <p
+                className={cn(
+                    'text-muted-foreground',
+                    compact ? 'text-[11px]' : 'text-sm',
+                )}
+            >
+                {s.noChanges}
+            </p>
+        );
+    }
+
+    return (
+        <ul className={cn('space-y-1', compact ? 'text-[11px]' : 'text-sm')}>
+            {changes.map((change) => (
+                <li key={change.field} className="flex flex-wrap gap-x-1.5">
+                    <span className="text-muted-foreground">
+                        {s.fields[change.field]}:
+                    </span>
+                    <span className="text-muted-foreground line-through decoration-danger/60">
+                        {label(change.field, change.from)}
+                    </span>
+                    <span className="font-medium">
+                        {label(change.field, change.to)}
+                    </span>
+                </li>
+            ))}
+        </ul>
     );
 }

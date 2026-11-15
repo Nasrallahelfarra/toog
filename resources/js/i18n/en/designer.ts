@@ -97,6 +97,80 @@ export const designer: typeof ar = {
         submitting: 'The designer is starting…',
         estimate: '{n} designs · about {m} minutes',
         needFabric: 'Add a fabric photo or choose its type to start',
+        match: {
+            label: 'How should we design from it?',
+            close: 'Like the design',
+            inspired: 'Inspired by it',
+            closeHint:
+                'The same cut, neckline, sleeves, length and embellishment placement in your fabric, with only the modesty changes your level needs.',
+            inspiredHint:
+                'We take the idea only and design different pieces in your store’s spirit.',
+        },
+        selectedFabric: '{name}: {drape}',
+        customFabric: {
+            add: 'Other fabric',
+            addAria: 'Add a fabric that isn’t listed',
+            placeholder: 'e.g. Sequin-embroidered chiffon',
+            save: 'Add',
+            cancel: 'Cancel',
+            saving: 'Saving…',
+            hint: 'Saved to your store and shown here every time.',
+            title: 'A fabric you added',
+            baseHint: 'Treated like {base} for drape and sheerness.',
+            added: 'Added “{name}” and selected it',
+            exists: '“{name}” is already listed; we selected it.',
+            short: 'Type the fabric name (at least 2 letters).',
+            long: 'Too long — 40 characters max.',
+            letters: 'Use Arabic or English letters.',
+            limit: 'You’ve reached 20 custom fabrics. Remove one to add another.',
+        },
+        customSection: {
+            add: 'Add a section',
+            title: 'New section',
+            name: 'Section name',
+            placeholder: 'e.g. Engagement dresses',
+            designAs: 'Design it as',
+            designAsHint:
+                'Pick the closest garment so the designer knows the right cuts.',
+            suggested: 'Suggested',
+            save: 'Add section',
+            custom: 'Custom',
+            studioOnly:
+                'This section lives in the studio only; it isn’t added to your Zid store.',
+            empty: 'No store sections yet. Add one to design for it directly.',
+            short: 'Type the section name (at least 2 letters).',
+            exists: '“{name}” is already one of your sections; we selected it.',
+            pickGarment:
+                'Choose what the designer should design for this section.',
+            limit: 'You’ve reached 12 custom sections. Remove one to add another.',
+        },
+        remove: 'Remove “{name}”',
+        removed: 'Removed “{name}”',
+        undo: 'Undo',
+        saveFailed: 'Couldn’t save. Check your connection and try again.',
+        removeFabricPhoto: 'Remove fabric photo',
+        addColor: 'Add a colour',
+        estimateLine: '{designs} · about {minutes}',
+        counts: {
+            designs: {
+                one: '1 design',
+                two: '2 designs',
+                few: '{n} designs',
+                many: '{n} designs',
+            },
+            minutes: {
+                one: '1 minute',
+                two: '2 minutes',
+                few: '{n} minutes',
+                many: '{n} minutes',
+            },
+            products: {
+                one: '1 product',
+                two: '2 products',
+                few: '{n} products',
+                many: '{n} products',
+            },
+        },
         demo: 'Demo mode: the collection is built from your store data and templates; images are illustrative.',
     },
 
@@ -204,6 +278,15 @@ export const designer: typeof ar = {
         fit: 'Fit {n}',
         sheet: 'Design sheet',
         fabric: 'Fabric',
+        original: 'Original design',
+        yourFabric: 'Your fabric',
+        compare: 'Compare with the original',
+        compareTitle: 'The original and your designs',
+        compareHint:
+            'The original first, then each design at the same size, so you can check they match.',
+        referenceMissing:
+            'The original piece’s picture couldn’t be loaded, so it was designed from its description only.',
+        copied: 'Like the original design',
         fabricPhoto: 'Fabric photo',
     },
 
@@ -216,6 +299,10 @@ export const designer: typeof ar = {
     },
 
     sheet: {
+        original: 'Original',
+        yours: 'Your design',
+        changes: 'What changed from the original for modesty',
+        noChanges: 'Nothing: the design matches the original.',
         specs: 'Specification',
         why: 'Why this design?',
         noEvidence:

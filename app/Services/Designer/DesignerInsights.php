@@ -349,8 +349,8 @@ class DesignerInsights
                 'posted_at' => $r[0]->posted_at?->toDateString(),
                 'prefill' => [
                     'colors' => array_slice(array_values(array_filter((array) ($r[0]->features['colors'] ?? []), 'is_string')), 0, 3),
-                    'inspiration' => ['kind' => 'social', 'id' => $r[0]->id, 'label' => $active[$r[0]->competitor_id] ?? '—', 'image_url' => self::publicUrl($r[0]->evidence['image_path'] ?? null) ?? $r[0]->thumbnail_url],
-                    'notes' => $this->say('منشور حقق تفاعلًا مرتفعًا لدى المنافس: استلهم الفكرة دون نسخ الشكل.', 'A high-engagement competitor post: borrow the idea, not the look.'),
+                    'inspiration' => ['kind' => 'social', 'id' => $r[0]->id, 'label' => $active[$r[0]->competitor_id] ?? '—', 'image_url' => self::publicUrl($r[0]->evidence['image_path'] ?? null) ?? $r[0]->thumbnail_url, 'match' => 'close'],
+                    'notes' => DesignerPrompt::matchNote($this->locale),
                 ],
             ])
             ->values()
@@ -725,9 +725,8 @@ class DesignerInsights
             'colors' => array_slice(array_values(array_filter((array) ($cp->features['colors'] ?? []), 'is_string')), 0, 3),
             'pattern' => $cp->features['pattern'] ?? null,
             'style' => $cp->features['style'] ?? null,
-            'notes' => $this->say('ردّ على منتج رائج لدى منافس: خذ الفكرة وغيّر عنصرين على الأقل (القصّة، النقشة أو اللون) بروح متجرك.',
-                'Answer a competitor hit: take the idea and change at least two of silhouette, pattern or colour, in your store\'s spirit.'),
-            'inspiration' => ['kind' => 'competitor', 'id' => $cp->id, 'label' => $cp->name, 'image_url' => $cp->image_url],
+            'notes' => DesignerPrompt::matchNote($this->locale),
+            'inspiration' => ['kind' => 'competitor', 'id' => $cp->id, 'label' => $cp->name, 'image_url' => $cp->image_url, 'match' => 'close'],
         ];
     }
 

@@ -2,9 +2,11 @@
 
 namespace App\Services\Designer;
 
+use App\Models\CompetitorProduct;
 use App\Models\Design;
 use App\Models\DesignCollection;
 use App\Models\Product;
+use App\Models\SocialPost;
 use App\Models\Store;
 use App\Models\User;
 use App\Notifications\PlatformNotification;
@@ -13,10 +15,13 @@ use App\Services\Ai\AiException;
 use App\Services\Evaluation\Candidate;
 use App\Services\Evaluation\EvaluationEngine;
 use App\Services\Evaluation\StoreContext;
+use App\Services\Market\CompetitorRadar;
 use App\Support\FashionVocabulary;
+use App\Support\InlineImage;
 use App\Support\Vocabulary;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -27,6 +32,12 @@ use Throwable;
  * the merchant's fabric as the reference, and a fit score from the
  * evaluation engine. Numbers in the evidence come from the database by
  * id; the model only chooses which facts a concept rests on.
+ *
+ * "Design like this" (a competitor piece with match = close) reproduces
+ * the piece instead: the planner sees its picture, records its
+ * construction, and every concept keeps it — the first as it is, the
+ * others with one change each; modesty changes are the nearest allowed
+ * keys, recorded one by one.
  */
 class CollectionDesigner
 {
@@ -35,7 +46,20 @@ class CollectionDesigner
         private readonly DesignerInsights $insights,
         private readonly DesignerPrompt $prompts,
         private readonly EvaluationEngine $engine,
+        private readonly ReferenceImage $references,
     ) {}
+
+    /**
+     * Whether a brief copies a competitor piece (rather than taking it as
+     * a loose inspiration).
+     *
+     * @param  array<string, mixed>  $brief
+     */
+    public static function matches(array $brief): bool
+    {
+        return ($brief['inspiration']['match'] ?? null) === 'close'
+            && in_array($brief['inspiration']['kind'] ?? null, ['competitor', 'social'], true);
+    }
 
     /**
      * Plan the collection (when not planned yet) and draw every concept
@@ -81,29 +105,52 @@ class CollectionDesigner
         $insights = $this->insights->build($store, 'en');
         $packet = $this->evidence($insights);
 
+        // "Design like this": the original piece is copied once, next to the
+        // collection; without it the brief honestly falls back to inspiration.
+        $match = self::matches($brief);
+        if ($match && ! $this->hasReference($collection)) {
+            $found = $this->references->resolve($store, $brief['inspiration']);
+            if ($found) {
+                $collection->update(['reference_image_path' => $found['path']]);
+                $brief['inspiration']['brand'] = $found['brand'];
+            } else {
+                $brief['inspiration']['match'] = 'inspired';
+                $brief['reference_missing'] = true;
+                $match = false;
+            }
+        }
+        if ($match) {
+            $packet = [...$this->inspirationEvidence($store, $brief['inspiration']), ...$packet];
+        }
+
         if ($collection->fabric_image_path) {
             $brief['fabric_read'] = $this->readFabric($collection, $store);
-            if (empty($brief['colors']) && ! empty($brief['fabric_read']['colors'])) {
+            // A copied design takes its colours from the merchant's fabric.
+            if (($match || empty($brief['colors'])) && ! empty($brief['fabric_read']['colors'])) {
                 $brief['colors'] = $brief['fabric_read']['colors'];
             }
         }
         $brief['colors'] = array_values(array_slice($brief['colors'] ?? [], 0, 4)) ?: $this->dnaColors($insights);
 
-        $roles = FashionVocabulary::roleMix((int) $brief['creativity'], (int) $brief['count'], $insights['competitor_hits'] !== []);
+        $roles = $match
+            ? FashionVocabulary::matchRoles((int) $brief['count'])
+            : FashionVocabulary::roleMix((int) $brief['creativity'], (int) $brief['count'], $insights['competitor_hits'] !== []);
         $garment = $brief['garment'];
         $brief['modesty'] ??= FashionVocabulary::defaultModesty($garment);
         $allowed = $this->allowed($garment, $brief['modesty']);
+
+        $roleRules = $match ? DesignerPrompt::PLANNER_MATCH.' ' : 'Design a small, sellable collection for the brief, one concept per role, in the given order. '
+            .'safe_bet keeps the DNA of the store\'s own best sellers in the new fabric with at most one change; '
+            .'trend_twist adds one rising-trend element to a proven base; competitor_gap offers a combination that works for competitors but the store lacks, '
+            .'borrowing attribute combinations and never one competitor product\'s look (change at least two of silhouette, pattern and colour); '
+            .'signature is the store\'s own bold or heritage-inspired piece. '
+            .'The merchant\'s fabric is the main fabric of every concept, so make concepts differ in cut and details, not in fabric. ';
 
         $result = $this->ai->json(
             operation: 'designer_collection',
             store: $store,
             system: 'You are the head designer of a Saudi modest-womenswear label, designing for this online store. '
-                .'Design a small, sellable collection for the brief, one concept per role, in the given order. '
-                .'safe_bet keeps the DNA of the store\'s own best sellers in the new fabric with at most one change; '
-                .'trend_twist adds one rising-trend element to a proven base; competitor_gap offers a combination that works for competitors but the store lacks, '
-                .'borrowing attribute combinations and never one competitor product\'s look (change at least two of silhouette, pattern and colour); '
-                .'signature is the store\'s own bold or heritage-inspired piece. '
-                .'The merchant\'s fabric is the main fabric of every concept, so make concepts differ in cut and details, not in fabric. '
+                .$roleRules
                 .'Every concept must be buildable by a Saudi workshop and follow the brief\'s modesty level: strict is fully covered and loose; '
                 .'standard allows a softly fitted waist and midi lengths; open is contemporary fashion where bare shoulders or arms, one-shoulder or '
                 .'off-the-shoulder necklines, corset bodices and midi or knee lengths are welcome — always tasteful and elegant. '
@@ -112,15 +159,18 @@ class CollectionDesigner
                 .'Any claim about sales, competitors or trends must cite evidence ids from the packet in evidence_ids; never invent numbers, sales or revenue. '
                 .'A competitor best-seller label is the merchant\'s own claim, and engagement is not sales. '
                 .'Write names, pitches, rationale and risks in natural Arabic (Modern Standard, Saudi-friendly) and in English. '
-                .'design_notes_en is an English note of at most 40 words for the illustrator.',
+                .($match ? '' : 'design_notes_en is an English note of at most 40 words for the illustrator. ')
+                .'When brief.fabric.custom_name is set, fabric_en is its English name; otherwise leave fabric_en empty.',
             prompt: json_encode([
                 'brief' => $this->briefForModel($brief),
                 'roles' => $roles,
                 'allowed' => $allowed,
+                ...($match ? ['reference_keys' => $this->referenceKeys()] : []),
                 'evidence' => array_values(array_map(fn ($e) => Arr::except($e, ['claim_ar', 'claim_en', 'href', 'image_url', 'ref']), $packet)),
             ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR),
-            schema: $this->schema(count($roles)),
+            schema: $this->schema(count($roles), $match),
             fallback: fn () => $this->fallback($brief, $roles, $insights),
+            images: $match ? $this->plannerImages($collection) : [],
             userId: $collection->user_id,
             timeoutSeconds: 120,
         );
@@ -132,11 +182,31 @@ class CollectionDesigner
             $raw = $data['concepts'];
         }
 
+        $reference = null;
+        if ($match) {
+            if (($data['ref_is_garment'] ?? true) === false) {
+                throw new RuntimeException(__('mojo.designer_reference_not_garment'));
+            }
+            // The picture decides what the piece is.
+            $seen = $data['ref_garment'] ?? null;
+            if (is_string($seen) && isset(FashionVocabulary::garments()[$seen]) && $seen !== $garment) {
+                $brief['garment'] = $garment = $seen;
+                $allowed = $this->allowed($garment, $brief['modesty']);
+            }
+            $brief['reference'] = $reference = $this->reference($data, $garment);
+        }
+        if (filled($brief['fabric_custom'] ?? null) && is_string($data['fabric_en'] ?? null) && trim($data['fabric_en']) !== '') {
+            $brief['fabric_custom_en'] = mb_substr(trim($data['fabric_en']), 0, 80);
+        }
+
         $concepts = [];
         foreach ($roles as $i => $role) {
-            $concepts[] = $this->clean($raw[$i] ?? $this->fallback($brief, [$role], $insights)['concepts'][0], $role, $i, $brief, $packet, $allowed, $store);
+            $concepts[] = $this->clean($raw[$i] ?? $this->fallback($brief, [$role], $insights)['concepts'][0], $role, $i, $brief, $packet, $allowed, $store, $reference);
         }
-        $concepts = $this->diversify($concepts, $garment, $allowed);
+        // Copies of one piece keep its cut; other collections differ in cut.
+        if (! $match) {
+            $concepts = $this->diversify($concepts, $garment, $allowed);
+        }
 
         $collection->update([
             'brief' => $brief,
@@ -168,11 +238,17 @@ class CollectionDesigner
             $this->updateConcept($collection, $i, ['status' => 'drawing', 'error' => null]);
             $render = $this->prompts->render($brief['render'] ?? 'ghost', $concept, $brief['modesty'] ?? 'strict');
             $useFabric = $collection->fabric_image_path && $render !== 'flat' && Storage::disk('public')->exists($collection->fabric_image_path);
-            $prompt = $this->prompts->build($brief, $concept, (bool) $useFabric);
+            $copy = self::matches($brief) && $this->hasReference($collection);
+            $prompt = $this->prompts->build($brief, $concept, (bool) $useFabric, $copy);
+            // Copying a piece: Image 1 is the piece, Image 2 the merchant's fabric.
+            $references = $copy ? [
+                ['path' => (string) $collection->reference_image_path, 'label' => DesignerPrompt::LABEL_DESIGN],
+                ...($useFabric ? [['path' => (string) $collection->fabric_image_path, 'label' => DesignerPrompt::LABEL_FABRIC]] : []),
+            ] : [];
 
             try {
-                $image = $this->ai->image('designer_render', $store, $prompt, $useFabric ? $collection->fabric_image_path : null,
-                    FashionVocabulary::renders()[$render]['ratio'], $collection->user_id);
+                $image = $this->ai->image('designer_render', $store, $prompt, ! $copy && $useFabric ? $collection->fabric_image_path : null,
+                    FashionVocabulary::renders()[$render]['ratio'], $collection->user_id, $references);
             } catch (AiException $e) {
                 $this->updateConcept($collection, $i, ['status' => 'failed', 'error' => $e->getMessage()]);
 
@@ -350,7 +426,7 @@ class CollectionDesigner
      * @param  array<string, list<string>>  $allowed
      * @return array<string, mixed>
      */
-    private function clean(array $raw, string $role, int $index, array $brief, array $packet, array $allowed, Store $store): array
+    private function clean(array $raw, string $role, int $index, array $brief, array $packet, array $allowed, Store $store, ?array $reference = null): array
     {
         $garment = $brief['garment'];
         $pick = fn ($value, string $field, string $default) => is_string($value) && in_array($value, $allowed[$field], true) ? $value : $default;
@@ -364,7 +440,8 @@ class CollectionDesigner
 
         $ids = array_values(array_unique(array_filter((array) ($raw['evidence_ids'] ?? []), fn ($id) => is_string($id) && isset($packet[$id]))));
         if ($brief['inspiration']['evidence_id'] ?? null) {
-            $ids = array_values(array_unique([...($index === 0 ? [$brief['inspiration']['evidence_id']] : []), ...$ids]));
+            // Every copy of a piece rests on it; otherwise the first concept does.
+            $ids = array_values(array_unique([...($index === 0 || $reference !== null ? [$brief['inspiration']['evidence_id']] : []), ...$ids]));
             $ids = array_values(array_filter($ids, fn ($id) => isset($packet[$id])));
         }
         $evidence = array_map(fn (string $id) => Arr::only($packet[$id], ['id', 'kind', 'claim_ar', 'claim_en', 'href', 'image_url', 'caveat']), array_slice($ids, 0, 4));
@@ -404,18 +481,34 @@ class CollectionDesigner
             'error' => null,
         ];
 
-        // Anything the modesty level leaves out falls back to a covered choice.
-        $forbidden = FashionVocabulary::forbidden($brief['modesty'] ?? 'strict');
-        $safe = ['neckline' => 'round', 'sleeve' => 'straight', 'length' => $garment === 'coord_set' ? 'ankle' : 'floor',
-            'silhouette' => collect($allowed['silhouette'])->first() ?? $concept['silhouette']];
-        foreach ($safe as $field => $fallback) {
-            if (in_array($concept[$field], $forbidden[$field] ?? [], true)) {
-                $concept[$field] = $fallback;
+        if ($reference !== null) {
+            $concept = $this->followReference($concept, $raw, $reference, $index, $garment);
+            // Only the nearest allowed key, recorded so the prompt can name each change.
+            $concept['modesty_changes'] = [];
+            foreach (['neckline', 'sleeve', 'length', 'silhouette'] as $field) {
+                $to = FashionVocabulary::nearestAllowed($field, $concept[$field], $brief['modesty'] ?? 'strict', $allowed[$field]);
+                if ($to !== $concept[$field]) {
+                    $concept['modesty_changes'][] = ['field' => $field, 'from' => $concept[$field], 'to' => $to];
+                    $concept[$field] = $to;
+                }
             }
-        }
-        // Tunic length belongs to co-ord sets.
-        if ($concept['length'] === 'tunic' && $garment !== 'coord_set' && ($brief['modesty'] ?? 'strict') === 'strict') {
-            $concept['length'] = 'floor';
+            $concept['variant_of_en'] = $index === 0 ? '' : mb_substr($this->text($raw['variant_of_en'] ?? null), 0, 200);
+            $concept['design_notes_en'] = mb_substr($this->text($raw['design_notes_en'] ?? null), 0, 600);
+            $concept = $this->withoutBrand($concept, $brief['inspiration']['brand'] ?? null);
+        } else {
+            // Anything the modesty level leaves out falls back to a covered choice.
+            $forbidden = FashionVocabulary::forbidden($brief['modesty'] ?? 'strict');
+            $safe = ['neckline' => 'round', 'sleeve' => 'straight', 'length' => $garment === 'coord_set' ? 'ankle' : 'floor',
+                'silhouette' => collect($allowed['silhouette'])->first() ?? $concept['silhouette']];
+            foreach ($safe as $field => $fallback) {
+                if (in_array($concept[$field], $forbidden[$field] ?? [], true)) {
+                    $concept[$field] = $fallback;
+                }
+            }
+            // Tunic length belongs to co-ord sets.
+            if ($concept['length'] === 'tunic' && $garment !== 'coord_set' && ($brief['modesty'] ?? 'strict') === 'strict') {
+                $concept['length'] = 'floor';
+            }
         }
 
         return [
@@ -465,6 +558,7 @@ class CollectionDesigner
         $kinds = array_column($evidence, 'kind');
 
         return match (true) {
+            in_array($role, ['match', 'match_variant'], true) => 'competitors',
             $kinds === [] => 'creative',
             $role === 'competitor_gap' && array_intersect($kinds, ['gap', 'competitor_hit', 'social_post']) !== [] => 'competitors',
             array_intersect($kinds, ['my_bestseller', 'my_rising', 'dna']) !== [] && $role === 'safe_bet' => 'own_sales',
@@ -542,17 +636,24 @@ class CollectionDesigner
      *
      * @return array<string, mixed>
      */
-    public function schema(int $count): array
+    public function schema(int $count, bool $match = false): array
     {
         $string = ['type' => 'string'];
         $strings = ['type' => 'array', 'items' => ['type' => 'string']];
         $fields = ['role', 'name_ar', 'name_en', 'pitch_ar', 'pitch_en', 'silhouette', 'neckline', 'sleeve', 'length', 'closure',
-            'placement', 'pattern', 'style', 'rationale_ar', 'rationale_en', 'risk_ar', 'risk_en', 'finishing_ar', 'finishing_en', 'design_notes_en'];
+            'placement', 'pattern', 'style', 'rationale_ar', 'rationale_en', 'risk_ar', 'risk_en', 'finishing_ar', 'finishing_en', 'design_notes_en',
+            ...($match ? ['variant_of_en'] : [])];
+        // What the picture shows, flat at the top level (Gemini's schema limits).
+        $reference = $match ? [
+            ...array_fill_keys(['ref_garment', 'ref_silhouette', 'ref_neckline', 'ref_sleeve', 'ref_length', 'ref_closure', 'ref_placement', 'ref_construction_en', 'ref_visible'], $string),
+            'ref_embellishments' => $strings, 'ref_is_garment' => ['type' => 'boolean'],
+        ] : [];
 
         return [
             'type' => 'object',
             'properties' => [
-                'title_ar' => $string, 'title_en' => $string, 'story_ar' => $string, 'story_en' => $string,
+                'title_ar' => $string, 'title_en' => $string, 'story_ar' => $string, 'story_en' => $string, 'fabric_en' => $string,
+                ...$reference,
                 'concepts' => ['type' => 'array', 'maxItems' => $count, 'items' => [
                     'type' => 'object',
                     'properties' => [
@@ -562,8 +663,164 @@ class CollectionDesigner
                     'required' => [...$fields, 'colors', 'embellishments', 'evidence_ids'],
                 ]],
             ],
-            'required' => ['title_ar', 'title_en', 'story_ar', 'story_en', 'concepts'],
+            'required' => ['title_ar', 'title_en', 'story_ar', 'story_en', 'concepts', ...array_keys($reference)],
         ];
+    }
+
+    /**
+     * The construction keys the planner may use to describe the piece as it
+     * is, before any modesty change: every garment and its silhouettes.
+     *
+     * @return array<string, mixed>
+     */
+    private function referenceKeys(): array
+    {
+        $details = FashionVocabulary::details();
+
+        return [
+            'garments' => array_keys(FashionVocabulary::garments()),
+            'silhouettes_by_garment' => array_map('array_keys', FashionVocabulary::silhouettes()),
+            ...array_map('array_keys', Arr::only($details, ['neckline', 'sleeve', 'length', 'closure', 'placement', 'embellishment'])),
+        ];
+    }
+
+    /**
+     * Image 1 (the piece) and Image 2 (the fabric, when there is one) for
+     * the planner, labelled so the instructions can name them.
+     *
+     * @return list<array{mime: string, data: string, label: string}>
+     */
+    private function plannerImages(DesignCollection $collection): array
+    {
+        $images = [];
+        if ($design = InlineImage::fromDisk($collection->reference_image_path, 1024)) {
+            $images[] = [...$design, 'label' => DesignerPrompt::LABEL_DESIGN];
+        }
+        if ($images !== [] && $collection->fabric_image_path && ($fabric = InlineImage::fromDisk($collection->fabric_image_path, 1024))) {
+            $images[] = [...$fabric, 'label' => DesignerPrompt::LABEL_FABRIC];
+        }
+
+        return $images;
+    }
+
+    private function hasReference(DesignCollection $collection): bool
+    {
+        return filled($collection->reference_image_path) && Storage::disk('public')->exists((string) $collection->reference_image_path);
+    }
+
+    /**
+     * The piece as the planner read it, every key checked against the full
+     * vocabulary (modesty is applied per concept, change by change).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function reference(array $data, string $garment): array
+    {
+        $details = FashionVocabulary::details();
+        $d = $this->defaults($garment, 'match', 0);
+        $pick = fn ($value, array $keys, string $default) => is_string($value) && array_key_exists($value, $keys) ? $value : $default;
+        $embellishments = array_values(array_unique(array_filter((array) ($data['ref_embellishments'] ?? []),
+            fn ($e) => is_string($e) && isset($details['embellishment'][$e]))));
+        if (count($embellishments) > 1) {
+            $embellishments = array_values(array_diff($embellishments, ['none']));
+        }
+
+        return [
+            'silhouette' => $pick($data['ref_silhouette'] ?? null, FashionVocabulary::silhouettes()[$garment] ?? [], $d['silhouette']),
+            'neckline' => $pick($data['ref_neckline'] ?? null, $details['neckline'], $d['neckline']),
+            'sleeve' => $pick($data['ref_sleeve'] ?? null, $details['sleeve'], $d['sleeve']),
+            'length' => $pick($data['ref_length'] ?? null, $details['length'], $garment === 'kimono' ? 'ankle' : 'floor'),
+            'closure' => $pick($data['ref_closure'] ?? null, $details['closure'], $d['closure']),
+            'placement' => $pick($data['ref_placement'] ?? null, $details['placement'], $d['placement']),
+            'embellishments' => array_slice($embellishments ?: [$d['embellishment']], 0, 3),
+            'construction_en' => mb_substr($this->text($data['ref_construction_en'] ?? null), 0, 700),
+            'visible' => in_array($data['ref_visible'] ?? null, ['upper', 'lower'], true) ? $data['ref_visible'] : 'full',
+        ];
+    }
+
+    /**
+     * A copy keeps the piece's construction. The first concept is the piece
+     * as it is; each later one may change one of length, sleeve, closure
+     * or embellishment, in that order of preference, and nothing else.
+     *
+     * @param  array<string, mixed>  $concept
+     * @param  array<string, mixed>  $raw
+     * @param  array<string, mixed>  $reference
+     * @return array<string, mixed>
+     */
+    private function followReference(array $concept, array $raw, array $reference, int $index, string $garment): array
+    {
+        foreach (['silhouette', 'neckline', 'sleeve', 'length', 'closure', 'placement', 'embellishments'] as $field) {
+            $concept[$field] = $reference[$field];
+        }
+        if ($index === 0) {
+            return $concept;
+        }
+
+        $details = FashionVocabulary::details();
+        foreach (['length', 'sleeve', 'closure'] as $field) {
+            $value = $raw[$field] ?? null;
+            if (is_string($value) && $value !== $reference[$field] && isset($details[$field][$value])) {
+                $concept[$field] = $value;
+
+                return $concept;
+            }
+        }
+        $embellishments = array_values(array_unique(array_filter((array) ($raw['embellishments'] ?? []), fn ($e) => is_string($e) && isset($details['embellishment'][$e]))));
+        if ($embellishments !== [] && $embellishments !== $reference['embellishments']) {
+            $concept['embellishments'] = array_slice($embellishments, 0, 3);
+        }
+
+        return $concept;
+    }
+
+    /**
+     * The competitor's name never ends up in the merchant's own design.
+     *
+     * @param  array<string, mixed>  $concept
+     * @return array<string, mixed>
+     */
+    private function withoutBrand(array $concept, ?string $brand): array
+    {
+        $brand = trim((string) $brand);
+        if (mb_strlen($brand) < 2) {
+            return $concept;
+        }
+        foreach (['name_ar', 'name_en', 'pitch_ar', 'pitch_en'] as $field) {
+            $text = str_ireplace($brand, '', (string) $concept[$field]);
+            $concept[$field] = trim((string) preg_replace(['/\s{2,}/u', '/\s+([،,.:؛])/u', '/^[\s،,.:؛\-–—]+|[\s،,:؛\-–—]+$/u'], [' ', '$1', ''], $text));
+        }
+
+        return $concept;
+    }
+
+    /**
+     * The original piece as evidence, so every copy shows what it rests on.
+     *
+     * @param  array<string, mixed>  $inspiration
+     * @return array<string, array<string, mixed>>
+     */
+    private function inspirationEvidence(Store $store, array $inspiration): array
+    {
+        $id = (int) ($inspiration['id'] ?? 0);
+
+        if (($inspiration['kind'] ?? null) === 'competitor' && ($p = CompetitorProduct::query()->where('store_id', $store->id)->with('competitor:id,name')->find($id))) {
+            $brand = $p->competitor?->name ?? '—';
+
+            return ["C:{$p->id}" => ['id' => "C:{$p->id}", 'kind' => 'competitor_hit', 'competitor' => $brand, 'name' => $p->name,
+                'claim_ar' => "التصميم الأصلي: «{$p->name}» لدى {$brand}.", 'claim_en' => "The original design: “{$p->name}” at {$brand}.",
+                'href' => $p->url, 'image_url' => $p->image_url, 'caveat' => null]];
+        }
+        if (($inspiration['kind'] ?? null) === 'social' && ($post = SocialPost::query()->where('store_id', $store->id)->with('competitor:id,name')->find($id))) {
+            $brand = $post->competitor?->name ?? '—';
+
+            return ["S:{$post->id}" => ['id' => "S:{$post->id}", 'kind' => 'social_post', 'competitor' => $brand,
+                'claim_ar' => "التصميم الأصلي: منشور لـ{$brand}.", 'claim_en' => "The original design: a {$brand} post.",
+                'href' => $post->url, 'image_url' => CompetitorRadar::image($post), 'caveat' => 'engagement_not_sales']];
+        }
+
+        return [];
     }
 
     /**
@@ -573,11 +830,14 @@ class CollectionDesigner
     private function briefForModel(array $brief): array
     {
         $fabric = FashionVocabulary::fabrics()[$brief['fabric'] ?? ''] ?? null;
+        $custom = filled($brief['fabric_custom'] ?? null) ? ['custom_name' => $brief['fabric_custom'], 'like' => $fabric['en'] ?? null] : [];
 
         return [
             'garment' => $brief['garment'],
             'garment_label' => FashionVocabulary::label('garments', $brief['garment'], 'en'),
-            'fabric' => $fabric ? ['key' => $brief['fabric'], 'name' => $fabric['en'], 'sheer' => $fabric['sheer'], 'drape' => $fabric['drape_en']] : null,
+            'fabric' => $fabric || $custom
+                ? [...$custom, 'key' => $brief['fabric'] ?? null, 'name' => $fabric['en'] ?? null, 'sheer' => $fabric['sheer'] ?? false, 'drape' => $fabric['drape_en'] ?? null]
+                : null,
             'fabric_photo' => $brief['fabric_read'] ?? null,
             'colors' => $brief['colors'] ?? [],
             'occasion' => $brief['occasion'] ?? 'daily',
@@ -605,18 +865,21 @@ class CollectionDesigner
         $garment = $brief['garment'];
         $g = FashionVocabulary::garments()[$garment];
         $fabric = FashionVocabulary::fabrics()[$brief['fabric'] ?? ''] ?? null;
+        // The merchant's own fabric names the collection when there is one.
+        $fabricAr = trim((string) ($brief['fabric_custom'] ?? '')) ?: ($fabric['ar'] ?? null);
+        $fabricEn = trim((string) ($brief['fabric_custom_en'] ?? '')) ?: (trim((string) ($brief['fabric_custom'] ?? '')) ?: ($fabric['en'] ?? null));
         $colors = ($brief['colors'] ?? []) ?: $this->dnaColors($insights);
         $trend = collect($insights['gaps'])->firstWhere('attribute', 'pattern') ?? collect($insights['gaps'])->first();
         $gap = collect($insights['gaps'])->firstWhere('source', 'competitors');
         $best = $insights['bestsellers'][0] ?? null;
         $season = $insights['seasons'][0] ?? null;
 
-        $concepts = array_map(function (string $role, int $i) use ($garment, $g, $fabric, $colors, $trend, $gap, $best, $season) {
+        $concepts = array_map(function (string $role, int $i) use ($garment, $g, $fabric, $fabricAr, $fabricEn, $colors, $trend, $gap, $best, $season) {
             $d = $this->defaults($garment, $role, $i);
             $silAr = FashionVocabulary::label('silhouettes', $d['silhouette'], 'ar', $garment);
             $silEn = FashionVocabulary::label('silhouettes', $d['silhouette'], 'en', $garment);
-            $fabricAr = $fabric ? " من {$fabric['ar']}" : '';
-            $fabricEn = $fabric ? " in {$fabric['en']}" : '';
+            $inAr = $fabricAr ? " من {$fabricAr}" : '';
+            $inEn = $fabricEn ? " in {$fabricEn}" : '';
             $pattern = $role === 'trend_twist' && $trend && $trend['attribute'] === 'pattern' ? $trend['value'] : null;
             $roleColors = match ($role) {
                 'competitor_gap' => $gap && $gap['attribute'] === 'colors' ? [$gap['value'], ...array_slice($colors, 0, 1)] : $colors,
@@ -632,18 +895,22 @@ class CollectionDesigner
 
             return [
                 'role' => $role,
-                'name_ar' => "{$g['ar']} {$silAr}{$fabricAr}",
-                'name_en' => "{$silEn} {$g['en']}{$fabricEn}",
+                'name_ar' => "{$g['ar']} {$silAr}{$inAr}",
+                'name_en' => "{$silEn} {$g['en']}{$inEn}",
                 'pitch_ar' => match ($role) {
                     'safe_bet' => 'قصّة مجرّبة بنفس بصمة منتجاتك الرابحة، بقماشك الجديد.',
                     'trend_twist' => 'أساس مضمون مع لمسة واحدة من توجّه صاعد في السوق.',
                     'competitor_gap' => 'تركيبة تنجح لدى المنافسين وغير موجودة في كتالوجك.',
+                    'match' => 'نفس تصميم القطعة الأصلية، بقماشك.',
+                    'match_variant' => 'نفس التصميم بتغيير واحد مدروس.',
                     default => 'قطعة توقيع جريئة تميّز متجرك.',
                 },
                 'pitch_en' => match ($role) {
                     'safe_bet' => 'A proven cut with your best sellers\' DNA, in the new fabric.',
                     'trend_twist' => 'A safe base with one touch from a rising trend.',
                     'competitor_gap' => 'A combination that works for competitors and is missing from your catalog.',
+                    'match' => 'The original piece\'s design, in your fabric.',
+                    'match_variant' => 'The same design with one considered change.',
                     default => 'A bold signature piece that sets your store apart.',
                 },
                 'silhouette' => $d['silhouette'], 'neckline' => $d['neckline'], 'sleeve' => $d['sleeve'],
@@ -660,8 +927,8 @@ class CollectionDesigner
         $occasion = FashionVocabulary::occasions()[$brief['occasion'] ?? 'daily'] ?? FashionVocabulary::occasions()['daily'];
 
         return [
-            'title_ar' => "مجموعة {$occasion['ar']}".($fabric ? " — {$fabric['ar']}" : ''),
-            'title_en' => "{$occasion['en']} collection".($fabric ? " — {$fabric['en']}" : ''),
+            'title_ar' => "مجموعة {$occasion['ar']}".($fabricAr ? " — {$fabricAr}" : ''),
+            'title_en' => "{$occasion['en']} collection".($fabricEn ? " — {$fabricEn}" : ''),
             'story_ar' => "{$g['ar']} بأربع قراءات مختلفة للقماش نفسه: من القصّة المضمونة إلى قطعة التوقيع، مبنية على ما يبيع عندك وما يتحرك في السوق.",
             'story_en' => "{$g['en']} in distinct takes on the same fabric — from the proven cut to the signature piece — built on what sells for you and what moves in the market.",
             'concepts' => $concepts,
@@ -681,7 +948,7 @@ class CollectionDesigner
             'trend_twist' => ['neckline' => 'mandarin', 'sleeve' => 'bell', 'closure' => 'open_front', 'embellishment' => 'trim_tape', 'placement' => 'sleeves', 'style' => 'modern'],
             'competitor_gap' => ['neckline' => 'shirt_collar', 'sleeve' => 'wide', 'closure' => 'tie_belt', 'embellishment' => 'panel_insert', 'placement' => 'front_placket', 'style' => 'minimal'],
             'signature' => ['neckline' => 'round', 'sleeve' => 'butterfly', 'closure' => 'hidden_buttons', 'embellishment' => 'machine_embroidery', 'placement' => 'neckline', 'style' => 'luxury'],
-        ][$role] ?? [];
+        ][in_array($role, ['match', 'match_variant'], true) ? 'safe_bet' : $role] ?? [];
 
         if ($garment === 'abaya' && $role !== 'trend_twist') {
             $byRole['closure'] = $role === 'safe_bet' ? 'hidden_snaps' : 'open_front';

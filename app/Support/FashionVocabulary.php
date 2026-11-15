@@ -285,7 +285,47 @@ class FashionVocabulary
             'trend_twist' => ['ar' => 'لمسة موضة', 'en' => 'Trend twist'],
             'competitor_gap' => ['ar' => 'فرصة من المنافسين', 'en' => 'Competitor gap'],
             'signature' => ['ar' => 'توقيع المتجر', 'en' => 'Signature piece'],
+            // "Design like this": the piece itself, then one-change versions of it.
+            'match' => ['ar' => 'مطابق للقطعة', 'en' => 'Like the original'],
+            'match_variant' => ['ar' => 'نفس التصميم بلمسة واحدة', 'en' => 'Same design, one change'],
         ];
+    }
+
+    /**
+     * Roles for a "design like this" collection: the piece as it is, then
+     * versions that each change one thing.
+     *
+     * @return list<string>
+     */
+    public static function matchRoles(int $count): array
+    {
+        return array_slice(['match', 'match_variant', 'match_variant', 'match_variant'], 0, max(1, min(4, $count)));
+    }
+
+    /**
+     * The closest key a modesty level allows, so a copied design changes
+     * as little as possible: an off-the-shoulder neckline becomes a boat
+     * neckline, a knee length a midi (or ankle when very modest), and so on.
+     *
+     * @param  list<string>  $allowed  the keys the level allows for the field
+     */
+    public static function nearestAllowed(string $field, string $key, string $modesty, array $allowed): string
+    {
+        if (in_array($key, $allowed, true)) {
+            return $key;
+        }
+
+        $to = [
+            'neckline' => [
+                'off_shoulder' => 'boat', 'one_shoulder' => 'boat', 'halter' => 'mandarin', 'sweetheart' => 'square',
+                'v_neck' => $modesty === 'standard' ? 'v_shallow' : 'round', 'v_shallow' => 'round',
+            ],
+            'sleeve' => ['sleeveless' => 'straight', 'short' => 'straight'],
+            'length' => ['knee' => $modesty === 'standard' ? 'midi' : 'ankle', 'midi' => 'ankle', 'tunic' => 'ankle'],
+            'silhouette' => ['corset' => 'empire', 'fitted' => 'column', 'mermaid' => 'a_line'],
+        ][$field][$key] ?? null;
+
+        return $to !== null && in_array($to, $allowed, true) ? $to : ($allowed[0] ?? $key);
     }
 
     /**
