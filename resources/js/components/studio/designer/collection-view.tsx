@@ -2,6 +2,7 @@ import { router } from '@inertiajs/react';
 import {
     AlertTriangle,
     Check,
+    Columns2,
     FileText,
     Loader2,
     RefreshCw,
@@ -15,10 +16,16 @@ import { ConfirmDialog } from '@/components/mojo/confirm-dialog';
 import { scoreTone, toneClasses } from '@/components/mojo/tone';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { useI18n } from '@/hooks/use-i18n';
 import { useVocabulary } from '@/hooks/use-vocabulary';
 import { cn } from '@/lib/utils';
-import { DesignSheet } from './design-sheet';
+import { DesignSheet, ModestyChanges } from './design-sheet';
 import { GarmentIcon } from './garment-icons';
 import { SourceBadge } from './source-badge';
 import type { Collection, Concept, FashionVocabulary } from './types';
@@ -40,10 +47,15 @@ export function CollectionView({
     const { t, tr, locale, field, relative } = useI18n();
     const c = t.designer.collection;
     const [open, setOpen] = useState<number | null>(null);
+    const [comparing, setComparing] = useState(false);
     const active =
         collection.status === 'pending' || collection.status === 'processing';
     const brief = collection.brief;
     const fabric = brief.fabric ? vocabulary.fabrics[brief.fabric] : null;
+    const fabricName = brief.fabric_custom ?? fabric?.[locale] ?? null;
+    const canCompare =
+        Boolean(collection.reference_image_url) &&
+        collection.concepts.some((x) => x.status === 'ready' && x.image_url);
     const occasion = vocabulary.occasions[brief.occasion];
     const title = field(collection, 'title') || c.newCollection;
     const story = field(collection, 'story');
@@ -71,6 +83,23 @@ export function CollectionView({
                 />
                 <div className="relative flex flex-wrap items-start justify-between gap-4">
                     <div className="flex min-w-0 items-start gap-4">
+                        {collection.reference_image_url && (
+                            <button
+                                type="button"
+                                onClick={() => canCompare && setComparing(true)}
+                                className="group/original relative shrink-0 cursor-pointer"
+                                title={c.compare}
+                            >
+                                <img
+                                    src={collection.reference_image_url}
+                                    alt={c.original}
+                                    className="h-20 w-[60px] rounded-xl object-cover object-top shadow-sm ring-4 ring-white/70 transition-transform group-hover/original:scale-[1.03] dark:ring-white/10"
+                                />
+                                <span className="absolute inset-x-0 -bottom-2 mx-auto w-fit rounded-full bg-gold px-1.5 text-[9px] font-semibold text-gold-foreground shadow-sm">
+                                    {c.original}
+                                </span>
+                            </button>
+                        )}
                         {collection.fabric_image_url ? (
                             <img
                                 src={collection.fabric_image_url}
@@ -114,10 +143,10 @@ export function CollectionView({
                                         ]
                                     }
                                 </span>
-                                {fabric && (
+                                {fabricName && (
                                     <span className="inline-flex items-center gap-1">
                                         <Scissors className="size-3" />
-                                        {fabric[locale]}
+                                        {fabricName}
                                     </span>
                                 )}
                                 <span>
@@ -146,6 +175,16 @@ export function CollectionView({
                     </div>
                     {!active && (
                         <div className="flex shrink-0 gap-1.5">
+                            {canCompare && (
+                                <Button
+                                    size="sm"
+                                    variant="gold"
+                                    onClick={() => setComparing(true)}
+                                >
+                                    <Columns2 className="size-3.5" />
+                                    {c.compare}
+                                </Button>
+                            )}
                             <Button
                                 size="sm"
                                 variant="outline"
@@ -182,6 +221,13 @@ export function CollectionView({
             </header>
 
             {active && <Progress collection={collection} />}
+
+            {brief.reference_missing && (
+                <div className="mx-5 mt-5 flex items-center gap-2 rounded-xl bg-warning-soft px-4 py-2.5 text-xs text-warning sm:mx-6">
+                    <AlertTriangle className="size-4 shrink-0" />
+                    {c.referenceMissing}
+                </div>
+            )}
 
             {collection.status === 'failed' &&
                 collection.concepts.every((x) => x.status !== 'ready') && (
@@ -237,7 +283,108 @@ export function CollectionView({
                 vocabulary={vocabulary}
                 onOpenChange={(v) => !v && setOpen(null)}
             />
+
+            {canCompare && (
+                <CompareDialog
+                    collection={collection}
+                    vocabulary={vocabulary}
+                    open={comparing}
+                    onOpenChange={setComparing}
+                    onOpenSheet={(i) => {
+                        setComparing(false);
+                        setOpen(i);
+                    }}
+                />
+            )}
         </motion.section>
+    );
+}
+
+/**
+ * The original piece first, then every finished design at the same size,
+ * so the merchant can check each one against it.
+ */
+function CompareDialog({
+    collection,
+    vocabulary,
+    open,
+    onOpenChange,
+    onOpenSheet,
+}: {
+    collection: Collection;
+    vocabulary: FashionVocabulary;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onOpenSheet: (index: number) => void;
+}) {
+    const { t, field } = useI18n();
+    const c = t.designer.collection;
+    const ready = collection.concepts
+        .map((concept, i) => ({ concept, i }))
+        .filter(
+            ({ concept }) => concept.status === 'ready' && concept.image_url,
+        );
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-6xl">
+                <div className="space-y-1">
+                    <DialogTitle className="font-display text-xl font-semibold">
+                        {c.compareTitle}
+                    </DialogTitle>
+                    <DialogDescription className="text-xs">
+                        {c.compareHint}
+                    </DialogDescription>
+                </div>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-[repeat(auto-fit,minmax(190px,1fr))]">
+                    <figure className="space-y-2">
+                        <div className="overflow-hidden rounded-xl ring-2 ring-gold ring-offset-2 ring-offset-background">
+                            <img
+                                src={collection.reference_image_url!}
+                                alt={c.original}
+                                className="aspect-[3/4] w-full object-cover object-top"
+                            />
+                        </div>
+                        <figcaption className="text-xs font-semibold text-gold-foreground dark:text-gold">
+                            {c.original}
+                        </figcaption>
+                    </figure>
+                    {ready.map(({ concept, i }) => (
+                        <figure key={i} className="space-y-2">
+                            <button
+                                type="button"
+                                onClick={() => onOpenSheet(i)}
+                                className="block w-full cursor-zoom-in overflow-hidden rounded-xl"
+                                aria-label={field(concept, 'name')}
+                            >
+                                <img
+                                    src={concept.image_url!}
+                                    alt={field(concept, 'name')}
+                                    className={cn(
+                                        'w-full object-cover object-top transition-transform duration-500 hover:scale-[1.02]',
+                                        concept.render === 'flat'
+                                            ? 'aspect-square'
+                                            : 'aspect-[3/4]',
+                                    )}
+                                />
+                            </button>
+                            <figcaption className="space-y-1">
+                                <span className="block truncate text-xs font-medium">
+                                    {String(i + 1).padStart(2, '0')} ·{' '}
+                                    {field(concept, 'name')}
+                                </span>
+                                <ModestyChanges
+                                    concept={concept}
+                                    garment={collection.brief.garment}
+                                    vocabulary={vocabulary}
+                                    compact
+                                />
+                            </figcaption>
+                        </figure>
+                    ))}
+                </div>
+            </DialogContent>
+        </Dialog>
     );
 }
 

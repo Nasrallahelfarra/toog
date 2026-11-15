@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $error
  * @property array<string, mixed> $brief
  * @property string|null $fabric_image_path
+ * @property string|null $reference_image_path the piece a "design like this" collection reproduces
  * @property string|null $title_ar
  * @property string|null $title_en
  * @property string|null $story_ar
@@ -30,7 +31,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  */
 #[Fillable([
-    'store_id', 'user_id', 'status', 'error', 'brief', 'fabric_image_path', 'title_ar', 'title_en',
+    'store_id', 'user_id', 'status', 'error', 'brief', 'fabric_image_path', 'reference_image_path', 'title_ar', 'title_en',
     'story_ar', 'story_en', 'concepts', 'from_model', 'cost',
 ])]
 class DesignCollection extends Model

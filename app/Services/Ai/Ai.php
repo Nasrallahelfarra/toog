@@ -4,6 +4,7 @@ namespace App\Services\Ai;
 
 use App\Models\AiUsage;
 use App\Models\Store;
+use App\Support\InlineImage;
 use Closure;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -94,8 +95,17 @@ class Ai
         }
     }
 
+    /** Reference images per call, and their inline size in total. */
+    public const MAX_REFERENCES = 3;
+
+    public const MAX_REFERENCE_BYTES = 15_000_000;
+
     /**
-     * Generate one image and store it on the public disk.
+     * Generate one image and store it on the public disk. $sourcePath is a
+     * single image to edit; $references are labelled images on the public
+     * disk, sent in order (e.g. a design reference, then a fabric swatch).
+     *
+     * @param  list<array{path: string, label?: string}>  $references
      *
      * @throws AiException when the store is over budget or the model fails
      */
@@ -106,6 +116,7 @@ class Ai
         ?string $sourcePath = null,
         string $aspectRatio = '1:1',
         ?int $userId = null,
+        array $references = [],
     ): GeneratedImage {
         $provider = $this->provider();
 
@@ -115,21 +126,31 @@ class Ai
             throw AiException::budgetExceeded();
         }
 
-        $source = null;
+        $inline = [];
         if ($sourcePath) {
             if (! Storage::disk('public')->exists($sourcePath)) {
                 throw new AiException('The reference image is missing. Upload it again before editing.');
             }
-            $source = [
+            $inline[] = [
                 'mime' => Storage::disk('public')->mimeType($sourcePath) ?: 'image/png',
                 'data' => base64_encode(Storage::disk('public')->get($sourcePath)),
             ];
+        }
+        foreach (array_slice($references, 0, self::MAX_REFERENCES) as $reference) {
+            $image = InlineImage::fromDisk($reference['path'] ?? null);
+            if (! $image) {
+                throw new AiException('The reference image is missing. Upload it again before editing.');
+            }
+            $inline[] = [...$image, ...(filled($reference['label'] ?? null) ? ['label' => $reference['label']] : [])];
+        }
+        if (array_sum(array_map(fn (array $i) => strlen($i['data']), $inline)) > self::MAX_REFERENCE_BYTES) {
+            throw new AiException('The reference images are too large to send together.');
         }
 
         $started = microtime(true);
 
         try {
-            $response = $provider->image($prompt, $source, $aspectRatio);
+            $response = $provider->image($prompt, $inline, $aspectRatio);
         } catch (Throwable $e) {
             $this->record($operation, $store, $userId, $provider->name(), $provider->imageModel(),
                 error: Str::limit($e->getMessage(), 250), started: $started);
@@ -142,7 +163,8 @@ class Ai
         Storage::disk('public')->put($path, $response->bytes);
 
         $this->record($operation, $store, $userId, $provider->name(), $response->model,
-            in: $response->inputTokens, out: $response->outputTokens, images: 1, cost: $cost, started: $started);
+            in: $response->inputTokens, out: $response->outputTokens, images: 1, cost: $cost, started: $started,
+            meta: count($inline) > 1 ? ['references' => count($inline)] : []);
 
         return new GeneratedImage($path, $provider->name(), $response->model, $cost);
     }

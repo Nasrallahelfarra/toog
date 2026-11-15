@@ -34,4 +34,13 @@ return [
     'user_owns_stores' => 'This user owns stores; confirm deleting them too, or transfer them first.',
     'weights_required' => 'The weights must add up to more than zero.',
     'collection_untitled' => 'Collection #:id',
+    'designer_option_label_required' => 'Type a name first.',
+    'designer_option_label_short' => 'The name is too short; at least 2 characters.',
+    'designer_option_label_long' => 'The name is too long; 40 characters at most.',
+    'designer_option_garment_required' => 'Choose the garment the designer designs this section as.',
+    'designer_option_exists' => '“:name” is already in the list.',
+    'designer_option_limit' => 'You reached the limit (:count); remove one to add another.',
+    'designer_option_letters' => 'Use Arabic or English letters.',
+    'designer_fabric_unknown' => 'This fabric is no longer in your list; choose another.',
+    'designer_reference_not_garment' => 'The picture does not show a garment that can be designed; pick another product or post.',
 ];

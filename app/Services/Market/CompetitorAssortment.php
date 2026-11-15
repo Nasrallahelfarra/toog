@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\SeasonalEvent;
 use App\Models\Store;
 use App\Models\Trend;
+use App\Services\Designer\DesignerPrompt;
 use App\Services\Evaluation\Candidate;
 use App\Support\FashionVocabulary;
 use App\Support\Vocabulary;
@@ -392,10 +393,8 @@ class CompetitorAssortment
             'colors' => array_slice(array_values(array_unique([$color, ...$item['colors']])), 0, 3),
             'pattern' => $pattern ?: null,
             'style' => $item['style'],
-            'notes' => $this->locale === 'ar'
-                ? 'مستوحى من تصميم رائج لدى منافس: خذ الفكرة وغيّر عنصرين على الأقل (القصّة، النقشة أو اللون) بروح متجرك.'
-                : 'Inspired by a competitor hit: take the idea and change at least two of cut, pattern or colour, in your store\'s spirit.',
-            'inspiration' => ['kind' => $item['kind'] === 'post' ? 'social' : 'competitor', 'id' => $item['id'], 'label' => $item['name'], 'image_url' => $item['image_url']],
+            'notes' => DesignerPrompt::matchNote($this->locale),
+            'inspiration' => ['kind' => $item['kind'] === 'post' ? 'social' : 'competitor', 'id' => $item['id'], 'label' => $item['name'], 'image_url' => $item['image_url'], 'match' => 'close'],
         ];
     }
 

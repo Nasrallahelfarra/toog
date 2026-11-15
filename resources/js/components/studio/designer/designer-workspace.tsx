@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { useI18n } from '@/hooks/use-i18n';
+import { normalizeName } from './brief-options';
 import { BriefPanel, openFabricPicker } from './brief-panel';
 import type { BriefForm } from './brief-panel';
 import { CollectionView } from './collection-view';
@@ -48,8 +49,19 @@ export function DesignerWorkspace({
     const urgent =
         insights?.alerts.filter((a) => a.severity !== 'info').length ?? 0;
 
-    // Start on the store's largest section the designer can design.
-    const firstSection = designer.categories.find((c) => c.garment) ?? null;
+    // Start on the store's largest Zid section the designer can design.
+    const sectionFor = (garment?: string | null) =>
+        designer.categories.find(
+            (c) =>
+                c.garment &&
+                c.source === 'zid' &&
+                (!garment || c.garment === garment),
+        ) ??
+        designer.categories.find(
+            (c) => c.garment && (!garment || c.garment === garment),
+        ) ??
+        null;
+    const firstSection = sectionFor();
     const form = useForm<BriefForm>({
         garment: firstSection?.garment ?? 'abaya',
         category: firstSection?.name ?? null,
@@ -79,14 +91,15 @@ export function DesignerWorkspace({
             ...data,
             garment: p.garment ?? data.garment,
             category: p.garment
-                ? (designer.categories.find((c) => c.garment === p.garment)
-                      ?.name ?? null)
+                ? (sectionFor(p.garment)?.name ?? null)
                 : data.category,
             fabric: p.fabric ?? data.fabric,
             colors: p.colors?.length ? p.colors.slice(0, 4) : data.colors,
             occasion: p.occasion ?? data.occasion,
             notes: p.notes ?? data.notes,
             inspiration: p.inspiration ?? null,
+            // A copied piece: the piece itself and one version of it.
+            count: p.inspiration?.match === 'close' ? 2 : data.count,
         }));
         setPulse((n) => n + 1);
         setRailOpen(false);
@@ -100,7 +113,14 @@ export function DesignerWorkspace({
             category: c.brief.category ?? null,
             modesty: c.brief.modesty ?? null,
             show_face: c.brief.show_face ?? false,
-            fabric: c.brief.fabric,
+            // The store's own fabric, when it is still in the list.
+            fabric: c.brief.fabric_custom
+                ? (designer.custom_fabrics.find(
+                      (f) =>
+                          normalizeName(f.label) ===
+                          normalizeName(c.brief.fabric_custom!),
+                  )?.key ?? c.brief.fabric)
+                : c.brief.fabric,
             fabric_image: null,
             fabric_from: c.fabric_image_url ? c.id : null,
             colors: c.brief.colors,
@@ -156,6 +176,7 @@ export function DesignerWorkspace({
                     <BriefPanel
                         form={form}
                         categories={designer.categories}
+                        customFabrics={designer.custom_fabrics}
                         vocabulary={designer.vocabulary}
                         aiLive={aiLive}
                         pulse={pulse}
@@ -261,8 +282,9 @@ export function DesignerWorkspace({
                                                         c.brief.garment
                                                     ]?.[locale]
                                                 }
-                                                {c.brief.fabric &&
-                                                    ` · ${designer.vocabulary.fabrics[c.brief.fabric]?.[locale]}`}
+                                                {(c.brief.fabric_custom ||
+                                                    c.brief.fabric) &&
+                                                    ` · ${c.brief.fabric_custom ?? designer.vocabulary.fabrics[c.brief.fabric!]?.[locale]}`}
                                             </p>
                                         </div>
                                     </button>

@@ -31,7 +31,7 @@ class FakeProvider implements AiProvider
         return new AiResponse([], 'fake');
     }
 
-    public function image(string $prompt, ?array $source = null, string $aspectRatio = '1:1'): AiImageResponse
+    public function image(string $prompt, array $references = [], string $aspectRatio = '1:1'): AiImageResponse
     {
         [$w, $h] = $this->dimensions($aspectRatio);
         $seed = crc32($prompt);

@@ -10,6 +10,7 @@ use App\Models\DesignRequest;
 use App\Models\Evaluation;
 use App\Models\Product;
 use App\Models\ProductRecommendation;
+use App\Models\Store;
 use App\Models\Trend;
 use App\Services\Design\DesignService;
 use App\Services\Design\IdeaService;
@@ -98,18 +99,7 @@ class StudioController extends Controller
 
         return Inertia::render('store/studio/index', [
             'mode' => $mode,
-            'designer' => fn () => [
-                'vocabulary' => FashionVocabulary::forFrontend(),
-                'briefing' => DesignerController::briefing($store->id),
-                'brand_colors' => collect($store->brand_guide['colors'] ?? [])->map(fn ($hex) => $designs->nearestColor((string) $hex))->unique()->values()->all(),
-                // The store's own clothing sections (synced from Zid), each with
-                // the garment it designs; accessories, bags and the like are left out.
-                'categories' => Product::query()->where('store_id', $store->id)->whereNotNull('category')->where('category', '!=', '')
-                    ->selectRaw('category, COUNT(*) as products')->groupBy('category')->orderByDesc('products')->get()
-                    ->map(fn ($row) => ['name' => $row->category, 'products' => (int) $row->products, 'garment' => FashionVocabulary::garmentFor($row->category)])
-                    ->filter(fn (array $c) => $c['garment'] !== null)
-                    ->values()->all(),
-            ],
+            'designer' => fn () => $this->designer($store, $designs),
             // The latest collections; one opened by link stays first.
             'collections' => fn () => DesignCollection::query()->where('store_id', $store->id)
                 ->when($collectionId, fn ($q) => $q->orderByRaw('id = ? DESC', [$collectionId]))
@@ -311,6 +301,37 @@ class StudioController extends Controller
         return ($previous['path'] ?? '') === '/store/studio'
             ? to_route('store.studio.index', [...$query, 'mode' => self::modeFor($designRequest)])
             : back();
+    }
+
+    /**
+     * The AI designer's brief data: vocabulary, the latest advice, the
+     * store's colours, its clothing sections (from Zid and added by hand)
+     * and its own fabrics.
+     *
+     * @return array<string, mixed>
+     */
+    private function designer(Store $store, DesignService $designs): array
+    {
+        $custom = DesignerOptionController::forBrief($store->id);
+
+        return [
+            'vocabulary' => FashionVocabulary::forFrontend(),
+            'briefing' => DesignerController::briefing($store->id),
+            'brand_colors' => collect($store->brand_guide['colors'] ?? [])->map(fn ($hex) => $designs->nearestColor((string) $hex))->unique()->values()->all(),
+            // The store's own clothing sections (synced from Zid), each with
+            // the garment it designs; accessories, bags and the like are left out.
+            'categories' => [
+                ...Product::query()->where('store_id', $store->id)->whereNotNull('category')->where('category', '!=', '')
+                    ->selectRaw('category, COUNT(*) as products')->groupBy('category')->orderByDesc('products')->get()
+                    ->map(fn ($row) => ['name' => $row->category, 'products' => (int) $row->products, 'garment' => FashionVocabulary::garmentFor($row->category), 'source' => 'zid', 'id' => null])
+                    ->filter(fn (array $c) => $c['garment'] !== null)
+                    ->values()->all(),
+                // Sections the merchant added by hand.
+                ...array_map(fn (array $s) => ['name' => $s['label'], 'products' => 0, 'garment' => $s['garment'], 'source' => 'custom', 'id' => $s['id']], $custom['sections']),
+            ],
+            // Fabrics the merchant added that are not in the built-in list.
+            'custom_fabrics' => $custom['fabrics'],
+        ];
     }
 
     /**
