@@ -25,15 +25,21 @@ const OPTIONS_URL = '/store/studio/designer/options';
 export const OPTION_LIMITS = { fabric: 20, section: 12 } as const;
 
 /** Reload only the designer's data; the brief keeps what was typed. */
-const quiet: {
-    preserveScroll: boolean;
-    preserveState: boolean;
-    only: string[];
-} = {
+const quiet = {
     preserveScroll: true,
     preserveState: true,
     only: ['designer'],
 };
+
+/**
+ * A partial visit cancels the deferred store intelligence while it is
+ * still loading; ask for it again so the rail does not stay empty.
+ */
+function keepInsights(page: { props: Record<string, unknown> }): void {
+    if (page.props.insights === undefined) {
+        router.reload({ only: ['insights'] });
+    }
+}
 
 /**
  * A name in the form used to spot duplicates, with the server's rules:
@@ -220,6 +226,7 @@ export function FabricChips({
             {
                 ...quiet,
                 onSuccess: (page) => {
+                    keepInsights(page);
                     const fresh =
                         (page.props as { designer?: DesignerProps }).designer
                             ?.custom_fabrics ?? [];
@@ -241,6 +248,7 @@ export function FabricChips({
         );
 
     const submit = () => {
+        if (pending) return;
         const label = tidy(value);
         const problem = nameProblem(label);
         if (problem) {
@@ -267,7 +275,8 @@ export function FabricChips({
         const wasSelected = form.data.fabric === fabric.key;
         router.delete(`${OPTIONS_URL}/${fabric.id}`, {
             ...quiet,
-            onSuccess: () => {
+            onSuccess: (page) => {
+                keepInsights(page);
                 if (wasSelected) select(null);
                 setNotice(null);
                 toast(tr(d.removed, { name: fabric.label }), {
@@ -473,6 +482,7 @@ export function SectionComposer({
     const garments = Object.keys(vocabulary.garments) as GarmentKey[];
 
     const submit = () => {
+        if (saving) return;
         const label = tidy(name);
         const problem = nameProblem(label);
         if (problem) {
@@ -497,7 +507,10 @@ export function SectionComposer({
             { type: 'section', label, garment: chosen },
             {
                 ...quiet,
-                onSuccess: () => onAdded({ name: label, garment: chosen }),
+                onSuccess: (page) => {
+                    keepInsights(page);
+                    onAdded({ name: label, garment: chosen });
+                },
                 onError: (errors) =>
                     setError(errors.label ?? errors.garment ?? d.saveFailed),
                 onFinish: () => setSaving(false),
@@ -652,7 +665,8 @@ export function removeSection(
 
     router.delete(`${OPTIONS_URL}/${section.id}`, {
         ...quiet,
-        onSuccess: () => {
+        onSuccess: (page) => {
+            keepInsights(page);
             onRemoved();
             toast(labels.removed, {
                 duration: 6000,
@@ -664,7 +678,10 @@ export function removeSection(
                             { type: 'section', label: section.name, garment },
                             {
                                 ...quiet,
-                                onSuccess: () => wasSelected && onRestored(),
+                                onSuccess: (page) => {
+                                    keepInsights(page);
+                                    if (wasSelected) onRestored();
+                                },
                             },
                         ),
                 },

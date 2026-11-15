@@ -314,6 +314,8 @@ export type Brief = {
     fabric_custom?: string | null;
     /** A copied piece whose picture could not be loaded. */
     reference_missing?: boolean;
+    /** A copied piece the planner could not read: designed as inspiration instead. */
+    reference_unread?: boolean;
     colors: string[];
     occasion: string;
     age: 'young' | 'adult' | 'mature';

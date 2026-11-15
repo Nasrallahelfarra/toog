@@ -11,6 +11,7 @@ use App\Models\DesignerOption;
 use App\Models\Product;
 use App\Models\SocialPost;
 use App\Models\Store;
+use App\Services\Designer\CollectionDesigner;
 use App\Services\Designer\DesignerAdvisor;
 use App\Services\Designer\DesignerPrompt;
 use App\Services\Market\CompetitorRadar;
@@ -111,7 +112,8 @@ class DesignerController extends Controller
                 'creativity' => (int) $data['creativity'],
                 'count' => (int) $data['count'],
                 'render' => $data['render'],
-                'notes' => $data['notes'] ?? null,
+                // The automatic "design like this" note only belongs to a copy.
+                'notes' => ($inspiration['match'] ?? null) === 'close' ? ($data['notes'] ?? null) : CollectionDesigner::withoutCopyNote($data['notes'] ?? null),
                 'inspiration' => $inspiration,
             ],
         ]);

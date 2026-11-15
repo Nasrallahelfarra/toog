@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Support\Activity;
 use App\Support\CurrentStore;
 use App\Support\FashionVocabulary;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -24,7 +25,10 @@ class DesignerOptionController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $store = $this->current->require();
-        $request->merge(['label' => trim(preg_replace('/\s+/u', ' ', (string) $request->input('label')) ?? '')]);
+        // Only a string is tidied; anything else is left for the validator to refuse.
+        if (is_string($request->input('label'))) {
+            $request->merge(['label' => trim(preg_replace('/\s+/u', ' ', $request->input('label')) ?? '')]);
+        }
 
         $data = $request->validate([
             'type' => ['required', Rule::in([DesignerOption::FABRIC, DesignerOption::SECTION])],
@@ -47,7 +51,9 @@ class DesignerOptionController extends Controller
         // The same name as a built-in fabric, a Zid section or one already added.
         $builtIn = $type === DesignerOption::FABRIC
             ? collect(FashionVocabulary::fabrics())->flatMap(fn (array $f) => [$f['ar'], $f['en']])
-            : Product::query()->where('store_id', $store->id)->whereNotNull('category')->distinct()->pluck('category');
+            // Only the Zid sections the brief shows (clothing the designer knows).
+            : Product::query()->where('store_id', $store->id)->whereNotNull('category')->distinct()->pluck('category')
+                ->filter(fn ($category) => FashionVocabulary::garmentFor((string) $category) !== null);
         if ($builtIn->concat($own->pluck('label'))->contains(fn ($name) => DesignerOption::normalize((string) $name) === $normalized)) {
             throw ValidationException::withMessages(['label' => __('mojo.designer_option_exists', ['name' => $label])]);
         }
@@ -55,13 +61,18 @@ class DesignerOptionController extends Controller
             throw ValidationException::withMessages(['label' => __('mojo.designer_option_limit', ['count' => DesignerOption::LIMITS[$type]])]);
         }
 
-        $option = DesignerOption::query()->create([
-            'store_id' => $store->id,
-            'type' => $type,
-            'label' => $label,
-            'normalized' => $normalized,
-            'garment' => $type === DesignerOption::SECTION ? $data['garment'] : null,
-        ]);
+        try {
+            $option = DesignerOption::query()->create([
+                'store_id' => $store->id,
+                'type' => $type,
+                'label' => $label,
+                'normalized' => $normalized,
+                'garment' => $type === DesignerOption::SECTION ? $data['garment'] : null,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            // The database's collation can match names the check above does not.
+            throw ValidationException::withMessages(['label' => __('mojo.designer_option_exists', ['name' => $label])]);
+        }
 
         Activity::log('designer.option_added', $option, ['type' => $type, 'label' => $label]);
 

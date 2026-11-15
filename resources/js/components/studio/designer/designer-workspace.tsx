@@ -37,6 +37,7 @@ export function DesignerWorkspace({
     const d = t.designer;
     const [pulse, setPulse] = useState(0);
     const [railOpen, setRailOpen] = useState(false);
+    const [copyNote, setCopyNote] = useState<string | null>(null);
     const [selected, setSelected] = useState<number | null>(
         openCollection ?? collections[0]?.id ?? null,
     );
@@ -87,6 +88,15 @@ export function DesignerWorkspace({
             ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     const applyPrefill = (p: Prefill) => {
+        // A prefill saved before copy mode existed takes the idea only.
+        const inspiration = p.inspiration
+            ? { ...p.inspiration, match: p.inspiration.match ?? 'inspired' }
+            : null;
+        const copying =
+            (inspiration?.kind === 'competitor' ||
+                inspiration?.kind === 'social') &&
+            inspiration.match === 'close';
+        setCopyNote(copying ? (p.notes ?? null) : null);
         form.setData((data) => ({
             ...data,
             garment: p.garment ?? data.garment,
@@ -97,9 +107,9 @@ export function DesignerWorkspace({
             colors: p.colors?.length ? p.colors.slice(0, 4) : data.colors,
             occasion: p.occasion ?? data.occasion,
             notes: p.notes ?? data.notes,
-            inspiration: p.inspiration ?? null,
+            inspiration,
             // A copied piece: the piece itself and one version of it.
-            count: p.inspiration?.match === 'close' ? 2 : data.count,
+            count: copying ? 2 : data.count,
         }));
         setPulse((n) => n + 1);
         setRailOpen(false);
@@ -177,6 +187,7 @@ export function DesignerWorkspace({
                         form={form}
                         categories={designer.categories}
                         customFabrics={designer.custom_fabrics}
+                        copyNote={copyNote}
                         vocabulary={designer.vocabulary}
                         aiLive={aiLive}
                         pulse={pulse}

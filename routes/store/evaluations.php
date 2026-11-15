@@ -40,7 +40,7 @@ Route::post('studio/collections/{collection}/retry', [DesignerController::class,
 Route::post('studio/collections/{collection}/concepts/{index}/redraw', [DesignerController::class, 'redraw'])->whereNumber('index')->middleware('throttle:20,1')->name('designer.redraw');
 Route::delete('studio/collections/{collection}', [DesignerController::class, 'destroy'])->name('designer.destroy');
 Route::post('studio/designer/advice', [DesignerController::class, 'advise'])->middleware('throttle:6,1')->name('designer.advice');
-Route::post('studio/designer/options', [DesignerOptionController::class, 'store'])->middleware('throttle:30,1')->name('designer.options.store');
+Route::post('studio/designer/options', [DesignerOptionController::class, 'store'])->middleware('throttle:30,1,designer-options')->name('designer.options.store');
 Route::delete('studio/designer/options/{option}', [DesignerOptionController::class, 'destroy'])->whereNumber('option')->name('designer.options.destroy');
 
 Route::get('library', [DesignController::class, 'index'])->name('library.index');

@@ -41,6 +41,9 @@ use Throwable;
  */
 class CollectionDesigner
 {
+    /** Stored as the collection's error when the picture shows no garment. */
+    public const NOT_A_GARMENT = 'reference_not_garment';
+
     public function __construct(
         private readonly Ai $ai,
         private readonly DesignerInsights $insights,
@@ -116,11 +119,18 @@ class CollectionDesigner
             } else {
                 $brief['inspiration']['match'] = 'inspired';
                 $brief['reference_missing'] = true;
+                $brief['notes'] = self::withoutCopyNote($brief['notes'] ?? null);
                 $match = false;
             }
         }
         if ($match) {
-            $packet = [...$this->inspirationEvidence($store, $brief['inspiration']), ...$packet];
+            $original = $this->inspirationEvidence($store, $brief['inspiration']);
+            $packet = [...$original, ...$packet];
+            // Kept on every plan, a retry included, so the brand never reaches the names.
+            $brand = collect($original)->first()['competitor'] ?? null;
+            if (blank($brief['inspiration']['brand'] ?? null) && filled($brand) && $brand !== '—') {
+                $brief['inspiration']['brand'] = $brand;
+            }
         }
 
         if ($collection->fabric_image_path) {
@@ -178,6 +188,21 @@ class CollectionDesigner
         $data = $result->data;
         $raw = array_values(array_filter((array) ($data['concepts'] ?? []), 'is_array'));
         if ($raw === []) {
+            // Keep what the model read of the piece; only the concepts are templated.
+            $fallback = $this->fallback($brief, $roles, $insights);
+            $raw = $fallback['concepts'];
+            $data += $fallback;
+        }
+
+        // A copy needs the model's reading of the piece. Without it (a failed
+        // call, an empty answer) the brief falls back to inspiration rather
+        // than copying the picture against an invented design sheet.
+        if ($match && $this->ai->isLive() && (! $result->fromModel || ! is_string($data['ref_garment'] ?? null))) {
+            $brief['inspiration']['match'] = 'inspired';
+            $brief['reference_unread'] = true;
+            $brief['notes'] = self::withoutCopyNote($brief['notes'] ?? null);
+            $match = false;
+            $roles = FashionVocabulary::roleMix((int) $brief['creativity'], (int) $brief['count'], $insights['competitor_hits'] !== []);
             $data = $this->fallback($brief, $roles, $insights);
             $raw = $data['concepts'];
         }
@@ -185,7 +210,8 @@ class CollectionDesigner
         $reference = null;
         if ($match) {
             if (($data['ref_is_garment'] ?? true) === false) {
-                throw new RuntimeException(__('mojo.designer_reference_not_garment'));
+                // A code the studio translates for the viewer.
+                throw new RuntimeException(self::NOT_A_GARMENT);
             }
             // The picture decides what the piece is.
             $seen = $data['ref_garment'] ?? null;
@@ -239,6 +265,10 @@ class CollectionDesigner
             $render = $this->prompts->render($brief['render'] ?? 'ghost', $concept, $brief['modesty'] ?? 'strict');
             $useFabric = $collection->fabric_image_path && $render !== 'flat' && Storage::disk('public')->exists($collection->fabric_image_path);
             $copy = self::matches($brief) && $this->hasReference($collection);
+            if ($copy && $useFabric && InlineImage::fromDisk((string) $collection->fabric_image_path) === null) {
+                // Not JPEG, PNG or WebP, or too large: the fabric type describes it instead.
+                $useFabric = false;
+            }
             $prompt = $this->prompts->build($brief, $concept, (bool) $useFabric, $copy);
             // Copying a piece: Image 1 is the piece, Image 2 the merchant's fabric.
             $references = $copy ? [
@@ -482,19 +512,25 @@ class CollectionDesigner
         ];
 
         if ($reference !== null) {
-            $concept = $this->followReference($concept, $raw, $reference, $index, $garment);
-            // Only the nearest allowed key, recorded so the prompt can name each change.
+            $modesty = $brief['modesty'] ?? 'strict';
+            $concept = $this->followReference($concept, $raw, $reference, $index, $modesty, $allowed);
+            // Measured against the piece: every key the level does not allow is
+            // changed to the nearest allowed one (or the variant's own allowed
+            // choice) and recorded, so the prompt names each change.
             $concept['modesty_changes'] = [];
             foreach (['neckline', 'sleeve', 'length', 'silhouette'] as $field) {
-                $to = FashionVocabulary::nearestAllowed($field, $concept[$field], $brief['modesty'] ?? 'strict', $allowed[$field]);
-                if ($to !== $concept[$field]) {
-                    $concept['modesty_changes'][] = ['field' => $field, 'from' => $concept[$field], 'to' => $to];
-                    $concept[$field] = $to;
+                $original = $reference[$field];
+                if (in_array($original, $allowed[$field], true)) {
+                    continue;
                 }
+                if ($concept[$field] === $original || ! in_array($concept[$field], $allowed[$field], true)) {
+                    $concept[$field] = FashionVocabulary::nearestAllowed($field, $original, $modesty, $allowed[$field]);
+                }
+                $concept['modesty_changes'][] = ['field' => $field, 'from' => $original, 'to' => $concept[$field]];
             }
             $concept['variant_of_en'] = $index === 0 ? '' : mb_substr($this->text($raw['variant_of_en'] ?? null), 0, 200);
             $concept['design_notes_en'] = mb_substr($this->text($raw['design_notes_en'] ?? null), 0, 600);
-            $concept = $this->withoutBrand($concept, $brief['inspiration']['brand'] ?? null);
+            $concept = $this->withoutBrand($concept, $brief['inspiration']['brand'] ?? null, $defaults);
         } else {
             // Anything the modesty level leaves out falls back to a covered choice.
             $forbidden = FashionVocabulary::forbidden($brief['modesty'] ?? 'strict');
@@ -742,14 +778,17 @@ class CollectionDesigner
     /**
      * A copy keeps the piece's construction. The first concept is the piece
      * as it is; each later one may change one of length, sleeve, closure
-     * or embellishment, in that order of preference, and nothing else.
+     * or embellishment, in that order of preference, and nothing else. The
+     * planner's own modesty fix (the nearest allowed key) is not a change:
+     * it is applied, and recorded, by clean().
      *
      * @param  array<string, mixed>  $concept
      * @param  array<string, mixed>  $raw
      * @param  array<string, mixed>  $reference
+     * @param  array<string, list<string>>  $allowed
      * @return array<string, mixed>
      */
-    private function followReference(array $concept, array $raw, array $reference, int $index, string $garment): array
+    private function followReference(array $concept, array $raw, array $reference, int $index, string $modesty, array $allowed): array
     {
         foreach (['silhouette', 'neckline', 'sleeve', 'length', 'closure', 'placement', 'embellishments'] as $field) {
             $concept[$field] = $reference[$field];
@@ -761,7 +800,8 @@ class CollectionDesigner
         $details = FashionVocabulary::details();
         foreach (['length', 'sleeve', 'closure'] as $field) {
             $value = $raw[$field] ?? null;
-            if (is_string($value) && $value !== $reference[$field] && isset($details[$field][$value])) {
+            $base = $field === 'closure' ? $reference[$field] : FashionVocabulary::nearestAllowed($field, $reference[$field], $modesty, $allowed[$field]);
+            if (is_string($value) && $value !== $reference[$field] && $value !== $base && in_array($value, $allowed[$field], true)) {
                 $concept[$field] = $value;
 
                 return $concept;
@@ -776,23 +816,40 @@ class CollectionDesigner
     }
 
     /**
-     * The competitor's name never ends up in the merchant's own design.
+     * The competitor's name never ends up in the merchant's own design: as a
+     * whole word only ("ريم" stays in "كريمي"), and a name left empty takes
+     * the role's default.
      *
      * @param  array<string, mixed>  $concept
+     * @param  array<string, string>  $defaults
      * @return array<string, mixed>
      */
-    private function withoutBrand(array $concept, ?string $brand): array
+    private function withoutBrand(array $concept, ?string $brand, array $defaults): array
     {
         $brand = trim((string) $brand);
         if (mb_strlen($brand) < 2) {
             return $concept;
         }
         foreach (['name_ar', 'name_en', 'pitch_ar', 'pitch_en'] as $field) {
-            $text = str_ireplace($brand, '', (string) $concept[$field]);
+            $text = preg_replace('/(?<![\p{L}\p{N}])'.preg_quote($brand, '/').'(?![\p{L}\p{N}])/iu', '', (string) $concept[$field]) ?? (string) $concept[$field];
             $concept[$field] = trim((string) preg_replace(['/\s{2,}/u', '/\s+([،,.:؛])/u', '/^[\s،,.:؛\-–—]+|[\s،,:؛\-–—]+$/u'], [' ', '$1', ''], $text));
+        }
+        foreach (['name_ar', 'name_en'] as $field) {
+            $concept[$field] = $concept[$field] !== '' ? $concept[$field] : $defaults[$field];
         }
 
         return $concept;
+    }
+
+    /**
+     * The brief's notes without the automatic "design like this" note, for
+     * a brief that no longer copies the piece.
+     */
+    public static function withoutCopyNote(?string $notes): ?string
+    {
+        $notes = trim((string) $notes);
+
+        return $notes === '' || in_array($notes, [DesignerPrompt::matchNote('ar'), DesignerPrompt::matchNote('en')], true) ? null : $notes;
     }
 
     /**
@@ -1009,11 +1066,16 @@ class CollectionDesigner
             kind: 'design',
             titleAr: $failed ? "تعذّر إكمال مجموعة «{$title}»" : "مجموعتك جاهزة: «{$title}»",
             titleEn: $failed ? "The collection “{$collection->title_en}” stopped" : "Your collection is ready: “{$collection->title_en}”",
-            bodyAr: $failed ? (string) $collection->error : "رسم المصمم الذكي {$ready} تصاميم مع بطاقاتها الفنية.",
-            bodyEn: $failed ? (string) $collection->error : "The AI designer drew {$ready} designs with their design sheets.",
+            bodyAr: $failed ? $this->errorText($collection->error, 'ar') : "رسم المصمم الذكي {$ready} تصاميم مع بطاقاتها الفنية.",
+            bodyEn: $failed ? $this->errorText($collection->error, 'en') : "The AI designer drew {$ready} designs with their design sheets.",
             url: "/store/studio?collection={$collection->id}",
             storeId: $collection->store_id,
             level: $failed ? 'danger' : 'success',
         ));
+    }
+
+    private function errorText(?string $error, string $locale): string
+    {
+        return $error === self::NOT_A_GARMENT ? (string) __('mojo.designer_reference_not_garment', [], $locale) : (string) $error;
     }
 }

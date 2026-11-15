@@ -83,6 +83,7 @@ export function BriefPanel({
     onClearReused,
     categories = [],
     customFabrics = [],
+    copyNote = null,
 }: {
     form: InertiaFormProps<BriefForm>;
     vocabulary: FashionVocabulary;
@@ -93,6 +94,8 @@ export function BriefPanel({
     onSubmit: () => void;
     reusedFabricUrl?: string | null;
     onClearReused?: () => void;
+    /** The "design like this" note the prefill wrote, removed when inspiration is chosen. */
+    copyNote?: string | null;
 }) {
     const { t, tr, locale } = useI18n();
     const count = useCount();
@@ -218,6 +221,19 @@ export function BriefPanel({
                                                               3,
                                                           )
                                                         : data.count,
+                                                // The copy note goes with the copy.
+                                                notes:
+                                                    v === 'inspired' &&
+                                                    copyNote &&
+                                                    data.notes.trim() ===
+                                                        copyNote
+                                                        ? ''
+                                                        : v === 'close' &&
+                                                            copyNote &&
+                                                            data.notes.trim() ===
+                                                                ''
+                                                          ? copyNote
+                                                          : data.notes,
                                             }))
                                         }
                                     />
