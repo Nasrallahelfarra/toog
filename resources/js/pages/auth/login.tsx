@@ -1,7 +1,6 @@
 import { Form, Head } from '@inertiajs/react';
 import { ShieldCheck, Store } from 'lucide-react';
 import InputError from '@/components/input-error';
-import PasskeyVerify from '@/components/passkey-verify';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
@@ -10,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { useI18n } from '@/hooks/use-i18n';
-import { register } from '@/routes';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';
 
@@ -47,8 +45,6 @@ export default function Login({ status, canResetPassword }: Props) {
             {status && (
                 <div className="bg-warning-soft text-warning rounded-xl px-4 py-3 text-sm font-medium">{status}</div>
             )}
-
-            <PasskeyVerify label={t.auth.passkey} separator={t.auth.or} />
 
             <Form {...store.form()} resetOnSuccess={['password']} className="flex flex-col gap-5">
                 {({ processing, errors }) => (
@@ -101,12 +97,6 @@ export default function Login({ status, canResetPassword }: Props) {
                             {t.auth.login}
                         </Button>
 
-                        <div className="text-muted-foreground text-center text-sm">
-                            {t.auth.noAccount}{' '}
-                            <TextLink href={register()} tabIndex={5}>
-                                {t.auth.createAccount}
-                            </TextLink>
-                        </div>
                     </>
                 )}
             </Form>
