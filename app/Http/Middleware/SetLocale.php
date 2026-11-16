@@ -15,7 +15,8 @@ class SetLocale
 
     public function handle(Request $request, Closure $next): Response
     {
-        $locale = $request->user()?->locale ?? $request->session()->get('locale') ?? config('app.locale');
+        // Not the environment's APP_LOCALE: the platform opens in Arabic.
+        $locale = $request->user()?->locale ?? $request->session()->get('locale') ?? 'ar';
 
         app()->setLocale(in_array($locale, self::SUPPORTED, true) ? $locale : 'ar');
 
