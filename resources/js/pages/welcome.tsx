@@ -24,7 +24,6 @@ const copy = {
         title: 'لا تطرح منتجًا قبل أن تعرف فرصته',
         subtitle:
             'طوق يقيّم كل منتج أو تصميم جديد مقابل مبيعات متجرك وتوجهات المنافسين وذوق العميل السعودي، ثم يوصي بالقبول أو الرفض أو التعديل — ويولّد النسخة المحسّنة بهوية متجرك.',
-        start: 'ابدأ مجانًا',
         login: 'تسجيل الدخول',
         dashboard: 'لوحة التحكم',
         stats: [
@@ -51,7 +50,6 @@ const copy = {
         title: 'Never launch a product before you know its odds',
         subtitle:
             'طوق scores every new product or design against your store’s sales, competitor trends and Saudi shopper taste, recommends accept, reject or modify — and generates the improved version in your brand.',
-        start: 'Get started',
         login: 'Sign in',
         dashboard: 'Dashboard',
         stats: [
@@ -111,14 +109,9 @@ export default function Welcome() {
                                 <Link href="/dashboard">{c.dashboard}</Link>
                             </Button>
                         ) : (
-                            <>
-                                <Button asChild variant="ghost" className="text-white hover:bg-white/10 hover:text-white">
-                                    <Link href="/login">{c.login}</Link>
-                                </Button>
-                                <Button asChild variant="gold" className="hidden sm:inline-flex">
-                                    <Link href="/register">{c.start}</Link>
-                                </Button>
-                            </>
+                            <Button asChild variant="gold">
+                                <Link href="/login">{c.login}</Link>
+                            </Button>
                         )}
                     </nav>
                 </header>
@@ -139,16 +132,11 @@ export default function Welcome() {
                         </FadeIn>
                         <FadeIn delay={0.24} className="flex flex-wrap gap-3">
                             <Button asChild size="lg" variant="gold" className="h-12 px-6 text-base">
-                                <Link href={auth.user ? '/dashboard' : '/register'}>
-                                    {auth.user ? c.dashboard : c.start}
+                                <Link href={auth.user ? '/dashboard' : '/login'}>
+                                    {auth.user ? c.dashboard : c.login}
                                     <Arrow className="size-4" />
                                 </Link>
                             </Button>
-                            {!auth.user && (
-                                <Button asChild size="lg" variant="ghost" className="h-12 px-6 text-base text-white ring-1 ring-white/20 hover:bg-white/10 hover:text-white">
-                                    <Link href="/login">{c.login}</Link>
-                                </Button>
-                            )}
                         </FadeIn>
                     </div>
 
@@ -218,8 +206,8 @@ export default function Welcome() {
                     <h2 className="text-3xl font-semibold tracking-tight">{c.cta}</h2>
                     <p className="text-muted-foreground">{c.ctaBody}</p>
                     <Button asChild size="lg" className="h-12 px-8 text-base">
-                        <Link href={auth.user ? '/dashboard' : '/register'}>
-                            {auth.user ? c.dashboard : c.start}
+                        <Link href={auth.user ? '/dashboard' : '/login'}>
+                            {auth.user ? c.dashboard : c.login}
                             <Arrow className="size-4" />
                         </Link>
                     </Button>
