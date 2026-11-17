@@ -1,4 +1,4 @@
-import { router, usePoll } from '@inertiajs/react';
+import { router } from '@inertiajs/react';
 import {
     AlertTriangle,
     CheckCircle2,
@@ -17,6 +17,7 @@ import { SectionCard } from '@/components/mojo/section-card';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/hooks/use-i18n';
 import { cn } from '@/lib/utils';
+import { useQuietPoll } from '@/hooks/use-quiet-poll';
 
 export type FeatureExtractionRun = {
     id: number;
@@ -52,7 +53,7 @@ function ExtractionPoller({
 }: {
     onNetwork: (failed: boolean) => void;
 }) {
-    usePoll(4000, {
+    useQuietPoll(4000, {
         only: ['sync', 'extraction'],
         onSuccess: () => onNetwork(false),
         onNetworkError: () => {

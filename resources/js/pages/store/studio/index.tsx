@@ -1,4 +1,4 @@
-import { Link, router, useForm, usePage, usePoll } from '@inertiajs/react';
+import { Link, router, useForm, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
     Camera,
@@ -44,6 +44,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useI18n } from '@/hooks/use-i18n';
 import { useVocabulary } from '@/hooks/use-vocabulary';
 import { cn } from '@/lib/utils';
+import { useQuietPoll } from '@/hooks/use-quiet-poll';
 
 type RequestType = 'modification' | 'new_idea' | 'mockup' | 'refinement';
 type OutputType = 'product_photo' | 'print_file' | 'mockup_white' | 'mockup_model' | 'lifestyle' | 'social';
@@ -656,7 +657,7 @@ function Segment({ label, options, value, onChange, ltr }: { label: string; opti
 }
 
 function Poll() {
-    usePoll(2500, { only: ['requests'] });
+    useQuietPoll(2500, { only: ['requests'] });
 
     return null;
 }

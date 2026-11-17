@@ -1,4 +1,4 @@
-import { Link, router, useForm, usePoll } from '@inertiajs/react';
+import { Link, router, useForm } from '@inertiajs/react';
 import {
     AlertTriangle,
     ArrowUpRight,
@@ -56,6 +56,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useI18n } from '@/hooks/use-i18n';
 import { cn } from '@/lib/utils';
+import { useQuietPoll } from '@/hooks/use-quiet-poll';
 
 type Props = {
     competitors: Competitor[];
@@ -87,7 +88,7 @@ const WINDOWS: Days[] = [7, 30, 90];
 const SOCIAL = ['instagram', 'tiktok', 'facebook', 'snapchat'];
 
 function ScanPoll({ onFailure }: { onFailure: (failed: boolean) => void }) {
-    usePoll(2000, {
+    useQuietPoll(2000, {
         only: ['competitors', 'selected', 'stats', 'lastScan'],
         onSuccess: () => onFailure(false),
         onNetworkError: () => {

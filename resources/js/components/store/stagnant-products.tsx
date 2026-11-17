@@ -1,4 +1,4 @@
-import { Link, usePoll } from '@inertiajs/react';
+import { Link } from '@inertiajs/react';
 import {
     AlertCircle,
     ArrowUpRight,
@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { useI18n } from '@/hooks/use-i18n';
 import { useVocabulary } from '@/hooks/use-vocabulary';
 import { cn } from '@/lib/utils';
+import { useQuietPoll } from '@/hooks/use-quiet-poll';
 
 export type Recovery = {
     id: number;
@@ -75,7 +76,7 @@ export type StagnantDashboard = StagnantSummary & {
 
 /** Keeps the cards' recommendation status fresh while one is being prepared. */
 function RecommendationPoll({ dashboard }: { dashboard: boolean }) {
-    usePoll(3000, {
+    useQuietPoll(3000, {
         only: [dashboard ? 'stagnant' : 'products'],
         onHttpException: () => false,
         onNetworkError: () => false,

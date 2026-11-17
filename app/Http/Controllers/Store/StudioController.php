@@ -107,18 +107,19 @@ class StudioController extends Controller
                 ->map(fn (DesignCollection $c) => DesignerController::present($c)),
             'openCollection' => $collectionId ?: null,
             // "Design like this" from the competitor radar.
-            'designerPrefill' => DesignerController::inspire($store, $request->string('inspire')->toString()),
+            'designerPrefill' => fn () => DesignerController::inspire($store, $request->string('inspire')->toString()),
             // Store intelligence for the designer's rail: loaded after the page.
             'insights' => Inertia::defer(fn () => $insights->build($store)),
             // A prompt handed over from another page, e.g. a market trend.
             'prefillPrompt' => $request->string('prompt')->limit(500)->toString() ?: null,
             'source' => $source,
             'brand' => $store->brand_guide ?? [],
-            'trends' => Trend::query()->where('store_id', $store->id)->where('status', 'rising')->orderByDesc('momentum')->take(8)
+            // Closures: a background check (only collections or requests) skips them.
+            'trends' => fn () => Trend::query()->where('store_id', $store->id)->where('status', 'rising')->orderByDesc('momentum')->take(8)
                 ->get(['id', 'type', 'value', 'name_ar', 'name_en', 'momentum', 'saturation', 'in_catalog']),
-            'categories' => Product::query()->where('store_id', $store->id)->whereNotNull('category')->distinct()->pluck('category'),
+            'categories' => fn () => Product::query()->where('store_id', $store->id)->whereNotNull('category')->distinct()->pluck('category'),
             'since' => $since ?: null,
-            'requests' => DesignRequest::query()
+            'requests' => fn () => DesignRequest::query()
                 ->where('store_id', $store->id)
                 ->when($since, fn ($q) => $q->where(fn ($q) => $q->where('id', '>', $since)->orWhereIn('status', ['pending', 'processing'])))
                 ->with(['designs' => fn ($q) => $q->orderBy('id'), 'parentDesign'])

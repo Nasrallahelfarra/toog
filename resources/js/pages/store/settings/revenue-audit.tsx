@@ -1,4 +1,4 @@
-import { Link, router, useForm, usePoll } from '@inertiajs/react';
+import { Link, router, useForm } from '@inertiajs/react';
 import {
     AlertTriangle,
     ArrowLeftRight,
@@ -32,6 +32,7 @@ import { useClipboard } from '@/hooks/use-clipboard';
 import { useI18n } from '@/hooks/use-i18n';
 import type { Dictionary } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { useQuietPoll } from '@/hooks/use-quiet-poll';
 
 type Strings = Dictionary['revenueAudit'];
 type FindingCode = keyof Strings['findings'];
@@ -139,7 +140,7 @@ export default function RevenueAudit({ connected, months, audit, history }: Prop
 }
 
 function Poller() {
-    usePoll(3000, { only: ['audit', 'history'] });
+    useQuietPoll(3000, { only: ['audit', 'history'] });
 
     return null;
 }
