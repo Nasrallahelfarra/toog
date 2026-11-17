@@ -171,6 +171,7 @@ export const performance: typeof ar = {
     orders: 'Orders',
     returns: 'Returns',
 
+    categoryClassLink: 'Show {class} products in “{category}”',
     categoriesTitle: 'Performance by category',
     uncategorized: 'Uncategorized',
 

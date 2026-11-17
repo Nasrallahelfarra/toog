@@ -230,7 +230,9 @@ export default function Performance(props: Props) {
                         </FadeIn>
                     </div>
 
-                    <ProductsSection products={props.products} filters={props.filters} categoryNames={props.categoryNames} />
+                    <div id={PRODUCTS_ID} className="scroll-mt-20">
+                        <ProductsSection products={props.products} filters={props.filters} categoryNames={props.categoryNames} />
+                    </div>
                 </>
             )}
         </PageBody>
@@ -492,6 +494,29 @@ function UnitsTrend({ trend }: { trend: Props['trend'] }) {
     );
 }
 
+const PRODUCTS_ID = 'performance-products';
+
+const CLASS_LINKS = [
+    { key: 'winner', count: 'winners', tone: 'text-success' },
+    { key: 'average', count: 'average', tone: 'text-info' },
+    { key: 'at_risk', count: 'at_risk', tone: 'text-warning' },
+    { key: 'stagnant', count: 'stagnant', tone: 'text-danger' },
+] as const;
+
+/** Filter the products table below to one category and class, and bring it into view. */
+function showProducts(performanceClass: string, category: string) {
+    router.get(
+        '/store/performance',
+        { class: performanceClass, category },
+        {
+            preserveState: true,
+            preserveScroll: true,
+            only: ['products', 'filters'],
+            onSuccess: () => document.getElementById(PRODUCTS_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+        },
+    );
+}
+
 function CategoryBreakdown({ categories }: { categories: Props['categories'] }) {
     const { t, tr, money, number } = useI18n();
     const p = t.performance;
@@ -519,10 +544,26 @@ function CategoryBreakdown({ categories }: { categories: Props['categories'] }) 
                             })}
                         </div>
                         <div className="text-muted-foreground flex flex-wrap gap-3 text-[11px]">
-                            <span className="text-success">{t.common.performanceClass.winner} {number(c.winners)}</span>
-                            <span className="text-info">{t.common.performanceClass.average} {number(c.average)}</span>
-                            <span className="text-warning">{t.common.performanceClass.at_risk} {number(c.at_risk)}</span>
-                            <span className="text-danger">{t.common.performanceClass.stagnant} {number(c.stagnant)}</span>
+                            {CLASS_LINKS.map(({ key, count, tone }) => {
+                                const n = c[count];
+                                const text = `${t.common.performanceClass[key]} ${number(n)}`;
+                                // No products, or no category to filter by (neither page can): plain text.
+                                const category = c.category;
+                                if (!n || !category) return <span key={key} className={cn(tone, !n && 'opacity-60')}>{text}</span>;
+                                const className = cn(tone, 'cursor-pointer rounded underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none');
+                                const title = tr(p.categoryClassLink, { class: t.common.performanceClass[key], category });
+
+                                // Stagnant and at-risk products open their recovery page; the rest filter the table below.
+                                return key === 'at_risk' || key === 'stagnant' ? (
+                                    <Link key={key} href="/store/stagnant" data={{ class: key, category }} className={className} title={title}>
+                                        {text}
+                                    </Link>
+                                ) : (
+                                    <button key={key} type="button" className={className} title={title} onClick={() => showProducts(key, category)}>
+                                        {text}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </StaggerItem>
                 ))}

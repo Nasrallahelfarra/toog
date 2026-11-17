@@ -170,6 +170,7 @@ export const performance = {
     orders: 'الطلبات',
     returns: 'المرتجعات',
 
+    categoryClassLink: 'اعرض منتجات «{category}» المصنّفة {class}',
     categoriesTitle: 'الأداء حسب الفئة',
     uncategorized: 'بدون فئة',
 
