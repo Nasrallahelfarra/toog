@@ -35,6 +35,9 @@ class MarketTrends
 
     private const GROUPS = ['color' => 'colors', 'pattern' => 'patterns', 'material' => 'materials', 'style' => 'styles'];
 
+    /** Posts showing an attribute before their shares stand in for a catalog. */
+    private const MIN_POSTS = 5;
+
     /** Units over both windows before a value's own trend is trusted. */
     private const MIN_UNITS = 10;
 
@@ -99,8 +102,12 @@ class MarketTrends
                 'excluded' => $excluded,
                 'posts' => $posts->count(),
                 'hot_posts' => $lifted->filter(fn (array $p) => $p['lift'] >= 2)->count(),
+                // Posts whose picture shows a garment, used as products.
+                'product_posts' => $posts->filter(fn (array $p) => $p['garment'] !== null || $p['attrs']['color'] !== [])->count(),
                 'scanned_at' => collect([$products->max('seen_at'), $posts->max('seen_at')])->filter()->max(),
                 'own_products' => $own->count(),
+                // Each competitor's part in the reading, so an empty page explains itself.
+                'competitors' => $this->competitorCoverage($store, $live, $products, $posts),
                 'units' => $this->unitsNow,
             ],
             'opportunities' => $opportunities,
@@ -166,6 +173,51 @@ class MarketTrends
     }
 
     /**
+     * What each competitor contributes and, when it contributes no
+     * products, why: paused, a social account (posts only), never scanned,
+     * sample data, an old scan, or nothing that is womenswear.
+     *
+     * @param  Collection<int, array<string, mixed>>  $products
+     * @param  Collection<int, array<string, mixed>>  $posts
+     * @return list<array<string, mixed>>
+     */
+    private function competitorCoverage(Store $store, bool $live, Collection $products, Collection $posts): array
+    {
+        $used = $products->countBy('competitor_id');
+        $shown = $posts->countBy('competitor_id');
+        $rows = CompetitorProduct::query()->where('store_id', $store->id)
+            ->get(['competitor_id', 'evidence', 'last_seen_at'])->groupBy('competitor_id');
+
+        return Competitor::query()->where('store_id', $store->id)->orderBy('id')->get()
+            ->map(function (Competitor $c) use ($live, $used, $shown, $rows) {
+                $all = $rows->get($c->id, collect());
+                $real = $live ? $all->filter(fn (CompetitorProduct $p) => $p->evidence !== null) : $all;
+                $recent = $real->filter(fn (CompetitorProduct $p) => $p->last_seen_at === null || $p->last_seen_at->gte(now()->subDays(45)));
+                $products = (int) ($used[$c->id] ?? 0);
+                $postCount = (int) ($shown[$c->id] ?? 0);
+
+                return [
+                    'id' => $c->id,
+                    'name' => $c->name,
+                    'platform' => $c->platform,
+                    'products' => $products,
+                    'posts' => $postCount,
+                    'failed' => filled($c->last_error),
+                    'status' => match (true) {
+                        ! $c->is_active => 'inactive',
+                        $products > 0 => 'ok',
+                        $c->isSocial() => $postCount > 0 ? 'social' : 'social_empty',
+                        $all->isEmpty() => 'never_scanned',
+                        $real->isEmpty() => 'sample',
+                        $recent->isEmpty() => 'stale',
+                        default => 'not_clothing',
+                    },
+                ];
+            })
+            ->values()->all();
+    }
+
+    /**
      * Competitor products seen in the last 45 days, with their attributes
      * and a demand weight from the store's own public signals.
      *
@@ -193,6 +245,7 @@ class MarketTrends
 
             return [
                 'id' => $cp->id,
+                'competitor_id' => $cp->competitor_id,
                 'name' => $cp->name,
                 'image_url' => $cp->image_url,
                 'url' => $cp->url,
@@ -251,16 +304,23 @@ class MarketTrends
                 'style' => $tags['style'] ?? $text['style'] ?? null,
             ];
             $garment = is_string($read['garment'] ?? null) && isset(FashionVocabulary::garments()[$read['garment']]) ? $read['garment'] : $tags['garment'];
+            // Read and found to show no garment (an announcement, a quote): not a product.
+            $product = PostLookReader::look($p)['product'] !== false;
 
             return [
                 'id' => $p->id,
+                'competitor_id' => $p->competitor_id,
                 'competitor' => (string) ($active[$p->competitor_id] ?? ''),
                 'brand' => CompetitorSignals::brand((string) ($active[$p->competitor_id] ?? $p->competitor_id)),
                 'platform' => $p->platform,
                 'url' => $p->url,
                 'image_url' => CompetitorRadar::image($p),
-                'attrs' => $this->attributes($features, $garment),
+                'name' => mb_substr(trim((string) $p->caption), 0, 80),
+                'garment' => $product ? $garment : null,
+                'attrs' => $product ? $this->attributes($features, $garment) : $this->attributes([], null),
                 'lift' => $lifts[$p->id]['lift'] ?? null,
+                // A post counts once, a little more when it beat its account's usual.
+                'weight' => max(0.5, min(3.0, (float) ($lifts[$p->id]['lift'] ?? 1.0))),
                 'baseline' => $lifts[$p->id]['baseline'] ?? 0,
                 'seen_at' => ($p->posted_at ?? $p->created_at)?->toIso8601String(),
             ];
@@ -282,6 +342,7 @@ class MarketTrends
 
         foreach (self::TYPES as $type) {
             $withType = $products->filter(fn (array $p) => $p['attrs'][$type] !== []);
+            $postsWithType = $posts->filter(fn (array $p) => $p['attrs'][$type] !== []);
             $total = $withType->sum('weight');
             $values = $withType->flatMap(fn (array $p) => $p['attrs'][$type])
                 ->concat($posts->flatMap(fn (array $p) => $p['attrs'][$type]))->unique();
@@ -291,18 +352,34 @@ class MarketTrends
                 $showing = $posts->filter(fn (array $p) => in_array($value, $p['attrs'][$type], true));
                 $measured = $showing->filter(fn (array $p) => $p['lift'] !== null && $p['baseline'] >= CompetitorSignals::SMALL_BASELINE);
 
+                // Posts are pictures of products: without a store catalog for
+                // this attribute, the share is the value's share of the posts.
+                $byPosts = $withType->count() < 10 && $postsWithType->count() >= self::MIN_POSTS;
+
                 $out["{$type}:{$value}"] = [
-                    // A share needs a catalog to be a share of.
-                    'pct' => $withType->count() >= 10 && $total > 0 ? (int) round($carriers->sum('weight') / $total * 100) : null,
+                    'basis' => $byPosts ? 'posts' : 'products',
+                    // A share needs a catalog (or enough posts) to be a share of.
+                    'pct' => match (true) {
+                        $byPosts => (int) round($showing->sum('weight') / max(0.001, $postsWithType->sum('weight')) * 100),
+                        $withType->count() >= 10 && $total > 0 => (int) round($carriers->sum('weight') / $total * 100),
+                        default => null,
+                    },
+                    'shown' => $showing->count(),
                     'items' => $carriers->count(),
                     'brands' => $carriers->pluck('brand')->concat($showing->pluck('brand'))->unique()->count(),
                     'demand' => $carriers->where('demand', true)->count(),
                     'new' => $carriers->where('new', true)->count(),
                     'posts' => $measured->count(),
                     'post_lift' => $measured->count() >= 2 ? round((float) $measured->pluck('lift')->median(), 1) : null,
-                    'examples' => $carriers->sortByDesc(fn (array $p) => [$p['weight'], $p['published_sales'] ?? 0])->take(3)
-                        ->map(fn (array $p) => array_intersect_key($p, array_flip(['id', 'name', 'image_url', 'url', 'competitor', 'published_sales', 'best_seller', 'price', 'currency', 'garment'])))
-                        ->values()->all(),
+                    'examples' => $byPosts
+                        ? $showing->sortByDesc('weight')->take(3)->map(fn (array $p) => [
+                            'id' => $p['id'], 'name' => $p['name'], 'image_url' => $p['image_url'], 'url' => $p['url'], 'competitor' => $p['competitor'],
+                            'published_sales' => null, 'best_seller' => false, 'price' => null, 'currency' => null, 'garment' => $p['garment'],
+                            'lift' => $p['baseline'] >= CompetitorSignals::SMALL_BASELINE ? $p['lift'] : null, 'post' => true,
+                        ])->values()->all()
+                        : $carriers->sortByDesc(fn (array $p) => [$p['weight'], $p['published_sales'] ?? 0])->take(3)
+                            ->map(fn (array $p) => [...array_intersect_key($p, array_flip(['id', 'name', 'image_url', 'url', 'competitor', 'published_sales', 'best_seller', 'price', 'currency', 'garment'])), 'lift' => null, 'post' => false])
+                            ->values()->all(),
                 ];
             }
         }
@@ -403,6 +480,8 @@ class MarketTrends
         // posts showing it that beat their accounts' usual engagement.
         $strong = $m !== null && (
             ($m['items'] >= 5 && $m['pct'] !== null && (($m['pct'] >= 12 && ($m['brands'] >= 2 || $m['demand'] >= 3)) || ($m['pct'] >= 25 && $m['items'] >= 8)))
+            // Read from posts: shown in at least three of them and a clear share.
+            || ($m['basis'] === 'posts' && $m['shown'] >= 3 && $m['pct'] >= 15)
             || ($m['posts'] >= 2 && $m['post_lift'] !== null && $m['post_lift'] >= 1.5)
         );
         $change = $mine['change_pct'] ?? null;
@@ -429,7 +508,7 @@ class MarketTrends
             'verdict' => $verdict,
             'strong' => $strong,
             'heat' => round($heat, 1),
-            'market' => $m !== null && ($m['items'] > 0 || $m['posts'] > 0) ? [...$m, 'crowded' => ($m['pct'] ?? 0) >= 40 && $m['brands'] >= 3] : null,
+            'market' => $m !== null && ($m['items'] > 0 || $m['posts'] > 0 || $m['shown'] > 0) ? [...$m, 'crowded' => ($m['pct'] ?? 0) >= 40 && $m['brands'] >= 3] : null,
             'mine' => $mine,
             'design_href' => '/store/studio?mode=designer&inspire='.rawurlencode("attr:{$type}:{$value}"),
             'evaluate_href' => match ($type) {

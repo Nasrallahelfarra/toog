@@ -20,6 +20,7 @@ import { useState } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts';
 import { SectionHead } from '@/components/market/radar/parts';
 import {
+    CompetitorCoverageCard,
     FocusCard,
     MoverRow,
     OpportunityCard,
@@ -131,6 +132,8 @@ export default function Market({ board, reviews, lastAnalysis }: Props) {
             />
 
             <SourcesBar board={board} />
+
+            <CompetitorCoverageCard board={board} />
 
             <SummaryNav board={board} />
 

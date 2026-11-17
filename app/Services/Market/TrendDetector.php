@@ -200,7 +200,11 @@ class TrendDetector
         $lifts = $this->competitorSignals->lifts($posts);
 
         $posts = $posts->map(fn (SocialPost $p) => [
-            'features' => $p->features ?: $this->features->fromText((string) $p->caption),
+            // The caption's words, completed by what the picture shows.
+            'features' => [
+                ...array_filter(['colors' => PostLookReader::look($p)['colors'], 'pattern' => PostLookReader::look($p)['pattern'], 'style' => PostLookReader::look($p)['style']]),
+                ...array_filter($p->features ?: $this->features->fromText((string) $p->caption)),
+            ],
             'recent' => (bool) ($p->posted_at ?? $p->created_at)?->greaterThan(now()->subDays(30)),
             'weight' => max(0.5, min(4.0, (float) ($lifts[$p->id]['lift'] ?? 1.0))),
             'platform' => $p->platform,

@@ -13,6 +13,9 @@ export type MarketExample = {
     price: number | null;
     currency: string | null;
     garment: GarmentKey | null;
+    /** A post read as a product, with its engagement against the account's usual. */
+    post: boolean;
+    lift: number | null;
 };
 
 export type MineExample = {
@@ -25,7 +28,11 @@ export type MineExample = {
 
 /** The value at the active competitors: catalog share, brands, posts. */
 export type MarketSide = {
+    /** The share is of the competitors' store products, or of their posts. */
+    basis: 'products' | 'posts';
     pct: number | null;
+    /** Posts showing the value. */
+    shown: number;
     items: number;
     brands: number;
     demand: number;
@@ -47,6 +54,25 @@ export type MineSide = {
     in_stock: number;
     stock: number;
     examples: MineExample[];
+};
+
+/** One competitor's part in the reading, and why it adds no products when it adds none. */
+export type CompetitorCoverage = {
+    id: number;
+    name: string;
+    platform: string;
+    products: number;
+    posts: number;
+    failed: boolean;
+    status:
+        | 'ok'
+        | 'inactive'
+        | 'social'
+        | 'social_empty'
+        | 'never_scanned'
+        | 'sample'
+        | 'stale'
+        | 'not_clothing';
 };
 
 export type TrendItem = {
@@ -80,9 +106,11 @@ export type Board = {
         excluded: number;
         posts: number;
         hot_posts: number;
+        product_posts: number;
         scanned_at: string | null;
         own_products: number;
         units: number;
+        competitors: CompetitorCoverage[];
     };
     opportunities: TrendItem[];
     focus: TrendItem[];
