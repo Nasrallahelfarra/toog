@@ -18,6 +18,7 @@ import { Analyzing } from '@/components/evaluation/analyzing';
 import { CriteriaBreakdown } from '@/components/evaluation/criteria-breakdown';
 import { DecisionPanel } from '@/components/evaluation/decision-panel';
 import { EvidencePanel } from '@/components/evaluation/evidence-panel';
+import { GenerateImprovedButton } from '@/components/evaluation/generate-improved-button';
 import { ProductReviewPanel } from '@/components/evaluation/product-review';
 import {
     useChangeSummary,
@@ -785,21 +786,27 @@ export default function EvaluationShow({
 
                 <SectionCard title={s.designs} icon={Wand2}>
                     {designs.length === 0 ? (
-                        <div className="flex flex-col items-start gap-3">
-                            <p className="text-sm text-muted-foreground">—</p>
-                            <Button size="sm" variant="soft" asChild>
-                                <Link
-                                    href={
-                                        hasReview
-                                            ? '#specialist-review'
-                                            : `/store/studio?evaluation=${ev.id}`
-                                    }
-                                >
-                                    <Wand2 className="size-3.5" />
-                                    {s.generateImproved}
-                                </Link>
-                            </Button>
-                        </div>
+                        hasReview ? (
+                            <GenerateImprovedButton
+                                evaluation={ev}
+                                improvements={improvements}
+                                canImprove={canImprove}
+                            />
+                        ) : (
+                            <div className="flex flex-col items-start gap-3">
+                                <p className="text-sm text-muted-foreground">
+                                    —
+                                </p>
+                                <Button size="sm" variant="soft" asChild>
+                                    <Link
+                                        href={`/store/studio?evaluation=${ev.id}`}
+                                    >
+                                        <Wand2 className="size-3.5" />
+                                        {s.generateImproved}
+                                    </Link>
+                                </Button>
+                            </div>
+                        )
                     ) : (
                         <div className="grid grid-cols-3 gap-2">
                             {designs.map((d) => (
