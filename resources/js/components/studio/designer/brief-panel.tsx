@@ -101,15 +101,21 @@ export function BriefPanel({
     const count = useCount();
     const d = t.designer.brief;
     const name = (entry: { ar: string; en: string }) => entry[locale];
-    const ready = Boolean(
-        form.data.fabric || form.data.fabric_image || form.data.fabric_from,
-    );
     // A competitor piece is copied unless the merchant asks for inspiration only.
     const copyable =
         form.data.inspiration?.kind === 'competitor' ||
         form.data.inspiration?.kind === 'social';
     const copying =
         copyable && (form.data.inspiration?.match ?? 'close') === 'close';
+    // A copy in the original's own fabric needs no fabric from the merchant.
+    const originalFabric =
+        copying && form.data.inspiration?.same_fabric === true;
+    const ready = Boolean(
+        originalFabric ||
+        form.data.fabric ||
+        form.data.fabric_image ||
+        form.data.fabric_from,
+    );
     const builtIn = form.data.fabric
         ? vocabulary.fabrics[form.data.fabric]
         : null;
@@ -183,7 +189,14 @@ export function BriefPanel({
                                     size="icon"
                                     className="size-8"
                                     onClick={() =>
-                                        form.setData('inspiration', null)
+                                        form.setData((data) => ({
+                                            ...data,
+                                            inspiration: null,
+                                            // "As the original" belonged to the copy.
+                                            modesty: copying
+                                                ? null
+                                                : data.modesty,
+                                        }))
                                     }
                                     aria-label={d.clearInspiration}
                                 >
@@ -211,8 +224,20 @@ export function BriefPanel({
                                                           match: v as
                                                               | 'close'
                                                               | 'inspired',
+                                                          same_fabric:
+                                                              v === 'close'
+                                                                  ? !(
+                                                                        data.fabric_image ||
+                                                                        data.fabric_from
+                                                                    )
+                                                                  : false,
                                                       }
                                                     : null,
+                                                // A copy is as bold as the original.
+                                                modesty:
+                                                    v === 'close'
+                                                        ? 'open'
+                                                        : null,
                                                 // A copy comes in at most three versions.
                                                 count:
                                                     v === 'close'
@@ -244,38 +269,85 @@ export function BriefPanel({
                                     </p>
                                 </div>
                             )}
+                            {copying && (
+                                <div className="space-y-1.5">
+                                    <p className="text-[11px] font-medium text-muted-foreground">
+                                        {d.match.fabricLabel}
+                                    </p>
+                                    <Segmented
+                                        options={['same', 'other']}
+                                        labels={{
+                                            same: d.match.sameFabric,
+                                            other: d.match.otherFabric,
+                                        }}
+                                        value={
+                                            originalFabric ? 'same' : 'other'
+                                        }
+                                        onChange={(v) =>
+                                            form.setData((data) => ({
+                                                ...data,
+                                                inspiration: data.inspiration
+                                                    ? {
+                                                          ...data.inspiration,
+                                                          same_fabric:
+                                                              v === 'same',
+                                                      }
+                                                    : null,
+                                            }))
+                                        }
+                                    />
+                                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                                        {originalFabric
+                                            ? d.match.sameFabricHint
+                                            : d.match.otherFabricHint}
+                                    </p>
+                                </div>
+                            )}
                         </motion.div>
                     )}
                 </AnimatePresence>
 
-                <Field label={d.fabricPhoto} pulse={pulse}>
-                    <FabricDrop
-                        file={form.data.fabric_image}
-                        reusedUrl={reusedFabricUrl ?? null}
-                        onClearReused={onClearReused}
-                        onChange={(file) =>
-                            form.setData((data) => ({
-                                ...data,
-                                fabric_image: file,
-                                fabric_from: file ? null : data.fabric_from,
-                            }))
-                        }
-                        onColors={(colors) =>
-                            colors.length &&
-                            form.setData('colors', colors.slice(0, MAX_COLORS))
-                        }
-                    />
-                    <InputError message={form.errors.fabric_image} />
-                </Field>
+                {!originalFabric && (
+                    <>
+                        <Field label={d.fabricPhoto} pulse={pulse}>
+                            <FabricDrop
+                                file={form.data.fabric_image}
+                                reusedUrl={reusedFabricUrl ?? null}
+                                onClearReused={onClearReused}
+                                onChange={(file) =>
+                                    form.setData((data) => ({
+                                        ...data,
+                                        fabric_image: file,
+                                        fabric_from: file
+                                            ? null
+                                            : data.fabric_from,
+                                    }))
+                                }
+                                onColors={(colors) =>
+                                    colors.length &&
+                                    form.setData(
+                                        'colors',
+                                        colors.slice(0, MAX_COLORS),
+                                    )
+                                }
+                            />
+                            <InputError message={form.errors.fabric_image} />
+                        </Field>
 
-                <Field label={d.fabricType} hint={fabricHint} pulse={pulse}>
-                    <FabricChips
-                        form={form}
-                        vocabulary={vocabulary}
-                        customFabrics={customFabrics}
-                    />
-                    <InputError message={form.errors.fabric} />
-                </Field>
+                        <Field
+                            label={d.fabricType}
+                            hint={fabricHint}
+                            pulse={pulse}
+                        >
+                            <FabricChips
+                                form={form}
+                                vocabulary={vocabulary}
+                                customFabrics={customFabrics}
+                            />
+                            <InputError message={form.errors.fabric} />
+                        </Field>
+                    </>
+                )}
 
                 <Field label={d.garment} pulse={pulse}>
                     <GarmentPicker
@@ -287,12 +359,23 @@ export function BriefPanel({
 
                 <Field
                     label={d.modesty}
-                    hint={d.modestyHints[modesty]}
+                    hint={
+                        copying && modesty === 'open'
+                            ? d.match.asOriginalHint
+                            : d.modestyHints[modesty]
+                    }
                     pulse={pulse}
                 >
                     <Segmented
                         options={['strict', 'standard', 'open']}
-                        labels={d.modestyLevels}
+                        labels={
+                            copying
+                                ? {
+                                      ...d.modestyLevels,
+                                      open: d.match.asOriginal,
+                                  }
+                                : d.modestyLevels
+                        }
                         value={modesty}
                         onChange={(v) =>
                             form.setData('modesty', v as BriefForm['modesty'])
@@ -318,12 +401,16 @@ export function BriefPanel({
                     </div>
                 </Field>
 
-                <Field label={d.colors} hint={d.colorsHint} pulse={pulse}>
-                    <ColorPicker
-                        value={form.data.colors}
-                        onChange={(colors) => form.setData('colors', colors)}
-                    />
-                </Field>
+                {!originalFabric && (
+                    <Field label={d.colors} hint={d.colorsHint} pulse={pulse}>
+                        <ColorPicker
+                            value={form.data.colors}
+                            onChange={(colors) =>
+                                form.setData('colors', colors)
+                            }
+                        />
+                    </Field>
+                )}
 
                 {!copying && (
                     <Field label={d.creativity}>

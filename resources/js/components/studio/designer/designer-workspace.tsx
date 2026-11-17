@@ -99,6 +99,9 @@ export function DesignerWorkspace({
         setCopyNote(copying ? (p.notes ?? null) : null);
         form.setData((data) => ({
             ...data,
+            // A copy is as bold as the original, in its own fabric unless the
+            // merchant already brought hers.
+            modesty: copying ? 'open' : data.modesty,
             garment: p.garment ?? data.garment,
             category: p.garment
                 ? (sectionFor(p.garment)?.name ?? null)
@@ -107,7 +110,13 @@ export function DesignerWorkspace({
             colors: p.colors?.length ? p.colors.slice(0, 4) : data.colors,
             occasion: p.occasion ?? data.occasion,
             notes: p.notes ?? data.notes,
-            inspiration,
+            inspiration:
+                inspiration && copying
+                    ? {
+                          ...inspiration,
+                          same_fabric: !(data.fabric_image || data.fabric_from),
+                      }
+                    : inspiration,
             // A copied piece: the piece itself and one version of it.
             count: copying ? 2 : data.count,
         }));
@@ -155,6 +164,11 @@ export function DesignerWorkspace({
                     fabric_image: null,
                     fabric_from: null,
                     inspiration: null,
+                    // "As the original" belonged to the copy.
+                    modesty:
+                        data.inspiration?.match === 'close'
+                            ? null
+                            : data.modesty,
                     notes: '',
                 }));
             },

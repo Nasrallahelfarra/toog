@@ -52,7 +52,13 @@ export function CollectionView({
         collection.status === 'pending' || collection.status === 'processing';
     const brief = collection.brief;
     const fabric = brief.fabric ? vocabulary.fabrics[brief.fabric] : null;
-    const fabricName = brief.fabric_custom ?? fabric?.[locale] ?? null;
+    // A copy in the original's own fabric says so, with the fabric it was read as.
+    const originalFabric =
+        brief.inspiration?.match === 'close' &&
+        brief.inspiration?.same_fabric === true;
+    const fabricName = originalFabric
+        ? c.originalFabric + (fabric ? ` (${fabric[locale]})` : '')
+        : (brief.fabric_custom ?? fabric?.[locale] ?? null);
     // The picture showed no garment: retrying would read it the same way.
     const notGarment = collection.error === 'reference_not_garment';
     const canCompare =
