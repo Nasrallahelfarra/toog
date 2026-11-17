@@ -82,6 +82,8 @@ export type Inspiration = {
     image_url: string | null;
     /** A competitor piece: copy it (close) or take the idea only (inspired). */
     match?: 'close' | 'inspired';
+    /** A copy that keeps the original piece's own fabric, print and colours. */
+    same_fabric?: boolean;
 };
 
 /** What an insight hands to the brief when the merchant picks "design this". */

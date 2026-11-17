@@ -84,7 +84,12 @@ export function DesignSheet({
             : []),
         [
             s.fields.fabric,
-            collection.brief.fabric_custom ?? (fabric ? fabric[locale] : '—'),
+            collection.brief.inspiration?.match === 'close' &&
+            collection.brief.inspiration?.same_fabric
+                ? t.designer.collection.originalFabric +
+                  (fabric ? ` (${fabric[locale]})` : '')
+                : (collection.brief.fabric_custom ??
+                  (fabric ? fabric[locale] : '—')),
         ],
         [s.lining, s.linings[concept.lining]],
         [s.fields.colors, <ColorChips key="c" colors={concept.colors} />],

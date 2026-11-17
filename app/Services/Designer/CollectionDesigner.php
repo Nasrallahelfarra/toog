@@ -133,14 +133,16 @@ class CollectionDesigner
             }
         }
 
-        if ($collection->fabric_image_path) {
+        // Keeping the piece's own fabric: no swatch, and the colours come from the picture.
+        $sameFabric = $match && DesignerPrompt::sameFabric($brief);
+        if ($collection->fabric_image_path && ! $sameFabric) {
             $brief['fabric_read'] = $this->readFabric($collection, $store);
             // A copied design takes its colours from the merchant's fabric.
             if (($match || empty($brief['colors'])) && ! empty($brief['fabric_read']['colors'])) {
                 $brief['colors'] = $brief['fabric_read']['colors'];
             }
         }
-        $brief['colors'] = array_values(array_slice($brief['colors'] ?? [], 0, 4)) ?: $this->dnaColors($insights);
+        $brief['colors'] = array_values(array_slice($brief['colors'] ?? [], 0, 4)) ?: ($sameFabric ? [] : $this->dnaColors($insights));
 
         $roles = $match
             ? FashionVocabulary::matchRoles((int) $brief['count'])
@@ -149,7 +151,7 @@ class CollectionDesigner
         $brief['modesty'] ??= FashionVocabulary::defaultModesty($garment);
         $allowed = $this->allowed($garment, $brief['modesty']);
 
-        $roleRules = $match ? DesignerPrompt::PLANNER_MATCH.' ' : 'Design a small, sellable collection for the brief, one concept per role, in the given order. '
+        $roleRules = $match ? DesignerPrompt::PLANNER_MATCH.' '.($sameFabric ? DesignerPrompt::PLANNER_SAME_FABRIC : DesignerPrompt::PLANNER_OWN_FABRIC).' ' : 'Design a small, sellable collection for the brief, one concept per role, in the given order. '
             .'safe_bet keeps the DNA of the store\'s own best sellers in the new fabric with at most one change; '
             .'trend_twist adds one rising-trend element to a proven base; competitor_gap offers a combination that works for competitors but the store lacks, '
             .'borrowing attribute combinations and never one competitor product\'s look (change at least two of silhouette, pattern and colour); '
@@ -180,7 +182,7 @@ class CollectionDesigner
             ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR),
             schema: $this->schema(count($roles), $match),
             fallback: fn () => $this->fallback($brief, $roles, $insights),
-            images: $match ? $this->plannerImages($collection) : [],
+            images: $match ? $this->plannerImages($collection, ! $sameFabric) : [],
             userId: $collection->user_id,
             timeoutSeconds: 120,
         );
@@ -220,6 +222,11 @@ class CollectionDesigner
                 $allowed = $this->allowed($garment, $brief['modesty']);
             }
             $brief['reference'] = $reference = $this->reference($data, $garment);
+            if ($sameFabric) {
+                // The piece's own fabric and colours stand for the merchant's.
+                $brief['colors'] = $reference['colors'] ?: ($brief['colors'] ?: ['black']);
+                $brief['fabric'] ??= $reference['fabric'];
+            }
         }
         if (filled($brief['fabric_custom'] ?? null) && is_string($data['fabric_en'] ?? null) && trim($data['fabric_en']) !== '') {
             $brief['fabric_custom_en'] = mb_substr(trim($data['fabric_en']), 0, 80);
@@ -263,8 +270,10 @@ class CollectionDesigner
 
             $this->updateConcept($collection, $i, ['status' => 'drawing', 'error' => null]);
             $render = $this->prompts->render($brief['render'] ?? 'ghost', $concept, $brief['modesty'] ?? 'strict');
-            $useFabric = $collection->fabric_image_path && $render !== 'flat' && Storage::disk('public')->exists($collection->fabric_image_path);
             $copy = self::matches($brief) && $this->hasReference($collection);
+            // A copy in the piece's own fabric sends the piece alone.
+            $useFabric = $collection->fabric_image_path && $render !== 'flat' && ! ($copy && DesignerPrompt::sameFabric($brief))
+                && Storage::disk('public')->exists($collection->fabric_image_path);
             if ($copy && $useFabric && InlineImage::fromDisk((string) $collection->fabric_image_path) === null) {
                 // Not JPEG, PNG or WebP, or too large: the fabric type describes it instead.
                 $useFabric = false;
@@ -528,6 +537,14 @@ class CollectionDesigner
                 }
                 $concept['modesty_changes'][] = ['field' => $field, 'from' => $original, 'to' => $concept[$field]];
             }
+            if (DesignerPrompt::sameFabric($brief) && $reference['colors'] !== []) {
+                // The piece's own fabric: its main colour and pattern; a variant may change the trim colour.
+                $main = $reference['colors'][0];
+                $concept['colors'] = $index === 0
+                    ? $reference['colors']
+                    : array_slice(array_values(array_unique([$main, ...array_diff($colors, [$main])])), 0, 3);
+                $concept['pattern'] = $reference['pattern'];
+            }
             $concept['variant_of_en'] = $index === 0 ? '' : mb_substr($this->text($raw['variant_of_en'] ?? null), 0, 200);
             $concept['design_notes_en'] = mb_substr($this->text($raw['design_notes_en'] ?? null), 0, 600);
             $concept = $this->withoutBrand($concept, $brief['inspiration']['brand'] ?? null, $defaults);
@@ -681,8 +698,9 @@ class CollectionDesigner
             ...($match ? ['variant_of_en'] : [])];
         // What the picture shows, flat at the top level (Gemini's schema limits).
         $reference = $match ? [
-            ...array_fill_keys(['ref_garment', 'ref_silhouette', 'ref_neckline', 'ref_sleeve', 'ref_length', 'ref_closure', 'ref_placement', 'ref_construction_en', 'ref_visible'], $string),
-            'ref_embellishments' => $strings, 'ref_is_garment' => ['type' => 'boolean'],
+            ...array_fill_keys(['ref_garment', 'ref_silhouette', 'ref_neckline', 'ref_sleeve', 'ref_length', 'ref_closure', 'ref_placement', 'ref_construction_en', 'ref_visible',
+                'ref_pattern', 'ref_fabric'], $string),
+            'ref_embellishments' => $strings, 'ref_colors' => $strings, 'ref_is_garment' => ['type' => 'boolean'],
         ] : [];
 
         return [
@@ -717,6 +735,7 @@ class CollectionDesigner
             'garments' => array_keys(FashionVocabulary::garments()),
             'silhouettes_by_garment' => array_map('array_keys', FashionVocabulary::silhouettes()),
             ...array_map('array_keys', Arr::only($details, ['neckline', 'sleeve', 'length', 'closure', 'placement', 'embellishment'])),
+            'fabrics' => array_keys(FashionVocabulary::fabrics()),
         ];
     }
 
@@ -726,13 +745,13 @@ class CollectionDesigner
      *
      * @return list<array{mime: string, data: string, label: string}>
      */
-    private function plannerImages(DesignCollection $collection): array
+    private function plannerImages(DesignCollection $collection, bool $withFabric = true): array
     {
         $images = [];
         if ($design = InlineImage::fromDisk($collection->reference_image_path, 1024)) {
             $images[] = [...$design, 'label' => DesignerPrompt::LABEL_DESIGN];
         }
-        if ($images !== [] && $collection->fabric_image_path && ($fabric = InlineImage::fromDisk($collection->fabric_image_path, 1024))) {
+        if ($images !== [] && $withFabric && $collection->fabric_image_path && ($fabric = InlineImage::fromDisk($collection->fabric_image_path, 1024))) {
             $images[] = [...$fabric, 'label' => DesignerPrompt::LABEL_FABRIC];
         }
 
@@ -772,6 +791,10 @@ class CollectionDesigner
             'embellishments' => array_slice($embellishments ?: [$d['embellishment']], 0, 3),
             'construction_en' => mb_substr($this->text($data['ref_construction_en'] ?? null), 0, 700),
             'visible' => in_array($data['ref_visible'] ?? null, ['upper', 'lower'], true) ? $data['ref_visible'] : 'full',
+            // The piece's own fabric, used when the copy keeps it.
+            'colors' => array_slice(array_values(array_unique(array_filter((array) ($data['ref_colors'] ?? []), fn ($c) => is_string($c) && isset(Vocabulary::colors()[$c])))), 0, 3),
+            'pattern' => is_string($data['ref_pattern'] ?? null) && isset(Vocabulary::patterns()[$data['ref_pattern']]) && $data['ref_pattern'] !== 'calligraphy' ? $data['ref_pattern'] : 'solid',
+            'fabric' => is_string($data['ref_fabric'] ?? null) && isset(FashionVocabulary::fabrics()[$data['ref_fabric']]) ? $data['ref_fabric'] : null,
         ];
     }
 

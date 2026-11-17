@@ -32,17 +32,30 @@ class DesignerPrompt
     public const LABEL_FABRIC = 'Image 2 — FABRIC SWATCH: the merchant\'s textile. Use it for the material only.';
 
     /** The planner's instructions when the brief copies a design. */
-    public const PLANNER_MATCH = 'MATCH MODE. Image 1 is a DESIGN REFERENCE the merchant wants reproduced in her own fabric; Image 2, when present, is her FABRIC SWATCH. '
+    public const PLANNER_MATCH = 'MATCH MODE. Image 1 is a DESIGN REFERENCE the merchant wants reproduced; Image 2, when present, is her FABRIC SWATCH. '
         .'Reproduce the reference\'s design; do not reinterpret it. First fill the ref_ fields for the single main garment (if several appear, the most prominent full-length one): '
         .'ref_garment (one of the garments in reference_keys), and the closest key from reference_keys for ref_silhouette (from that garment\'s list), ref_neckline, ref_sleeve, ref_length, '
         .'ref_closure, ref_placement and ref_embellishments, ignoring the modesty level; ref_construction_en is at most 80 words a pattern cutter could work from: panels and seam lines, '
         .'yoke, gathers, pleats, tiers, layers or overlays, sleeve shape and cuff, collar, hem shape, volume, proportions, contrast parts and where each embellishment sits. '
         .'Describe construction only: never logos, brand names, monograms, text, the person, her pose or the background. ref_visible is full, upper or lower; '
+        .'ref_colors are up to three colour keys (from allowed colors) of the reference\'s main fabric, most dominant first, then its trim colour; '
+        .'ref_pattern is the pattern key (from allowed pattern) of its main fabric; ref_fabric is the closest key from reference_keys fabrics; '
         .'ref_is_garment is false when no wearable women\'s garment is shown. Concept 1 (role match) copies every reference field exactly. '
         .'Each later concept (role match_variant) keeps the same design and changes exactly one of: trim or embellishment colour, length, sleeve, closure — name it in variant_of_en. '
-        .'Silhouette, neckline, seam lines and proportions never change. The merchant\'s fabric replaces the reference\'s fabric, colour and print in every concept. '
+        .'Silhouette, neckline, seam lines and proportions never change. '
         .'Where a reference key is not allowed at the brief\'s modesty level, use the nearest allowed key and change nothing else for modesty. '
         .'Never use the competitor\'s product or brand name. design_notes_en (at most 80 words) is what this concept keeps from Image 1 and its one change.';
+
+    /** The planner, copying a piece in the merchant's own fabric. */
+    public const PLANNER_OWN_FABRIC = 'The merchant\'s fabric replaces the reference\'s fabric, colour and print in every concept.';
+
+    /** The planner, copying a piece in its own fabric (brief.inspiration.same_fabric). */
+    public const PLANNER_SAME_FABRIC = 'The merchant wants the reference\'s own fabric: every concept keeps its fabric, print and colours '
+        .'(colors start with ref_colors\' main colour, pattern is ref_pattern); a variant may change only its trim colour.';
+
+    /** The image prompt's fabric line when the copy keeps Image 1's own fabric. */
+    public const SAME_FABRIC = 'Keep Image 1\'s own fabric on the main body: the same kind of textile, colours, print or pattern, motif scale and density, texture, weave and sheen, '
+        .'so it reads as the same fabric. Contrast parts and trims keep Image 1\'s colours. Let it drape the way it does in Image 1.';
 
     private const MATCH = 'Create a NEW %s of the garment in Image 1 — not an edit of Image 1. Reproduce its design exactly: silhouette and volume, neckline and collar, '
         .'sleeve shape and cuff, length and hem shape, seam lines, panels, yokes, pleats, gathers, tiers and layers, closure, and the type, placement and density of every embellishment. '
@@ -50,8 +63,13 @@ class DesignerPrompt
 
     private const GUARDRAILS = 'Take nothing else from the images: not the person, face, body, hair, head covering or pose; not the background, props, lighting or camera angle; '
         .'not the swatch\'s folds or framing. Remove every logo, brand name, monogram, label, watermark, caption, price tag and text overlay in Image 1, and never turn one into '
-        .'embroidery, print or hardware; branded buttons, buckles or chains become plain ones. Do not trace Image 1\'s printed or embroidered artwork: keep each embellishment\'s '
-        .'type and placement with a simple motif of your own.';
+        .'embroidery, print or hardware; branded buttons, buckles or chains become plain ones.';
+
+    /** Artwork in a copy in the merchant's fabric. */
+    private const ARTWORK_OWN = 'Do not trace Image 1\'s printed or embroidered artwork: keep each embellishment\'s type and placement with a simple motif of your own.';
+
+    /** Artwork in a copy that keeps Image 1's fabric. */
+    private const ARTWORK_SAME = 'Keep each embellishment\'s type, placement, density and colours, and the print\'s style; draw the motifs afresh in the same style rather than tracing them.';
 
     /** Who wears the design: always recognisably a Saudi, Gulf Arab woman. */
     private const MODEL = 'a Saudi woman in her mid-twenties with distinctly Gulf Arab (Khaleeji) looks';
@@ -158,8 +176,10 @@ class DesignerPrompt
             $variant = trim((string) ($concept['variant_of_en'] ?? ''));
             $visible = (string) ($reference['visible'] ?? 'full');
             $colorsText = implode(' and ', array_filter(array_map($colorName, array_slice($colors, 0, 2)))) ?: 'black (#1C1C1E)';
+            $sameFabric = self::sameFabric($brief);
             $matchFabric = match (true) {
                 $render === 'flat' => '',
+                $sameFabric => self::SAME_FABRIC,
                 $hasFabricPhoto => 'Make it entirely in the fabric of Image 2: reproduce its exact colours, print motifs, motif scale, texture, weave and sheen on the main body; '
                     .'do not recolour, simplify or redraw the print. Replace Image 1\'s fabric, colour and print completely. '
                     ."Parts that are a contrast fabric in Image 1 stay contrast, in solid {$detailColor}. Let the fabric drape naturally while keeping the same seam lines and proportions.",
@@ -179,7 +199,7 @@ class DesignerPrompt
                 in_array($visible, ['upper', 'lower'], true) ? "Image 1 shows only the {$visible} part; complete the rest following the design sheet, in the same style." : null,
                 $matchFabric,
                 $lining,
-                self::GUARDRAILS,
+                self::GUARDRAILS.' '.($sameFabric ? self::ARTWORK_SAME : self::ARTWORK_OWN),
                 $modestyLine,
                 $quality,
             ]));
@@ -238,14 +258,24 @@ class DesignerPrompt
     }
 
     /**
-     * The brief note for "design like this": the same piece in the
-     * merchant's fabric, changed only where modesty requires.
+     * A copy that keeps the original piece's own fabric, print and colours.
+     *
+     * @param  array<string, mixed>  $brief
+     */
+    public static function sameFabric(array $brief): bool
+    {
+        return ($brief['inspiration']['match'] ?? null) === 'close' && ($brief['inspiration']['same_fabric'] ?? false) === true;
+    }
+
+    /**
+     * The brief note for "design like this": the same piece, as bold as
+     * the original, without anything branded.
      */
     public static function matchNote(string $locale): string
     {
         return $locale === 'ar'
-            ? 'صمّم مثل هذه القطعة بقماشك: نفس القصّة والياقة والأكمام والطول وأماكن التطريز، مع تعديلات الحشمة اللازمة فقط، ومن دون أي شعار أو كتابة من الصورة.'
-            : 'Design it like this piece, in your fabric: same cut, neckline, sleeves, length and embellishment placement, with only the modesty changes your level needs, and no logo or text from the photo.';
+            ? 'صمّم مثل هذه القطعة تمامًا: نفس القصّة والياقة والأكمام والطول والجرأة وأماكن التطريز، ومن دون أي شعار أو كتابة من الصورة.'
+            : 'Design it exactly like this piece: same cut, neckline, sleeves, length, boldness and embellishment placement, and no logo or text from the photo.';
     }
 
     /**

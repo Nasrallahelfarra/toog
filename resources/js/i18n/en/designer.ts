@@ -102,9 +102,19 @@ export const designer: typeof ar = {
             close: 'Like the design',
             inspired: 'Inspired by it',
             closeHint:
-                'The same cut, neckline, sleeves, length and embellishment placement in your fabric, with only the modesty changes your level needs.',
+                'The same cut, neckline, sleeves, length and embellishment placement, as bold as the original piece.',
             inspiredHint:
                 'We take the idea only and design different pieces in your store’s spirit.',
+            fabricLabel: 'Fabric',
+            sameFabric: 'Same fabric as the original',
+            otherFabric: 'A different fabric',
+            sameFabricHint:
+                'The same kind of fabric, colours and print as in the original photo, so no fabric photo is needed.',
+            otherFabricHint:
+                'The same design in your own fabric: add a fabric photo or choose its type and colours below.',
+            asOriginal: 'As the original',
+            asOriginalHint:
+                'As bold as the original piece, unchanged: the same sleeves, neckline, length and cut.',
         },
         selectedFabric: '{name}: {drape}',
         customFabric: {
@@ -279,6 +289,7 @@ export const designer: typeof ar = {
         sheet: 'Design sheet',
         fabric: 'Fabric',
         original: 'Original design',
+        originalFabric: 'Same fabric as the original',
         yourFabric: 'Your fabric',
         compare: 'Compare with the original',
         compareTitle: 'The original and your designs',

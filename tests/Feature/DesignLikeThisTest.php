@@ -294,5 +294,70 @@ class DesignLikeThisTest extends TestCase
         $this->assertSame('close', $saved['inspiration']['match']);
         $this->assertSame('chiffon', $saved['fabric']);
         $this->assertSame('شيفون مطرز بالترتر', $saved['fabric_custom']);
+        $this->assertFalse($saved['inspiration']['same_fabric']);
+    }
+
+    public function test_a_copy_in_the_original_fabric_sends_the_piece_alone_and_keeps_its_boldness(): void
+    {
+        $this->piecePicture();
+        $plan = $this->plan();
+        $this->live([...$plan, 'ref_colors' => ['emerald', 'gold', 'not-a-colour'], 'ref_pattern' => 'floral', 'ref_fabric' => 'satin']);
+        $collection = $this->collection(['fabric' => null, 'colors' => [], 'modesty' => 'open',
+            'inspiration' => ['kind' => 'competitor', 'id' => $this->piece->id, 'label' => $this->piece->name, 'image_url' => 'http://127.0.0.1/never.jpg',
+                'match' => 'close', 'same_fabric' => true, 'evidence_id' => "C:{$this->piece->id}"]]);
+        $collection->update(['fabric_image_path' => null]);
+
+        app(CollectionDesigner::class)->run($collection);
+        $collection->refresh();
+        $this->assertSame('completed', $collection->status, (string) $collection->error);
+
+        // The planner sees the piece alone and keeps its fabric.
+        $planner = $this->planner[0];
+        $this->assertStringContainsString(DesignerPrompt::PLANNER_SAME_FABRIC, $planner['system']);
+        $this->assertStringNotContainsString(DesignerPrompt::PLANNER_OWN_FABRIC, $planner['system']);
+        $this->assertCount(1, array_filter($planner['parts'], fn (array $p) => isset($p['inlineData'])));
+
+        // As bold as the original: nothing changed for modesty.
+        $first = $collection->concepts[0];
+        $this->assertSame(['mermaid', 'off_shoulder', 'sleeveless', 'knee'], [$first['silhouette'], $first['neckline'], $first['sleeve'], $first['length']]);
+        $this->assertSame([], $first['modesty_changes']);
+        // Its own colours, print and fabric.
+        $this->assertSame(['emerald', 'gold'], $first['colors']);
+        $this->assertSame('floral', $first['pattern']);
+        $this->assertSame('emerald', $collection->concepts[1]['colors'][0]);
+        $this->assertSame('satin', $collection->brief['fabric']);
+        $this->assertSame(['emerald', 'gold'], $collection->brief['colors']);
+
+        // Each image call: the piece only, its own fabric, no required changes, no shayla.
+        foreach ($this->images as $parts) {
+            $this->assertCount(1, array_filter($parts, fn (array $p) => isset($p['inlineData'])));
+            $prompt = end($parts)['text'];
+            $this->assertStringContainsString(DesignerPrompt::SAME_FABRIC, $prompt);
+            $this->assertStringNotContainsString('Image 2', $prompt);
+            $this->assertStringNotContainsString('Required changes', $prompt);
+            $this->assertStringNotContainsString('shayla', $prompt);
+        }
+    }
+
+    public function test_the_original_fabric_needs_no_fabric_and_only_for_a_copy(): void
+    {
+        Queue::fake();
+        $brief = ['garment' => 'dress_evening', 'occasion' => 'evening', 'creativity' => 3, 'count' => 2, 'render' => 'ghost', 'colors' => ['black'],
+            'inspiration' => ['kind' => 'competitor', 'id' => (string) $this->piece->id, 'label' => 'x', 'match' => 'close', 'same_fabric' => '1']];
+
+        // Inspiration only, or a copy in another fabric, still needs the fabric.
+        $this->actingAs($this->store->owner)->post('/store/studio/collections', [...$brief, 'inspiration' => [...$brief['inspiration'], 'match' => 'inspired']])
+            ->assertSessionHasErrors('fabric');
+        $this->post('/store/studio/collections', [...$brief, 'inspiration' => [...$brief['inspiration'], 'same_fabric' => '0']])->assertSessionHasErrors('fabric');
+        $this->assertSame(0, DesignCollection::query()->count());
+
+        $this->post('/store/studio/collections', [...$brief, 'fabric' => 'satin'])->assertSessionHasNoErrors();
+        $saved = DesignCollection::query()->sole();
+        $this->assertTrue($saved->brief['inspiration']['same_fabric']);
+        // The piece's own fabric replaces the brief's; the copy is as bold as the original.
+        $this->assertNull($saved->brief['fabric']);
+        $this->assertSame([], $saved->brief['colors']);
+        $this->assertNull($saved->fabric_image_path);
+        $this->assertSame('open', $saved->brief['modesty']);
     }
 }

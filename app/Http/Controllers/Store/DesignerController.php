@@ -44,10 +44,14 @@ class DesignerController extends Controller
     {
         $store = $this->current->require();
 
+        // A copy that keeps the piece's own fabric needs no fabric from the merchant.
+        $copyable = in_array($request->input('inspiration.kind'), ['competitor', 'social'], true);
+        $sameFabric = $copyable && $request->input('inspiration.match', 'close') === 'close' && $request->boolean('inspiration.same_fabric');
+
         $data = $request->validate([
             'garment' => ['required', Rule::in(array_keys(FashionVocabulary::garments()))],
             // A built-in fabric, or one the store added ("custom:{id}").
-            'fabric' => ['nullable', 'required_without_all:fabric_image,fabric_from', 'string', 'max:40'],
+            'fabric' => ['nullable', Rule::requiredIf(! $sameFabric && ! $request->hasFile('fabric_image') && ! $request->filled('fabric_from')), 'string', 'max:40'],
             'fabric_image' => ['nullable', 'image', 'max:8192'],
             'fabric_from' => ['nullable', 'integer'],
             'colors' => ['nullable', 'array', 'max:4'],
@@ -69,24 +73,30 @@ class DesignerController extends Controller
             'inspiration.image_url' => ['nullable', 'string', 'max:2048'],
             // close: reproduce the piece; inspired: take the idea only.
             'inspiration.match' => ['nullable', Rule::in(['close', 'inspired'])],
+            // close only: keep the piece's own fabric, print and colours.
+            'inspiration.same_fabric' => ['nullable', 'boolean'],
         ], [
-            'fabric.required_without_all' => __('mojo.designer_fabric_required'),
+            'fabric.required' => __('mojo.designer_fabric_required'),
         ]);
 
-        [$fabric, $fabricCustom] = $this->fabric($store, $data['fabric'] ?? null);
+        // The piece's own fabric replaces whatever fabric the brief still holds.
+        [$fabric, $fabricCustom] = $sameFabric ? [null, null] : $this->fabric($store, $data['fabric'] ?? null);
 
         // A competitor piece is copied unless the merchant asks for inspiration only.
-        $copyable = isset($data['inspiration']) && in_array($data['inspiration']['kind'], ['competitor', 'social'], true);
         $inspiration = isset($data['inspiration']) ? [
-            ...Arr::except($data['inspiration'], ['match']),
+            ...Arr::except($data['inspiration'], ['match', 'same_fabric']),
             'match' => $copyable ? ($data['inspiration']['match'] ?? 'close') : 'inspired',
+            'same_fabric' => $sameFabric,
             'evidence_id' => self::INSPIRATION[$data['inspiration']['kind']].':'.$data['inspiration']['id'],
         ] : null;
+        $copying = ($inspiration['match'] ?? null) === 'close';
 
         // "Another collection with the same fabric" reuses an earlier swatch.
-        $fabricPath = $request->hasFile('fabric_image')
-            ? $request->file('fabric_image')->store("design-sources/{$store->id}/fabrics", 'public')
-            : DesignCollection::query()->where('store_id', $store->id)->whereKey($data['fabric_from'] ?? 0)->value('fabric_image_path');
+        $fabricPath = match (true) {
+            $sameFabric => null,
+            $request->hasFile('fabric_image') => $request->file('fabric_image')->store("design-sources/{$store->id}/fabrics", 'public'),
+            default => DesignCollection::query()->where('store_id', $store->id)->whereKey($data['fabric_from'] ?? 0)->value('fabric_image_path'),
+        };
 
         $collection = DesignCollection::query()->create([
             'store_id' => $store->id,
@@ -98,10 +108,11 @@ class DesignerController extends Controller
                 'fabric' => $fabric,
                 // The merchant's own fabric, by name; it behaves like `fabric` when that is set.
                 'fabric_custom' => $fabricCustom,
-                'colors' => array_values(array_unique($data['colors'] ?? [])),
+                'colors' => $sameFabric ? [] : array_values(array_unique($data['colors'] ?? [])),
                 'occasion' => $data['occasion'],
                 'age' => $data['age'] ?? 'adult',
-                'modesty' => $data['modesty'] ?? FashionVocabulary::defaultModesty($data['garment']),
+                // A copy is as bold as the original unless the merchant asks for more cover.
+                'modesty' => $data['modesty'] ?? ($copying ? 'open' : FashionVocabulary::defaultModesty($data['garment'])),
                 'show_face' => $request->boolean('show_face'),
                 // Only one of the store's own sections (from Zid or added by hand).
                 'category' => filled($data['category'] ?? null) && (
@@ -113,7 +124,7 @@ class DesignerController extends Controller
                 'count' => (int) $data['count'],
                 'render' => $data['render'],
                 // The automatic "design like this" note only belongs to a copy.
-                'notes' => ($inspiration['match'] ?? null) === 'close' ? ($data['notes'] ?? null) : CollectionDesigner::withoutCopyNote($data['notes'] ?? null),
+                'notes' => $copying ? ($data['notes'] ?? null) : CollectionDesigner::withoutCopyNote($data['notes'] ?? null),
                 'inspiration' => $inspiration,
             ],
         ]);
