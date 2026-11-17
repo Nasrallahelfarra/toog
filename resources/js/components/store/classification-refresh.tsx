@@ -1,4 +1,4 @@
-import { router, useForm, usePoll } from '@inertiajs/react';
+import { router, useForm } from '@inertiajs/react';
 import {
     AlertTriangle,
     CheckCircle2,
@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/hooks/use-i18n';
+import { useQuietPoll } from '@/hooks/use-quiet-poll';
 
 export type ClassificationRun = {
     id: number;
@@ -69,7 +70,7 @@ function ClassificationPoller({
 }: {
     onNetwork: (failed: boolean) => void;
 }) {
-    usePoll(4000, {
+    useQuietPoll(4000, {
         only: ['classification'],
         onSuccess: () => onNetwork(false),
         onError: () => onNetwork(true),

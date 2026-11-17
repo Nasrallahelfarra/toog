@@ -1,4 +1,4 @@
-import { Link, useForm, usePoll } from '@inertiajs/react';
+import { Link, useForm } from '@inertiajs/react';
 import {
     CheckCircle2,
     ExternalLink,
@@ -19,6 +19,7 @@ import { SectionCard } from '@/components/mojo/section-card';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/hooks/use-i18n';
 import { cn } from '@/lib/utils';
+import { useQuietPoll } from '@/hooks/use-quiet-poll';
 
 export function ProductReviewPanel({
     evaluation,
@@ -625,6 +626,6 @@ function ImprovementResult({
 }
 
 function ImprovementPoll() {
-    usePoll(2000, { only: ['improvements', 'versions', 'designs'] });
+    useQuietPoll(2000, { only: ['improvements', 'versions', 'designs'] });
     return null;
 }

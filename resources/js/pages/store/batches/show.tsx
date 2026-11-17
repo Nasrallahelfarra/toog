@@ -1,4 +1,4 @@
-import { Link, usePoll } from '@inertiajs/react';
+import { Link } from '@inertiajs/react';
 import { ArrowRight, Crown, Layers, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { Factor, Recommendation, Thresholds } from '@/components/evaluation/types';
@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useI18n } from '@/hooks/use-i18n';
 import { cn } from '@/lib/utils';
+import { useQuietPoll } from '@/hooks/use-quiet-poll';
 
 type Row = {
     id: number;
@@ -149,7 +150,7 @@ export default function BatchShow({ batch, evaluations, thresholds }: Props) {
 }
 
 function Poll() {
-    usePoll(2500, { only: ['evaluations'] });
+    useQuietPoll(2500, { only: ['evaluations'] });
 
     return null;
 }

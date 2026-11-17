@@ -1,4 +1,4 @@
-import { useForm, usePoll } from '@inertiajs/react';
+import { useForm } from '@inertiajs/react';
 import { BrainCircuit, ImagePlus, Lightbulb } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
@@ -12,6 +12,7 @@ import { CollectionView } from './collection-view';
 import { GarmentIcon } from './garment-icons';
 import { InsightRail } from './insight-rail';
 import type { Collection, DesignerProps, Insights, Prefill } from './types';
+import { useQuietPoll } from '@/hooks/use-quiet-poll';
 
 /**
  * The AI designer mode of the studio: the brief at the start, the
@@ -399,7 +400,7 @@ function EmptyTable({
 }
 
 function Poll() {
-    usePoll(3000, { only: ['collections'] });
+    useQuietPoll(3000, { only: ['collections'] });
 
     return null;
 }

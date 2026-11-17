@@ -1,4 +1,4 @@
-import { Head, Link, router, useForm, usePage, usePoll } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import {
     BarChart3,
     CalendarDays,
@@ -40,6 +40,7 @@ import { useI18n } from '@/hooks/use-i18n';
 import { useRevenueVisible } from '@/hooks/use-revenue-visible';
 import { useVocabulary } from '@/hooks/use-vocabulary';
 import { cn } from '@/lib/utils';
+import { useQuietPoll } from '@/hooks/use-quiet-poll';
 
 type ClassKey = 'winner' | 'average' | 'at_risk' | 'stagnant';
 type Metric = 'units' | 'revenue' | 'orders';
@@ -289,7 +290,7 @@ export default function ProductShow({ product, history, category, similar, recov
 }
 
 function RecoveryPoll({ onNetwork }: { onNetwork: (failed: boolean) => void }) {
-    usePoll(3000, {
+    useQuietPoll(3000, {
         only: ['recovery'],
         onSuccess: () => onNetwork(false),
         onNetworkError: () => {

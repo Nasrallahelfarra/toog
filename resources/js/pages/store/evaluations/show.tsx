@@ -1,4 +1,4 @@
-import { Link, router, usePoll } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import {
     AlertTriangle,
     ArrowRight,
@@ -45,6 +45,7 @@ import { Button } from '@/components/ui/button';
 import { useI18n } from '@/hooks/use-i18n';
 import { useVocabulary } from '@/hooks/use-vocabulary';
 import { cn } from '@/lib/utils';
+import { useQuietPoll } from '@/hooks/use-quiet-poll';
 
 type Props = {
     evaluation: EvaluationDetail;
@@ -837,7 +838,7 @@ export default function EvaluationShow({
 
 /** Polls the server while the evaluation is still running. */
 function Poll() {
-    usePoll(2000, {
+    useQuietPoll(2000, {
         only: [
             'evaluation',
             'versions',

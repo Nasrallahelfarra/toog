@@ -62,7 +62,16 @@ class DesignerInsights
         $this->products = Product::query()->where('store_id', $store->id)->get();
         $this->sales = ProductSale::query()->where('store_id', $store->id)
             ->where('period', '>=', $this->window['l12'][0])
-            ->get(['product_id', 'period', 'units', 'orders', 'returns', 'views', 'add_to_cart'])
+            ->toBase()
+            ->get(['product_id', 'period', 'units', 'orders', 'returns'])
+            // Plain rows, the period read once: the windows below scan them many times.
+            ->map(fn (object $s) => [
+                'product_id' => (int) $s->product_id,
+                'period' => substr((string) $s->period, 0, 10),
+                'units' => (int) $s->units,
+                'orders' => (int) $s->orders,
+                'returns' => (int) $s->returns,
+            ])
             ->groupBy('product_id');
 
         $bestsellers = $this->bestsellers();
@@ -120,7 +129,7 @@ class DesignerInsights
     private function totals(int $productId, array $range): array
     {
         $rows = $this->sales->get($productId, collect())
-            ->filter(fn (ProductSale $s) => $s->period->toDateString() >= $range[0] && $s->period->toDateString() <= $range[1]);
+            ->filter(fn (array $s) => $s['period'] >= $range[0] && $s['period'] <= $range[1]);
 
         return [
             'units' => (int) $rows->sum('units'),
@@ -135,7 +144,7 @@ class DesignerInsights
      */
     private function spark(int $productId): array
     {
-        $byMonth = $this->sales->get($productId, collect())->groupBy(fn (ProductSale $s) => $s->period->format('Y-m'));
+        $byMonth = $this->sales->get($productId, collect())->groupBy(fn (array $s) => substr($s['period'], 0, 7));
 
         return array_map(fn (string $m) => (int) $byMonth->get($m, collect())->sum('units'), $this->window['months']);
     }
