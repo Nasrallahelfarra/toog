@@ -151,6 +151,24 @@ class MarketTrendsTest extends TestCase
         $this->assertFalse(FashionVocabulary::forMenOrKids('عبايات', 'عباية كريب نسائية'));
     }
 
+    public function test_each_competitor_says_what_it_adds_and_why_not(): void
+    {
+        $this->seedMarket();
+        $social = Competitor::query()->create(['store_id' => $this->store->id, 'name' => 'Sadeim', 'platform' => 'instagram', 'handle' => 'sadeim', 'is_active' => true]);
+        $unread = Competitor::query()->create(['store_id' => $this->store->id, 'name' => 'New shop', 'platform' => 'salla', 'url' => 'https://new.example', 'is_active' => true]);
+        $shoes = Competitor::query()->create(['store_id' => $this->store->id, 'name' => 'Shoe shop', 'platform' => 'shopify', 'url' => 'https://shoes.example', 'is_active' => true]);
+        $this->listing($shoes, 'Sport sneakers', 'Sneakers', 'black');
+
+        $coverage = collect(app(MarketTrends::class)->build($this->store, 'ar')['coverage']['competitors'])->keyBy('id');
+
+        $this->assertSame('ok', $coverage[$this->rival->id]['status']);
+        $this->assertSame(11, $coverage[$this->rival->id]['products']);
+        $this->assertSame('social_empty', $coverage[$social->id]['status']);
+        $this->assertSame('never_scanned', $coverage[$unread->id]['status']);
+        $this->assertSame('not_clothing', $coverage[$shoes->id]['status']);
+        $this->assertSame('inactive', $coverage->firstWhere('name', 'Paused')['status']);
+    }
+
     public function test_seeded_samples_are_used_only_until_real_scans_exist(): void
     {
         foreach (range(1, 6) as $i) {

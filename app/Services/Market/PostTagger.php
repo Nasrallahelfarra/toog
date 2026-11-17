@@ -67,13 +67,16 @@ class PostTagger
             $flags[] = 'comments_only';
         }
 
+        // The post's picture, read once (PostLookReader): it fills what the caption leaves out.
+        $look = PostLookReader::look($post);
+
         return [
             'format' => $this->format($post),
             'hooks' => array_values($hooks),
-            'garment' => FashionVocabulary::garmentFor($text),
-            'colors' => array_values(array_filter((array) ($features['colors'] ?? []), 'is_string')),
-            'pattern' => is_string($features['pattern'] ?? null) ? $features['pattern'] : null,
-            'style' => is_string($features['style'] ?? null) ? $features['style'] : null,
+            'garment' => FashionVocabulary::garmentFor($text) ?? $look['garment'],
+            'colors' => array_values(array_filter((array) ($features['colors'] ?? []), 'is_string')) ?: $look['colors'],
+            'pattern' => (is_string($features['pattern'] ?? null) ? $features['pattern'] : null) ?? $look['pattern'],
+            'style' => (is_string($features['style'] ?? null) ? $features['style'] : null) ?? $look['style'],
             'occasion' => is_string($occasion) ? $occasion : (is_string($features['season'] ?? null) && $features['season'] !== 'all_year' ? $features['season'] : null),
             'flags' => $flags,
             'codes' => self::codes((string) $post->caption),

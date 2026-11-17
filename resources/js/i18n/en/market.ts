@@ -97,6 +97,8 @@ export const market: typeof ar = {
         sources: {
             market: 'The market',
             marketLine: '{products} of clothing from {brands}, and {posts}',
+            productPosts:
+                '{n} had their pictures read as products and count in the analysis.',
             demand: '{n} with a public demand signal: a “best seller” label or a purchase count the store shows.',
             excluded:
                 '{n} left out because they are not womenswear (men’s, children’s, shoes, bags, accessories).',
@@ -112,6 +114,27 @@ export const market: typeof ar = {
             sample: 'This page shows sample data. Add your real competitors to base the analysis on their stores and accounts.',
             none: 'No competitors yet, so the page shows your own sales only.',
             manage: 'Manage competitors',
+        },
+        coverage: {
+            emptyTitle: 'No competitor products in the analysis yet',
+            emptyBody:
+                'Your competitors’ post pictures are read as products after each scan, once per post. Press “Refresh analysis” to read them now. For prices and selling signals, add a competitor store (Salla, Zid, Shopify or a website) and scan it.',
+            title: 'What each competitor adds to the analysis',
+            statuses: {
+                ok: 'Its products are in the analysis.',
+                inactive: 'Paused. Activate it to include it.',
+                social: 'A social account: its post pictures are read as products (garment, colour, pattern). Prices and selling signals need its online store.',
+                social_empty:
+                    'A social account with no readable posts in the last 90 days. Scan it.',
+                never_scanned:
+                    'A store whose products haven’t been read yet. Scan it.',
+                sample: 'Sample data, left out of the analysis.',
+                stale: 'Its products were last read more than 45 days ago. Scan it again.',
+                not_clothing:
+                    'Its products were read, but none is womenswear the designer knows.',
+            },
+            failed: 'Last scan failed',
+            manage: 'Open competitors',
         },
         opportunities: {
             title: 'Opportunities: strong at your competitors, missing from your catalog',
@@ -156,6 +179,8 @@ export const market: typeof ar = {
             style: 'Style',
         },
         inMarket: 'of competitors’ range',
+        inPosts: 'of competitors’ posts',
+        postLiftExample: '{lift}× its usual',
         inCatalog: 'of your catalog',
         atBrands: 'At {brands}',
         demand: '{n} with a demand signal',

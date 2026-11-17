@@ -189,7 +189,11 @@ function ShareBars({
     const { t, percent } = useI18n();
     const b = t.market.board;
     const rows = [
-        { label: b.inMarket, pct: market?.pct ?? null, bar: 'bg-gold' },
+        {
+            label: market?.basis === 'posts' ? b.inPosts : b.inMarket,
+            pct: market?.pct ?? null,
+            bar: 'bg-gold',
+        },
         { label: b.inCatalog, pct: mine?.catalog_pct ?? 0, bar: 'bg-primary' },
     ];
 
@@ -296,6 +300,11 @@ function MarketExamples({ examples }: { examples: MarketExample[] }) {
                             <div className="mt-1 truncate text-[11px] text-muted-foreground">
                                 {e.competitor}
                             </div>
+                            {e.post && e.lift !== null && e.lift >= 1.5 && (
+                                <div className="truncate text-[11px] font-medium text-gold-foreground dark:text-gold">
+                                    {tr(b.postLiftExample, { lift: e.lift })}
+                                </div>
+                            )}
                             {(e.published_sales || e.best_seller) && (
                                 <div className="truncate text-[11px] font-medium text-gold-foreground dark:text-gold">
                                     {e.published_sales
@@ -482,7 +491,9 @@ export function FocusCard({
                     <div className="grid grid-cols-2 gap-2">
                         <div className="rounded-xl bg-gold-soft/60 p-3">
                             <div className="text-[11px] text-muted-foreground">
-                                {b.inMarket}
+                                {market?.basis === 'posts'
+                                    ? b.inPosts
+                                    : b.inMarket}
                             </div>
                             <div className="num mt-1 text-xl font-semibold">
                                 {market?.pct !== null &&
@@ -749,6 +760,13 @@ export function SourcesBar({ board }: { board: Board }) {
                                 posts: count(c.posts, cb.posts),
                             })}
                         </p>
+                        {c.product_posts > 0 && (
+                            <p className="text-muted-foreground">
+                                {tr(b.productPosts, {
+                                    n: count(c.product_posts, cb.posts),
+                                })}
+                            </p>
+                        )}
                         {c.demand > 0 && (
                             <p className="text-muted-foreground">
                                 {tr(b.demand, { n: number(c.demand) })}
@@ -810,6 +828,98 @@ export function SourcesBar({ board }: { board: Board }) {
                     </PopoverContent>
                 </Popover>
             </div>
+        </div>
+    );
+}
+
+/**
+ * What each competitor adds to the reading. Open, with the reason, when no
+ * competitor products are in the analysis; folded away otherwise, and
+ * hidden when every competitor contributes.
+ */
+export function CompetitorCoverageCard({ board }: { board: Board }) {
+    const { t } = useI18n();
+    const count = useCount();
+    const c = t.market.board.coverage;
+    const cb = t.market.board.count;
+    const competitors = board.coverage.competitors;
+    const empty =
+        board.coverage.products === 0 && board.coverage.product_posts === 0;
+    const attention = competitors.some(
+        (x) => !['ok', 'social'].includes(x.status) || x.failed,
+    );
+
+    if (competitors.length === 0 || (!empty && !attention)) return null;
+
+    const list = (
+        <ul className="divide-y">
+            {competitors.map((x) => (
+                <li
+                    key={x.id}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-xs"
+                >
+                    <span className="font-medium text-foreground">
+                        {x.name}
+                    </span>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                        {t.market.platforms[
+                            x.platform as keyof typeof t.market.platforms
+                        ] ?? x.platform}
+                    </span>
+                    <span
+                        className={cn(
+                            'min-w-0 flex-1 basis-56',
+                            x.status === 'ok'
+                                ? 'text-success'
+                                : 'text-muted-foreground',
+                        )}
+                    >
+                        {c.statuses[x.status]}
+                    </span>
+                    <span className="num shrink-0 text-muted-foreground">
+                        {x.products > 0 && count(x.products, cb.products)}
+                        {x.products > 0 && x.posts > 0 && ' · '}
+                        {x.posts > 0 && count(x.posts, cb.posts)}
+                    </span>
+                    {x.failed && (
+                        <span className="inline-flex shrink-0 items-center gap-1 text-warning">
+                            <TriangleAlert className="size-3.5" />
+                            {c.failed}
+                        </span>
+                    )}
+                </li>
+            ))}
+        </ul>
+    );
+
+    if (!empty) {
+        return (
+            <details className="rounded-2xl border border-border/70 bg-card px-4 py-3 text-xs">
+                <summary className="cursor-pointer font-medium">
+                    {c.title}
+                </summary>
+                <div className="mt-2">{list}</div>
+            </details>
+        );
+    }
+
+    return (
+        <div className="space-y-3 rounded-2xl border border-gold/40 bg-gold-soft/40 p-4">
+            <div className="flex flex-wrap items-start gap-3">
+                <Info className="mt-0.5 size-4 shrink-0 text-gold-foreground dark:text-gold" />
+                <div className="min-w-0 flex-1 space-y-1">
+                    <h3 className="text-sm font-semibold">{c.emptyTitle}</h3>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                        {c.emptyBody}
+                    </p>
+                </div>
+                <Button size="sm" variant="gold" asChild>
+                    <Link href="/store/competitors?tab=accounts">
+                        {c.manage}
+                    </Link>
+                </Button>
+            </div>
+            <div className="rounded-xl bg-card px-3">{list}</div>
         </div>
     );
 }
