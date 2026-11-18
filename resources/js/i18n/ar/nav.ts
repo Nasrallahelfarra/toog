@@ -28,6 +28,8 @@ export const nav = {
     notifications: 'التنبيهات',
     activity: 'سجل النشاط',
     storeSettings: 'إعدادات المتجر',
+    team: 'فريق المتجر',
+    myProducts: 'منتجاتي',
 
     adminMode: 'وضع المدير',
     viewingStoreAs: 'أنت تتصفح متجر «{store}» بصلاحيات المالك الكاملة',

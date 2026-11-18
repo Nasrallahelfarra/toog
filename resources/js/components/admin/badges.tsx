@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck, CircleDashed, PauseCircle, Plug, PlugZap, ShieldCheck, Store } from 'lucide-react';
+import { CircleAlert, CircleCheck, CircleDashed, PauseCircle, Plug, PlugZap, ShieldCheck, Store, UserRound } from 'lucide-react';
 import { toneClasses } from '@/components/mojo/tone';
 import type { Tone } from '@/components/mojo/tone';
 import { useI18n } from '@/hooks/use-i18n';
@@ -64,8 +64,20 @@ export function UserStatusBadge({ status }: { status: string }) {
     );
 }
 
-export function RoleBadge({ role }: { role: string }) {
+/**
+ * The account's role. `staff` marks a member a store owner added with
+ * limited pages: the same kind of account as an owner, but not one.
+ */
+export function RoleBadge({ role, staff = false }: { role: string; staff?: boolean }) {
     const { t } = useI18n();
+
+    if (staff && role !== 'admin') {
+        return (
+            <Pill tone="neutral" icon={UserRound}>
+                {t.admin.roles.store_staff}
+            </Pill>
+        );
+    }
 
     return role === 'admin' ? (
         <Pill tone="gold" icon={ShieldCheck}>

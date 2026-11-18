@@ -32,12 +32,14 @@ import { FadeIn, HoverLift, Stagger, StaggerItem } from '@/components/mojo/motio
 import { PageBody } from '@/components/mojo/page-header';
 import { SectionCard } from '@/components/mojo/section-card';
 import { RecommendationBody } from '@/components/store/stagnant-products';
+import { HolderChip } from '@/components/store/team/member-products';
 import type { Recovery } from '@/components/store/stagnant-products';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useI18n } from '@/hooks/use-i18n';
 import { useRevenueVisible } from '@/hooks/use-revenue-visible';
+import { useStoreAccess } from '@/hooks/use-store-access';
 import { useVocabulary } from '@/hooks/use-vocabulary';
 import { cn } from '@/lib/utils';
 import { useQuietPoll } from '@/hooks/use-quiet-poll';
@@ -78,6 +80,8 @@ type Props = {
     };
     similar: { id: number; name: string; image_url: string | null; performance: string | null; units_sold: number; price: number | null }[];
     recovery: Recovery | null;
+    /** The staff member responsible for this product, if anyone took it. */
+    assignee: { id: number; name: string } | null;
 };
 
 const statusTone: Record<ClassKey | 'none', string> = {
@@ -88,9 +92,10 @@ const statusTone: Record<ClassKey | 'none', string> = {
     none: 'bg-muted text-muted-foreground',
 };
 
-export default function ProductShow({ product, history, category, similar, recovery }: Props) {
+export default function ProductShow({ product, history, category, similar, recovery, assignee }: Props) {
     const { t, tr, money, number, percent, date } = useI18n();
     const showRevenue = useRevenueVisible();
+    const { owner, can } = useStoreAccess();
     const c = t.catalog;
     const p = c.product;
     const expertRef = useRef<HTMLDivElement>(null);
@@ -159,7 +164,11 @@ export default function ProductShow({ product, history, category, similar, recov
             {working && <RecoveryPoll onNetwork={setNetworkError} />}
 
             <nav aria-label="breadcrumb" className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-sm">
-                {fromStagnant ? (
+                {!can('catalog') && !(fromStagnant && can('stagnant')) ? (
+                    <Link href={owner ? '/store' : '/store/my-products'} className="hover:text-foreground">
+                        {owner ? t.nav.dashboard : t.nav.myProducts}
+                    </Link>
+                ) : fromStagnant && can('stagnant') ? (
                     <Link href="/store/stagnant" className="hover:text-foreground">
                         {t.stagnant.breadcrumb}
                     </Link>
@@ -195,6 +204,11 @@ export default function ProductShow({ product, history, category, similar, recov
                                     SKU {product.sku}
                                 </span>
                             )}
+                            {assignee && (
+                                <span title={tr(c.memberTooltip, { name: assignee.name })}>
+                                    <HolderChip name={assignee.name} className="bg-muted shadow-none" />
+                                </span>
+                            )}
                         </div>
                         <h1 className="text-2xl leading-snug font-bold sm:text-3xl">{product.name}</h1>
                         <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
@@ -222,10 +236,12 @@ export default function ProductShow({ product, history, category, similar, recov
 
                     <Attributes features={product.features} />
 
-                    <Button size="lg" className="w-full sm:w-auto" onClick={() => ask()} disabled={request.processing}>
-                        {working ? <Loader2 className="size-4 motion-safe:animate-spin" /> : <Sparkles className="size-4" />}
-                        {working ? t.stagnant.pending : recovery?.status === 'completed' ? p.viewRecommendation : p.askExpert}
-                    </Button>
+                    {can('stagnant') && (
+                        <Button size="lg" className="w-full sm:w-auto" onClick={() => ask()} disabled={request.processing}>
+                            {working ? <Loader2 className="size-4 motion-safe:animate-spin" /> : <Sparkles className="size-4" />}
+                            {working ? t.stagnant.pending : recovery?.status === 'completed' ? p.viewRecommendation : p.askExpert}
+                        </Button>
+                    )}
                 </div>
             </FadeIn>
 
@@ -238,7 +254,8 @@ export default function ProductShow({ product, history, category, similar, recov
                 </FadeIn>
             </div>
 
-            <div ref={expertRef} className="scroll-mt-6">
+            {/* The expert's advice belongs to the stagnation page. */}
+            <div ref={expertRef} className={cn('scroll-mt-6', !can('stagnant') && 'hidden')}>
                 <SectionCard title={p.expertTitle} description={product.performance ? p.goals[product.performance] : p.goals.none} icon={Sparkles}>
                     {!recovery && !request.processing && !requestError ? (
                         <ExpertIntro onAsk={() => ask()} />

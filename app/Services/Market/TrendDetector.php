@@ -291,7 +291,7 @@ class TrendDetector
         $gapAr = $trend->in_catalog ? 'وموجود في كتالوجك.' : 'وغير موجود في كتالوجك حاليًا — فرصة فجوة.';
         $gapEn = $trend->in_catalog ? 'and it is already in your catalog.' : 'and it is missing from your catalog — a gap opportunity.';
 
-        foreach ($store->members as $member) {
+        foreach ($store->recipients('market') as $member) {
             $member->notify(new PlatformNotification(
                 kind: 'trend',
                 titleAr: "توجه جديد صاعد: {$trend->name_ar}",

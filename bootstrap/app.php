@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureAdmin;
+use App\Http\Middleware\EnsureSectionAllowed;
 use App\Http\Middleware\EnsureStoreSelected;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\HandleAppearance;
@@ -40,6 +41,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'admin' => EnsureAdmin::class,
             'store' => EnsureStoreSelected::class,
+            'store.access' => EnsureSectionAllowed::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

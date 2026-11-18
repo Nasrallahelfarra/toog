@@ -42,5 +42,17 @@ return [
     'designer_option_limit' => 'You reached the limit (:count); remove one to add another.',
     'designer_option_letters' => 'Use Arabic or English letters.',
     'designer_fabric_unknown' => 'This fabric is no longer in your list; choose another.',
+    // Store team
+    'member_created' => 'Team member added.',
+    'permissions_saved' => 'Member details and access updated.',
+    'member_removed' => ':name was removed from the team.',
+    'member_not_managed' => 'This account is linked to more than one store; the platform admin manages it.',
+    'section_forbidden' => 'This page is not available to your account.',
+    'product_taken' => 'This product is already with :name and cannot be added twice.',
+    'products_none_claimed' => 'No product was added; refresh the page and try again.',
+    'products_claimed' => '{1} Product added to yours.|[2,*] :count products added to yours.',
+    'products_claimed_partial' => ':count added; :taken are already with your colleagues.',
+    'products_released' => '{0} Nothing to remove.|{1} Product removed from the list.|[2,*] :count products removed from the list.',
+    'products_assigned' => '{0} :name already holds these products.|{1} Product assigned to :name.|[2,*] :count products assigned to :name.',
     'designer_reference_not_garment' => 'The picture does not show a garment that can be designed; pick another product or post.',
 ];

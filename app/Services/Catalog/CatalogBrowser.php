@@ -44,6 +44,22 @@ class CatalogBrowser
     }
 
     /**
+     * The selected period as other reports need it: "from" inclusive and
+     * "to" exclusive (dates), plus the months of its series, oldest first.
+     * A chosen month is one month of totals with the year leading up to it.
+     *
+     * @return array{from: string, to: string, months: list<string>}
+     */
+    public function period(Store $store, int $months, ?string $month = null): array
+    {
+        return [
+            'from' => $this->start($store, $month ? 1 : $months, $month)->toDateString(),
+            'to' => $this->end($store, $month)->copy()->addMonth()->toDateString(),
+            'months' => $this->months($store, $month ? self::HISTORY : $months, $month),
+        ];
+    }
+
+    /**
      * Totals for the period against the same length of time just before it.
      *
      * @return array<string, mixed>
@@ -160,13 +176,18 @@ class CatalogBrowser
      * the 12 months of units and revenue up to the period's end. With a
      * chosen month, cards carry that month's sales and rank by them.
      *
-     * @param  array{search?: string|null, class?: string|null, sort?: string|null}  $filters
+     * @param  array{search?: string|null, class?: string|null, sort?: string|null, member?: string|null}  $filters
      * @return array<string, mixed> the paginator as sent to the page
      */
     public function products(Store $store, ?string $category, array $filters, ?string $month = null): array
     {
         $page = $this->inCategory($store, $category)
             ->select('products.*')
+            ->with('assignee:id,name')
+            // "none" lists products nobody is responsible for yet.
+            ->when($filters['member'] ?? null, fn (Builder $q, string $member) => $member === 'none'
+                ? $q->whereNull('products.assigned_user_id')
+                : $q->where('products.assigned_user_id', (int) $member))
             ->when($month, fn (Builder $q) => $q
                 ->leftJoinSub(ProductSale::query()
                     ->selectRaw('product_id, SUM(units) AS month_units, SUM(revenue) AS month_revenue')
@@ -221,6 +242,7 @@ class CatalogBrowser
                 'return_rate' => (float) $p->return_rate,
                 'features' => $p->features ?? [],
                 'launched_at' => $p->launched_at?->toDateString(),
+                'assignee' => $p->assignee ? ['id' => $p->assignee->id, 'name' => $p->assignee->name] : null,
                 'history' => array_map(fn (string $m) => [
                     'period' => $m.'-01',
                     'units' => (int) $rows->get($m, collect())->sum('units'),

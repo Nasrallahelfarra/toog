@@ -32,7 +32,12 @@ use Illuminate\Support\Carbon;
  * @property int $stock
  * @property bool $is_novel
  * @property Carbon|null $launched_at
+ * @property int|null $assigned_user_id
+ * @property Carbon|null $assigned_at
  */
+// assigned_user_id / assigned_at are deliberately not fillable: the sync
+// and the file import mass-assign product rows and must never touch who
+// is responsible for a product. Only ProductAssignments writes them.
 #[Fillable([
     'store_id', 'external_id', 'sku', 'name', 'category', 'price', 'image_url', 'features',
     'performance', 'performance_score', 'units_sold', 'revenue', 'views', 'add_to_cart_rate',
@@ -70,7 +75,18 @@ class Product extends Model
             'return_rate' => 'decimal:2',
             'is_novel' => 'boolean',
             'launched_at' => 'date',
+            'assigned_at' => 'datetime',
         ];
+    }
+
+    /**
+     * The store member responsible for this product, if anyone claimed it.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function assignee(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_user_id');
     }
 
     /**

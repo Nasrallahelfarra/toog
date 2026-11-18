@@ -19,6 +19,7 @@ use App\Services\Zid\ZidClient;
 use App\Services\Zid\ZidSyncState;
 use App\Support\CurrentStore;
 use App\Support\RevenueVisibility;
+use App\Support\StoreAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -31,9 +32,12 @@ use Inertia\Response;
  */
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request, CurrentStore $current, StorePerformance $performance, BalanceService $balance, DemoCatalogCleanup $cleanup): Response
+    public function __invoke(Request $request, CurrentStore $current, StorePerformance $performance, BalanceService $balance, DemoCatalogCleanup $cleanup, StoreAccess $access): Response
     {
         $store = $current->require();
+        // Each card belongs to a page; a staff member gets only the cards
+        // of the pages they may open. The rest is never sent.
+        $can = fn (string $section): bool => $access->can($section);
         $sync = app(ZidSyncState::class)->latest($store);
 
         $evaluations = Evaluation::query()
@@ -71,31 +75,31 @@ class DashboardController extends Controller
         $revenuePrev = $trend[4]['revenue'] ?? 0;
 
         return Inertia::render('store/dashboard', [
-            'sync' => $sync,
+            'sync' => $can('connection') ? $sync : null,
             'demoCatalog' => fn () => $cleanup->availableInDashboard($store, $request->user()) ? $cleanup->preview($store) : null,
             'kpis' => RevenueVisibility::apply($store, [
-                'evaluated_this_month' => $thisMonth,
-                'evaluated_delta' => $lastMonth > 0 ? round(($thisMonth - $lastMonth) / $lastMonth * 100, 1) : null,
-                'acceptance_rate' => $completed->count() ? (int) round($decisions[Evaluation::ACCEPT] / $completed->count() * 100) : null,
-                'diversity' => $analysis['overall']['diversity'],
-                'novel_ratio' => $analysis['overall']['novel_ratio'],
-                'target_novel' => $analysis['overall']['target_novel'],
-                'balance_alerts' => count($analysis['alerts']),
-                'at_risk' => $performance->atRiskCount($store),
-                'revenue' => $revenueNow,
-                'revenue_delta' => $revenuePrev > 0 ? round(($revenueNow - $revenuePrev) / $revenuePrev * 100, 1) : null,
+                'evaluated_this_month' => $can('evaluations') ? $thisMonth : null,
+                'evaluated_delta' => $can('evaluations') && $lastMonth > 0 ? round(($thisMonth - $lastMonth) / $lastMonth * 100, 1) : null,
+                'acceptance_rate' => $can('evaluations') && $completed->count() ? (int) round($decisions[Evaluation::ACCEPT] / $completed->count() * 100) : null,
+                'diversity' => $can('balance') ? $analysis['overall']['diversity'] : null,
+                'novel_ratio' => $can('balance') ? $analysis['overall']['novel_ratio'] : null,
+                'target_novel' => $can('balance') ? $analysis['overall']['target_novel'] : null,
+                'balance_alerts' => $can('balance') ? count($analysis['alerts']) : 0,
+                'at_risk' => $can('stagnant') ? $performance->atRiskCount($store) : null,
+                'revenue' => $can('performance') ? $revenueNow : null,
+                'revenue_delta' => $can('performance') && $revenuePrev > 0 ? round(($revenueNow - $revenuePrev) / $revenuePrev * 100, 1) : null,
             ]),
-            'revenueTrend' => $store->showsRevenue() ? array_column($trend, 'revenue') : [],
-            'evaluationsTrend' => $byMonth->map(fn ($m) => $m['accept'] + $m['modify'] + $m['reject'])->all(),
-            'decisions' => $decisions,
-            'byMonth' => $byMonth,
-            'trends' => Trend::query()
+            'revenueTrend' => $store->showsRevenue() && $can('performance') ? array_column($trend, 'revenue') : [],
+            'evaluationsTrend' => $can('evaluations') ? $byMonth->map(fn ($m) => $m['accept'] + $m['modify'] + $m['reject'])->all() : [],
+            'decisions' => $can('evaluations') ? $decisions : ['accept' => 0, 'modify' => 0, 'reject' => 0],
+            'byMonth' => $can('evaluations') ? $byMonth : [],
+            'trends' => ! $can('market') ? [] : Trend::query()
                 ->where('store_id', $store->id)
                 ->where('status', 'rising')
                 ->orderByDesc('momentum')
                 ->limit(5)
                 ->get(['id', 'type', 'value', 'name_ar', 'name_en', 'momentum', 'growth', 'saturation', 'in_catalog', 'platforms']),
-            'events' => SeasonalEvent::query()
+            'events' => ! $can('calendar') ? [] : SeasonalEvent::query()
                 ->forStore($store)
                 ->where('ends_on', '>=', now()->toDateString())
                 ->orderBy('starts_on')
@@ -113,9 +117,9 @@ class DashboardController extends Controller
                     'prep_weeks' => $e->prep_weeks,
                     'palette' => $e->palette ?? [],
                 ]),
-            'atRisk' => $performance->atRisk($store, 5),
-            'stagnant' => fn () => app(StagnantProducts::class)->dashboard($store),
-            'recentEvaluations' => Evaluation::query()
+            'atRisk' => $can('stagnant') ? $performance->atRisk($store, 5) : [],
+            'stagnant' => fn () => $can('stagnant') ? app(StagnantProducts::class)->dashboard($store) : null,
+            'recentEvaluations' => ! $can('evaluations') ? [] : Evaluation::query()
                 ->where('store_id', $store->id)
                 ->latest()
                 ->limit(6)
@@ -125,7 +129,7 @@ class DashboardController extends Controller
                     'created_at' => $e->created_at?->toIso8601String(),
                     'image_url' => $e->image_path ? Storage::disk('public')->url($e->image_path) : null,
                 ]),
-            'connection' => [
+            'connection' => ! $can('connection') ? null : [
                 'status' => $store->connection_status,
                 'platform' => $store->platform,
                 'last_synced_at' => $store->last_synced_at?->toIso8601String(),

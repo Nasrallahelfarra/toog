@@ -12,6 +12,7 @@ import { Pagination } from '@/components/mojo/pagination';
 import type { Paginated } from '@/components/mojo/pagination';
 import { SectionCard } from '@/components/mojo/section-card';
 import { Sparkline, StatCard } from '@/components/mojo/stat-card';
+import { HolderChip } from '@/components/store/team/member-products';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -58,10 +59,12 @@ type Product = {
     return_rate: number;
     features: { colors?: string[]; pattern?: string; material?: string; style?: string };
     launched_at: string | null;
+    /** The staff member responsible for the product, if anyone took it. */
+    assignee: { id: number; name: string } | null;
     history: { period: string; units: number; revenue: number }[];
 };
 
-type Filters = { search?: string; class?: string; sort?: string };
+type Filters = { search?: string; class?: string; sort?: string; member?: string };
 
 type Props = {
     months: Range;
@@ -70,6 +73,8 @@ type Props = {
     availableMonths: string[];
     category: string | null;
     filters: Filters;
+    /** The store's staff, for the owner's filter; empty for everyone else. */
+    members: { id: number; name: string }[];
     summary: {
         revenue: number;
         units: number;
@@ -234,6 +239,7 @@ export default function Catalog(props: Props) {
                     <ProductsSection
                         key={props.category ?? ALL}
                         products={props.products}
+                        members={props.members}
                         params={params}
                         title={props.category ? tr(c.productsIn, { category: scope }) : c.productsTitle}
                         hint={props.month ? tr(c.productsHintMonth, { month: monthName(props.month) }) : c.productsHint}
@@ -471,7 +477,19 @@ function ImageStrip({ images }: { images: string[] }) {
     );
 }
 
-function ProductsSection({ products, params, title, hint }: { products: Paginated<Product>; params: Params; title: string; hint: string }) {
+function ProductsSection({
+    products,
+    members,
+    params,
+    title,
+    hint,
+}: {
+    products: Paginated<Product>;
+    members: Props['members'];
+    params: Params;
+    title: string;
+    hint: string;
+}) {
     const { t } = useI18n();
     const c = t.catalog;
     const showRevenue = useRevenueVisible();
@@ -512,6 +530,22 @@ function ProductsSection({ products, params, title, hint }: { products: Paginate
                             ))}
                         </SelectContent>
                     </Select>
+                    {members.length > 0 && (
+                        <Select value={params.member ?? ALL} onValueChange={(v) => apply({ member: v === ALL ? undefined : v })}>
+                            <SelectTrigger className={cn('w-44', params.member && 'border-primary text-primary')} aria-label={c.allMembers}>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={ALL}>{c.allMembers}</SelectItem>
+                                <SelectItem value="none">{c.noMember}</SelectItem>
+                                {members.map((member) => (
+                                    <SelectItem key={member.id} value={String(member.id)}>
+                                        {member.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
                     <Select value={params.sort ?? defaultSort} onValueChange={(v) => apply({ sort: v === defaultSort ? undefined : v })}>
                         <SelectTrigger className="w-44">
                             <SelectValue />
@@ -532,7 +566,7 @@ function ProductsSection({ products, params, title, hint }: { products: Paginate
                     <EmptyState icon={Package} title={c.noProducts} />
                 </SectionCard>
             ) : (
-                <Stagger key={`${products.current_page}-${params.sort}-${params.class}-${params.search}`} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                <Stagger key={`${products.current_page}-${params.sort}-${params.class}-${params.search}-${params.member}`} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                     {products.data.map((product) => (
                         <StaggerItem key={product.id}>
                             <ProductCard product={product} />
@@ -573,6 +607,11 @@ function ProductCard({ product }: { product: Product }) {
                         </div>
                     )}
                     <PerformanceBadge value={product.performance} className="absolute start-2 top-2 shadow-sm" />
+                    {product.assignee && (
+                        <span className="absolute end-2 bottom-2 max-w-[70%]" title={tr(c.memberTooltip, { name: product.assignee.name })}>
+                            <HolderChip name={product.assignee.name} />
+                        </span>
+                    )}
                 </div>
                 <div className="flex flex-1 flex-col gap-2 p-4">
                     <h3 className="line-clamp-2 text-sm leading-6 font-medium">{product.name}</h3>

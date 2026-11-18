@@ -56,6 +56,7 @@ export const admin = {
     roles: {
         admin: 'مدير المنصة',
         store_owner: 'صاحب متجر',
+        store_staff: 'موظف متجر',
     },
 
     stores: {

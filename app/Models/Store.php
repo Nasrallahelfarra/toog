@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use App\Support\StoreSections;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -48,6 +50,11 @@ class Store extends Model
     public const STATUS_ACTIVE = 'active';
 
     public const STATUS_SUSPENDED = 'suspended';
+
+    /** Membership roles on the store_user pivot. */
+    public const ROLE_OWNER = 'owner';
+
+    public const ROLE_STAFF = 'staff';
 
     /**
      * @var array<string, mixed>
@@ -135,7 +142,32 @@ class Store extends Model
      */
     public function members(): BelongsToMany
     {
-        return $this->belongsToMany(User::class)->withPivot('role')->withTimestamps();
+        return $this->belongsToMany(User::class)->withPivot('role', 'permissions')->withTimestamps();
+    }
+
+    /**
+     * Members the owner added with limited sections.
+     *
+     * @return BelongsToMany<User, $this>
+     */
+    public function staff(): BelongsToMany
+    {
+        return $this->members()->wherePivot('role', self::ROLE_STAFF);
+    }
+
+    /**
+     * Who hears about something in one section of the dashboard: the
+     * owners, and the staff members who can open that section. A section
+     * staff cannot hold (the Zid connection) reaches the owners only.
+     *
+     * @return Collection<int, User>
+     */
+    public function recipients(string $section): Collection
+    {
+        return $this->members()->get()
+            ->filter(fn (User $member) => $member->pivot->role !== self::ROLE_STAFF
+                || in_array($section, StoreSections::clean((array) json_decode((string) $member->pivot->permissions, true)), true))
+            ->values();
     }
 
     /**

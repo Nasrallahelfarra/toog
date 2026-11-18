@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\Catalog\CatalogBrowser;
 use App\Support\CurrentStore;
 use App\Support\RevenueVisibility;
+use App\Support\StoreAccess;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -18,12 +19,13 @@ class CatalogController extends Controller
 {
     public function __construct(private readonly CurrentStore $current) {}
 
-    public function index(Request $request, CatalogBrowser $catalog): Response
+    public function index(Request $request, CatalogBrowser $catalog, StoreAccess $access): Response
     {
         $store = $this->current->require();
         $months = in_array($request->integer('months'), CatalogBrowser::RANGES, true) ? $request->integer('months') : 12;
         $category = $request->filled('category') ? (string) $request->input('category') : null;
-        $filters = $request->only(['search', 'class', 'sort']);
+        // Filtering by who holds a product is the owner's tool.
+        $filters = $request->only($access->isOwner() ? ['search', 'class', 'sort', 'member'] : ['search', 'class', 'sort']);
         $showRevenue = $store->showsRevenue();
         // Without revenue the catalog ranks by units sold, and never by money.
         if (! $showRevenue && in_array($filters['sort'] ?? 'revenue', ['revenue', ''], true)) {
@@ -39,6 +41,7 @@ class CatalogController extends Controller
             'availableMonths' => $available,
             'category' => $category,
             'filters' => $filters,
+            'members' => $access->isOwner() ? $store->staff()->orderBy('users.name')->get(['users.id', 'users.name'])->map->only(['id', 'name'])->values() : [],
             'summary' => fn () => RevenueVisibility::apply($store, $catalog->summary($store, $category, $months, $month)),
             'trend' => fn () => RevenueVisibility::apply($store, $catalog->trend($store, $category, $months, $month)),
             'categories' => fn () => RevenueVisibility::apply($store, $catalog->categories($store, $months, $month, byUnits: ! $showRevenue)),

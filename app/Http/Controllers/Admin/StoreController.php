@@ -70,6 +70,8 @@ class StoreController extends Controller
         return Inertia::render('admin/stores/create', [
             'owners' => User::query()
                 ->where('role', User::ROLE_STORE_OWNER)
+                // Staff accounts belong to the store that created them.
+                ->whereDoesntHave('stores', fn ($q) => $q->where('store_user.role', Store::ROLE_STAFF))
                 ->orderBy('name')
                 ->get(['id', 'name', 'email']),
         ]);
