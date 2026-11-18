@@ -140,7 +140,7 @@ export const team: typeof ar = {
         createTitle: 'Add a staff member',
         editTitle: 'Details and access for “{name}”',
         password: 'Password',
-        passwordHint: 'Give them the email and password to sign in; they can change it from their account later.',
+        passwordHint: 'At least 8 characters; digits alone are fine. Give them the email and password to sign in.',
         pages: 'Allowed pages',
         pagesHint: 'An unticked page disappears from their menu and cannot be opened. “My products” and notifications are always available.',
         selectAll: 'Select all',

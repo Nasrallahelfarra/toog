@@ -16,7 +16,6 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -28,6 +27,13 @@ use Inertia\Response;
  */
 class TeamController extends Controller
 {
+    /**
+     * A staff password the owner sets: eight characters or more, and
+     * digits alone are fine. Deliberately lighter than the platform's
+     * rule for owners and admins, at the store owner's request.
+     */
+    private const PASSWORD = ['required', 'string', 'min:8', 'max:120'];
+
     public function __construct(private readonly CurrentStore $current) {}
 
     public function index(Request $request, TeamReport $report, CatalogBrowser $catalog): Response
@@ -83,7 +89,7 @@ class TeamController extends Controller
             // A new account only: an owner never gets to set the password
             // of an account that already exists.
             'email' => ['required', 'email', 'max:190', Rule::unique(User::class)],
-            'password' => ['required', 'string', 'max:120', Password::defaults()],
+            'password' => self::PASSWORD,
             ...$this->permissionRules(),
         ]);
 
@@ -143,7 +149,7 @@ class TeamController extends Controller
         $user = $this->managed($this->member($this->current->require(), $member));
 
         $data = $request->validate([
-            'password' => ['required', 'string', 'max:120', 'confirmed', Password::defaults()],
+            'password' => [...self::PASSWORD, 'confirmed'],
         ]);
 
         $user->forceFill(['password' => $data['password']])->save();
