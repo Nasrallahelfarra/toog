@@ -7,6 +7,8 @@ use App\Models\Product;
 use App\Services\Catalog\CatalogBrowser;
 use App\Support\CurrentStore;
 use App\Support\RevenueVisibility;
+use App\Support\StoreAccess;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -18,10 +20,18 @@ class ProductController extends Controller
 {
     public function __construct(private readonly CurrentStore $current) {}
 
-    public function show(Product $product, CatalogBrowser $catalog): Response
+    public function show(Request $request, Product $product, CatalogBrowser $catalog, StoreAccess $access): Response
     {
         $store = $this->current->require();
         abort_unless($product->store_id === $store->id, 404);
+        // A staff member opens any product through the pages that list
+        // them; without those pages, only the products they hold.
+        $browses = $access->can('catalog', 'performance', 'stagnant');
+        abort_unless($browses || $product->assigned_user_id === $request->user()->id, 403);
+
+        $detail = $catalog->productDetail($store, $product);
+        // Other products are listed only for those who can open them.
+        $detail['similar'] = $browses ? $detail['similar'] : [];
 
         return Inertia::render('store/products/show', RevenueVisibility::apply($store, [
             'product' => [
@@ -35,10 +45,11 @@ class ProductController extends Controller
                 'launched_at' => $product->launched_at?->toDateString(),
                 'classification_reason' => $product->performanceReason(),
             ],
-            ...$catalog->productDetail($store, $product),
+            ...$detail,
         ]) + [
             // Polled while the expert works on a recommendation.
-            'recovery' => fn () => $product->recovery?->presentation(),
+            'recovery' => fn () => $access->can('stagnant') ? $product->recovery?->presentation() : null,
+            'assignee' => $product->assignee?->only(['id', 'name']),
         ]);
     }
 }

@@ -466,6 +466,6 @@ class SyncStoreData implements ShouldQueue
     {
         $notification = new PlatformNotification('sync', $titleAr, $titleEn, $bodyAr, $bodyEn, '/store/settings/integration', $this->store->id, $level, $email);
 
-        $this->store->members()->get()->each->notify($notification);
+        $this->store->recipients('connection')->each->notify($notification);
     }
 }

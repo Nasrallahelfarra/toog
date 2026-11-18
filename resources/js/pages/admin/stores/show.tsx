@@ -624,7 +624,7 @@ function MembersTab({ members }: { members: Member[] }) {
                                 </div>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
-                                <RoleBadge role={m.role} />
+                                <RoleBadge role={m.role} staff={m.member_role === 'staff'} />
                                 <UserStatusBadge status={m.status} />
                                 <span className="text-muted-foreground text-xs">
                                     {t.admin.detail.lastLogin}: {m.last_login_at ? relative(m.last_login_at) : t.common.never}

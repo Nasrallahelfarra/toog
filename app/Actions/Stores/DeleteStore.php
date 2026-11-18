@@ -3,6 +3,7 @@
 namespace App\Actions\Stores;
 
 use App\Models\Store;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -21,8 +22,12 @@ class DeleteStore
         $id = $store->id;
 
         DB::transaction(function () use ($store): void {
+            // Staff accounts exist for this store only, so they go with it.
+            $staff = $store->staff()->get();
             // Members are a pivot without a cascading key on every driver.
             $store->members()->detach();
+            $staff->filter(fn (User $member) => ! $member->isAdmin() && $member->stores()->doesntExist() && $member->ownedStores()->whereKeyNot($store->id)->doesntExist())
+                ->each->delete();
             $store->delete();
         });
 

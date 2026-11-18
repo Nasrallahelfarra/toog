@@ -150,7 +150,7 @@ export default function AdminUsers({ users, filters: initial, counts, stores, me
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <RoleBadge role={user.role} />
+                                        <RoleBadge role={user.role} staff={user.staff} />
                                     </TableCell>
                                     <TableCell>
                                         {user.stores.length === 0 ? (

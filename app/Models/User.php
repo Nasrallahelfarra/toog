@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -71,6 +72,15 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
         'locale' => 'ar',
     ];
 
+    protected static function booted(): void
+    {
+        // The foreign key clears who holds a product when the account goes;
+        // the date it was taken has to go with it.
+        static::deleting(function (User $user): void {
+            DB::table('products')->where('assigned_user_id', $user->id)->update(['assigned_user_id' => null, 'assigned_at' => null]);
+        });
+    }
+
     public const ROLE_ADMIN = 'admin';
 
     public const ROLE_STORE_OWNER = 'store_owner';
@@ -84,7 +94,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
      */
     public function stores(): BelongsToMany
     {
-        return $this->belongsToMany(Store::class)->withPivot('role')->withTimestamps();
+        return $this->belongsToMany(Store::class)->withPivot('role', 'permissions')->withTimestamps();
     }
 
     /**

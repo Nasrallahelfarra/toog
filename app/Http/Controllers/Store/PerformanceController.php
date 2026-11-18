@@ -11,6 +11,7 @@ use App\Services\Zid\ZidClient;
 use App\Support\Activity;
 use App\Support\CurrentStore;
 use App\Support\RevenueVisibility;
+use App\Support\StoreAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -97,7 +98,7 @@ class PerformanceController extends Controller
             'sync' => [
                 'status' => $store->connection_status,
                 'last_synced_at' => $store->last_synced_at?->toIso8601String(),
-                'can_sync' => $store->isConnected() && filled($store->zid_access_token) && ZidClient::configured(),
+                'can_sync' => app(StoreAccess::class)->can('connection') && $store->isConnected() && filled($store->zid_access_token) && ZidClient::configured(),
                 'missing_features' => $extraction->pending($store->id)->count(),
             ],
             'extraction' => $extraction->latest($store),

@@ -36,7 +36,7 @@ class CheckBalance implements ShouldQueue
         foreach ($alerts->reject(fn ($a) => in_array($signature($a), $previous, true)) as $alert) {
             [$titleAr, $titleEn, $bodyAr, $bodyEn] = $this->text($alert);
 
-            foreach ($store->members as $member) {
+            foreach ($store->recipients('balance') as $member) {
                 $member->notify(new PlatformNotification(
                     kind: 'balance',
                     titleAr: $titleAr,

@@ -54,6 +54,9 @@ export const catalog = {
     noCategories: 'لا توجد منتجات في الكتالوج بعد. اربط متجر زد أو استورد ملف المنتجات.',
     unitsSold: '{n} وحدة',
     noImage: 'بلا صورة',
+    allMembers: 'كل المسؤولين',
+    noMember: 'بلا مسؤول',
+    memberTooltip: 'المسؤول: {name}',
     product: {
         novel: 'منتج جديد',
         status: {

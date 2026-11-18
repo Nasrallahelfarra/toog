@@ -40,6 +40,8 @@ class UserController extends Controller
                 'email' => $u->email,
                 'phone' => $u->phone,
                 'role' => $u->role,
+                // Added to a store by its owner, with limited pages.
+                'staff' => $u->stores->contains(fn (Store $s) => $s->pivot->role === Store::ROLE_STAFF),
                 'status' => $u->status,
                 'disabled_reason' => $u->disabled_reason,
                 'disabled_at' => $u->disabled_at?->toIso8601String(),

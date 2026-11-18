@@ -40,6 +40,7 @@ import { SectionCard } from '@/components/mojo/section-card';
 import { StatCard } from '@/components/mojo/stat-card';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/hooks/use-i18n';
+import { useStoreAccess } from '@/hooks/use-store-access';
 import { useVocabulary } from '@/hooks/use-vocabulary';
 import { cn } from '@/lib/utils';
 
@@ -97,7 +98,8 @@ type RecentEvaluation = {
 };
 
 type Props = {
-    stagnant: StagnantDashboard;
+    /** Null (like the other cards' data) when the page it belongs to is closed to this user. */
+    stagnant: StagnantDashboard | null;
     demoCatalog: DemoCatalogPreview | null;
     sync: ZidSyncProgressData | null;
     kpis: {
@@ -125,7 +127,7 @@ type Props = {
         platform: string;
         last_synced_at: string | null;
         check: { ok: boolean; fail: number; checked_at: string } | null;
-    };
+    } | null;
     setup: SetupState | null;
     thresholds: { accept: number; reject: number };
 };
@@ -133,9 +135,16 @@ type Props = {
 export default function StoreDashboard(props: Props) {
     const { t, tr, number, percent, isRtl } = useI18n();
     const { auth, currentStore } = usePage().props;
+    const { can } = useStoreAccess();
     const d = t.dashboard;
     const Arrow = isRtl ? ArrowLeft : ArrowRight;
     const firstName = auth.user.name.split(' ')[0];
+    const quickActions = [
+        { section: 'evaluations', href: '/store/evaluations/create', icon: ScanSearch, title: d.actionEvaluate, hint: d.actionEvaluateHint, tone: 'bg-primary text-primary-foreground' },
+        { section: 'studio', href: '/store/studio', icon: WandSparkles, title: d.actionStudio, hint: d.actionStudioHint, tone: 'bg-gold text-gold-foreground' },
+        { section: 'market', href: '/store/market', icon: Radar, title: d.actionMarket, hint: d.actionMarketHint, tone: 'bg-info text-white' },
+        { section: 'balance', href: '/store/balance', icon: Scale, title: d.actionBalance, hint: d.actionBalanceHint, tone: 'bg-success text-white' },
+    ].filter((action) => can(action.section));
 
     return (
         <PageBody>
@@ -146,18 +155,22 @@ export default function StoreDashboard(props: Props) {
                 icon={LayoutDashboard}
                 actions={
                     <>
-                        <Button asChild variant="outline">
-                            <Link href="/store/studio" prefetch>
-                                <WandSparkles className="size-4" />
-                                {d.generateDesign}
-                            </Link>
-                        </Button>
-                        <Button asChild>
-                            <Link href="/store/evaluations/create" prefetch>
-                                <ScanSearch className="size-4" />
-                                {d.evaluateProduct}
-                            </Link>
-                        </Button>
+                        {can('studio') && (
+                            <Button asChild variant="outline">
+                                <Link href="/store/studio" prefetch>
+                                    <WandSparkles className="size-4" />
+                                    {d.generateDesign}
+                                </Link>
+                            </Button>
+                        )}
+                        {can('evaluations') && (
+                            <Button asChild>
+                                <Link href="/store/evaluations/create" prefetch>
+                                    <ScanSearch className="size-4" />
+                                    {d.evaluateProduct}
+                                </Link>
+                            </Button>
+                        )}
                     </>
                 }
             />
@@ -169,9 +182,10 @@ export default function StoreDashboard(props: Props) {
                 <SetupHero setup={props.setup} />
             ) : (
                 <>
-                    <ConnectionStrip connection={props.connection} />
+                    {props.connection && <ConnectionStrip connection={props.connection} />}
 
                     <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                        {can('evaluations') && (
                         <StaggerItem>
                             <StatCard
                                 label={d.kpiEvaluated}
@@ -183,6 +197,8 @@ export default function StoreDashboard(props: Props) {
                                 href="/store/evaluations"
                             />
                         </StaggerItem>
+                        )}
+                        {can('evaluations') && (
                         <StaggerItem>
                             <StatCard
                                 label={d.kpiAcceptance}
@@ -193,6 +209,8 @@ export default function StoreDashboard(props: Props) {
                                 hint={d.kpiAcceptanceHint}
                             />
                         </StaggerItem>
+                        )}
+                        {can('balance') && (
                         <StaggerItem>
                             <StatCard
                                 label={d.kpiDiversity}
@@ -204,6 +222,8 @@ export default function StoreDashboard(props: Props) {
                                 href="/store/balance"
                             />
                         </StaggerItem>
+                        )}
+                        {can('stagnant') && (
                         <StaggerItem>
                             <StatCard
                                 label={d.kpiAtRisk}
@@ -214,46 +234,57 @@ export default function StoreDashboard(props: Props) {
                                 href="#at-risk"
                             />
                         </StaggerItem>
+                        )}
                     </Stagger>
 
-                    <StagnantDashboardCard data={props.stagnant} />
+                    {props.stagnant && <StagnantDashboardCard data={props.stagnant} />}
 
-                    <div className="grid gap-6 lg:grid-cols-3">
-                        <FadeIn delay={0.1} className="lg:col-span-2">
-                            <EvaluationsChart byMonth={props.byMonth} />
-                        </FadeIn>
-                        <FadeIn delay={0.15}>
-                            <DecisionDonut decisions={props.decisions} />
-                        </FadeIn>
-                    </div>
+                    {can('evaluations') && (
+                        <div className="grid gap-6 lg:grid-cols-3">
+                            <FadeIn delay={0.1} className="lg:col-span-2">
+                                <EvaluationsChart byMonth={props.byMonth} />
+                            </FadeIn>
+                            <FadeIn delay={0.15}>
+                                <DecisionDonut decisions={props.decisions} />
+                            </FadeIn>
+                        </div>
+                    )}
 
-                    <div className="grid gap-6 lg:grid-cols-2">
-                        <FadeIn delay={0.1}>
-                            <SeasonsCard events={props.events} />
-                        </FadeIn>
-                        <FadeIn delay={0.15}>
-                            <TrendsCard trends={props.trends} />
-                        </FadeIn>
-                    </div>
+                    {can('calendar', 'market') && (
+                        <div className="grid gap-6 lg:grid-cols-2">
+                            {can('calendar') && (
+                                <FadeIn delay={0.1}>
+                                    <SeasonsCard events={props.events} />
+                                </FadeIn>
+                            )}
+                            {can('market') && (
+                                <FadeIn delay={0.15}>
+                                    <TrendsCard trends={props.trends} />
+                                </FadeIn>
+                            )}
+                        </div>
+                    )}
 
-                    <div className="grid gap-6 lg:grid-cols-2">
-                        <FadeIn delay={0.1} id="at-risk">
-                            <AtRiskCard items={props.atRisk} />
-                        </FadeIn>
-                        <FadeIn delay={0.15}>
-                            <RecentEvaluationsCard items={props.recentEvaluations} thresholds={props.thresholds} />
-                        </FadeIn>
-                    </div>
+                    {can('stagnant', 'evaluations') && (
+                        <div className="grid gap-6 lg:grid-cols-2">
+                            {can('stagnant') && (
+                                <FadeIn delay={0.1} id="at-risk">
+                                    <AtRiskCard items={props.atRisk} />
+                                </FadeIn>
+                            )}
+                            {can('evaluations') && (
+                                <FadeIn delay={0.15}>
+                                    <RecentEvaluationsCard items={props.recentEvaluations} thresholds={props.thresholds} />
+                                </FadeIn>
+                            )}
+                        </div>
+                    )}
 
+                    {quickActions.length > 0 && (
                     <FadeIn delay={0.1} className="space-y-3">
                         <h2 className="text-[15px] font-semibold">{d.quickActions}</h2>
                         <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                            {[
-                                { href: '/store/evaluations/create', icon: ScanSearch, title: d.actionEvaluate, hint: d.actionEvaluateHint, tone: 'bg-primary text-primary-foreground' },
-                                { href: '/store/studio', icon: WandSparkles, title: d.actionStudio, hint: d.actionStudioHint, tone: 'bg-gold text-gold-foreground' },
-                                { href: '/store/market', icon: Radar, title: d.actionMarket, hint: d.actionMarketHint, tone: 'bg-info text-white' },
-                                { href: '/store/balance', icon: Scale, title: d.actionBalance, hint: d.actionBalanceHint, tone: 'bg-success text-white' },
-                            ].map((action) => (
+                            {quickActions.map((action) => (
                                 <StaggerItem key={action.href}>
                                     <HoverLift>
                                         <Link
@@ -275,6 +306,7 @@ export default function StoreDashboard(props: Props) {
                             ))}
                         </Stagger>
                     </FadeIn>
+                    )}
 
                     {props.kpis.balance_alerts > 0 && (
                         <p className="text-muted-foreground text-center text-xs">
@@ -291,7 +323,7 @@ export default function StoreDashboard(props: Props) {
     );
 }
 
-function ConnectionStrip({ connection }: { connection: Props['connection'] }) {
+function ConnectionStrip({ connection }: { connection: NonNullable<Props['connection']> }) {
     const { t, tr, relative } = useI18n();
     const d = t.dashboard;
     const platform = d.platformNames[connection.platform as keyof typeof d.platformNames] ?? connection.platform;

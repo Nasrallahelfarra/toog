@@ -11,6 +11,7 @@ use App\Http\Controllers\Store\RevenueAuditController;
 use App\Http\Controllers\Store\SettingsController;
 use App\Http\Controllers\Store\StagnantProductController;
 use App\Support\CurrentStore;
+use App\Support\StoreAccess;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -33,8 +34,10 @@ Route::post('performance/extract-features', [PerformanceController::class, 'extr
 
 // Settings
 // Open on the Zid connection until the store is connected.
-Route::get('settings', fn (CurrentStore $current) => to_route(
-    $current->require()->isConnected() ? 'store.settings.general' : 'store.settings.integration',
+// The Zid connection is the owner's; staff with the settings page open the
+// general tab.
+Route::get('settings', fn (CurrentStore $current, StoreAccess $access) => to_route(
+    $access->isOwner() && ! $current->require()->isConnected() ? 'store.settings.integration' : 'store.settings.general',
 ))->name('settings');
 Route::get('settings/general', [SettingsController::class, 'general'])->name('settings.general');
 Route::post('settings/general', [SettingsController::class, 'updateGeneral'])->name('settings.general.update');

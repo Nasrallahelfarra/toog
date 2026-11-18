@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\User;
 use App\Support\CurrentStore;
+use App\Support\StoreAccess;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -20,7 +21,9 @@ class ActivityController extends Controller
         $store = $current->require();
         $filters = $request->only(['user', 'action', 'from', 'to']);
 
-        $base = ActivityLog::query()->where('store_id', $store->id);
+        // The whole trail is the owner's; a staff member sees their own part.
+        $base = ActivityLog::query()->where('store_id', $store->id)
+            ->when(! app(StoreAccess::class)->isOwner(), fn ($q) => $q->where('user_id', $request->user()->id));
 
         $logs = (clone $base)
             ->with('user:id,name,email,role')

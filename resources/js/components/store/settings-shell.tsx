@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import type { ReactNode } from 'react';
 import { PageBody, PageHeader } from '@/components/mojo/page-header';
 import { useI18n } from '@/hooks/use-i18n';
+import { useStoreAccess } from '@/hooks/use-store-access';
 import { cn } from '@/lib/utils';
 
 /**
@@ -13,13 +14,15 @@ export function SettingsShell({ children, actions }: { children: ReactNode; acti
     const { t } = useI18n();
     const { url } = usePage();
     const s = t.settings;
+    const { can } = useStoreAccess();
 
+    // The Zid connection tab is the owner's; staff with the settings see the rest.
     const tabs = [
-        { href: '/store/settings/general', label: s.tabs.general, icon: Store },
-        { href: '/store/settings/integration', label: s.tabs.integration, icon: PlugZap },
-        { href: '/store/settings/evaluation', label: s.tabs.evaluation, icon: SlidersHorizontal },
-        { href: '/store/settings/brand', label: s.tabs.brand, icon: Palette },
-    ];
+        { section: 'settings', href: '/store/settings/general', label: s.tabs.general, icon: Store },
+        { section: 'connection', href: '/store/settings/integration', label: s.tabs.integration, icon: PlugZap },
+        { section: 'settings', href: '/store/settings/evaluation', label: s.tabs.evaluation, icon: SlidersHorizontal },
+        { section: 'settings', href: '/store/settings/brand', label: s.tabs.brand, icon: Palette },
+    ].filter((tab) => can(tab.section));
 
     return (
         <PageBody>

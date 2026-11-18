@@ -58,7 +58,7 @@ class CheckZidConnection implements ShouldQueue
                 email: true,
             );
 
-        foreach ($store->members as $member) {
+        foreach ($store->recipients('connection') as $member) {
             $member->notify($notification);
         }
     }

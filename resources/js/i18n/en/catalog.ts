@@ -55,6 +55,9 @@ export const catalog: typeof ar = {
     noCategories: 'The catalog has no products yet. Connect your Zid store or import a products file.',
     unitsSold: '{n} units',
     noImage: 'No image',
+    allMembers: 'All owners',
+    noMember: 'Unassigned',
+    memberTooltip: 'Owner: {name}',
     product: {
         novel: 'New product',
         status: {

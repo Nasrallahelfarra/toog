@@ -20,6 +20,7 @@ import { studio as arStudio } from './ar/studio';
 import { productReview as arProductReview } from './ar/product-review';
 import { zidSync as arZidSync } from './ar/zid-sync';
 import { stagnant as arStagnant } from './ar/stagnant';
+import { team as arTeam } from './ar/team';
 import { revenueAudit as arRevenueAudit } from './ar/revenue-audit';
 import { account as enAccount } from './en/account';
 import { activity as enActivity } from './en/activity';
@@ -43,6 +44,7 @@ import { studio as enStudio } from './en/studio';
 import { productReview as enProductReview } from './en/product-review';
 import { zidSync as enZidSync } from './en/zid-sync';
 import { stagnant as enStagnant } from './en/stagnant';
+import { team as enTeam } from './en/team';
 import { revenueAudit as enRevenueAudit } from './en/revenue-audit';
 
 /**
@@ -65,6 +67,7 @@ export const ar = {
     productReview: arProductReview,
     zidSync: arZidSync,
     stagnant: arStagnant,
+    team: arTeam,
     revenueAudit: arRevenueAudit,
     market: arMarket,
     balance: arBalance,
@@ -93,6 +96,7 @@ export const en: Dictionary = {
     productReview: enProductReview,
     zidSync: enZidSync,
     stagnant: enStagnant,
+    team: enTeam,
     revenueAudit: enRevenueAudit,
     market: enMarket,
     balance: enBalance,

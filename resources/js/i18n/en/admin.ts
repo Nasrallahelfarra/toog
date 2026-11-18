@@ -57,6 +57,7 @@ export const admin: typeof ar = {
     roles: {
         admin: 'Platform admin',
         store_owner: 'Store owner',
+        store_staff: 'Store staff',
     },
 
     stores: {

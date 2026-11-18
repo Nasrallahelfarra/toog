@@ -6,6 +6,7 @@ use App\Models\AiUsage;
 use App\Models\User;
 use App\Services\Ai\Ai;
 use App\Support\CurrentStore;
+use App\Support\StoreAccess;
 use App\Support\Vocabulary;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -76,6 +77,12 @@ class HandleInertiaRequests extends Middleware
                 ? $user->stores()->get(['stores.id', 'stores.name'])->map->only(['id', 'name'])
                 : [],
             'actingAsAdmin' => $user instanceof User && $current->actingAsAdmin(),
+            // What this user may open in the store: everything for owners,
+            // the pages the owner granted for staff.
+            'access' => $store ? [
+                'owner' => app(StoreAccess::class)->isOwner(),
+                'sections' => app(StoreAccess::class)->sections(),
+            ] : null,
             // Same scope as the notifications page: this store plus platform-wide.
             'unreadNotifications' => fn () => $user?->unreadNotifications()
                 ->when($store, fn ($q) => $q->where(fn ($q) => $q->whereNull('data->store_id')->orWhere('data->store_id', $store->id)))

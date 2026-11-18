@@ -22,6 +22,8 @@ export type AdminUserRow = {
     email: string;
     phone: string | null;
     role: 'admin' | 'store_owner';
+    /** Added by a store owner with limited pages, rather than owning a store. */
+    staff?: boolean;
     status: 'active' | 'disabled';
     disabled_reason: string | null;
     disabled_at: string | null;
