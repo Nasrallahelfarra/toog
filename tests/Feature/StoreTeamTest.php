@@ -14,6 +14,7 @@ use App\Services\Team\TeamReport;
 use App\Support\StoreSections;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Validation\Rules\Password;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -99,6 +100,30 @@ class StoreTeamTest extends TestCase
         // Saved in the sidebar's order, whatever order they were ticked in.
         $this->assertSame(['catalog', 'studio'], json_decode($membership->permissions, true));
         $this->assertTrue(ActivityLog::query()->where('action', 'team.member_added')->where('store_id', $this->store->id)->exists());
+    }
+
+    public function test_a_staff_password_can_be_eight_digits_even_under_the_strict_platform_rule(): void
+    {
+        // Production asks owners and admins for a long mixed password.
+        Password::defaults(fn () => Password::min(12)->mixedCase()->letters()->numbers()->symbols());
+
+        $this->actingAs($this->owner)->post('/store/team', [
+            'name' => 'Sara', 'email' => 'sara@example.com', 'password' => '1234567', 'permissions' => [],
+        ])->assertSessionHasErrors('password');
+
+        $this->actingAs($this->owner)->post('/store/team', [
+            'name' => 'Sara', 'email' => 'sara@example.com', 'password' => '12345678', 'permissions' => [],
+        ])->assertSessionHasNoErrors();
+
+        $sara = User::query()->where('email', 'sara@example.com')->firstOrFail();
+        $this->assertTrue(password_verify('12345678', $sara->password));
+
+        $this->actingAs($this->owner)->put("/store/team/{$sara->id}/password", [
+            'password' => '87654321', 'password_confirmation' => '87654321',
+        ])->assertSessionHasNoErrors();
+        $this->assertTrue(password_verify('87654321', $sara->fresh()->password));
+
+        Password::defaults(fn () => null);
     }
 
     public function test_an_existing_account_cannot_be_added_as_staff(): void
