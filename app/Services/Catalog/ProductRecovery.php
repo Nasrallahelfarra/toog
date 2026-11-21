@@ -43,8 +43,11 @@ class ProductRecovery
             $result = app(EvaluationEngine::class)->score(Candidate::fromProduct($product), $ctx);
             $evaluation = new Evaluation(['store_id' => $store->id, 'name' => $snapshot['name'], 'category' => $snapshot['category'] ?? null]);
             $context = $this->reviewer->context($evaluation, $ctx, $result);
+            // Older snapshots carried stock figures; they are not evidence.
+            unset($snapshot['stock'], $snapshot['turnover_days']);
             $context['product_performance'] = $snapshot;
-            $context['classification_definition'] = 'stagnant means stocked inventory with at least 90 consecutive days without sales covered by sufficient data. at_risk is an early warning from weak relative performance or high stock coverage; it does not prove stagnation. Recommend prevention for at_risk and recovery for stagnant. The class is a computed signal, not a proven cause of customer behavior.';
+            $context['classification_definition'] = 'The class is judged by sales alone. stagnant means at least 90 consecutive days without a sale, covered by sufficient data (product_performance.no_sales_days). at_risk is an early warning: 60 or more days without a sale, or weak sales beside the store\'s other selling products; it does not prove stagnation. Recommend prevention for at_risk and recovery for stagnant. The class is a computed signal, not a proven cause of customer behavior.';
+            $context['inventory_note'] = 'Stock quantities are not provided and must not be assumed: the store may make pieces to order, so there may be no unsold stock at all. Never base advice on inventory levels, clearing or liquidating stock, restocking, or scarcity.';
             $context['history_window'] = 'Classification aggregates use up to 12 months of imported sales. Zero views may mean missing tracking.';
             $context['market_context'] = $this->marketing->context($store, $snapshot, $ctx);
             $context['goal'] = $this->goal($snapshot['performance'] ?? null);
@@ -98,8 +101,8 @@ class ProductRecovery
     private function role(?string $class): string
     {
         return in_array($class, [Product::STAGNANT, Product::AT_RISK], true)
-            ? 'You are a product recovery specialist. Diagnose a slow-moving catalog product using its actual sales, stock, returns, price and store evidence.'
-            : 'You are a product growth specialist. Review a catalog product using its actual sales, stock, returns, price and store evidence.';
+            ? 'You are a product recovery specialist. Diagnose a slow-moving catalog product using its actual sales, returns, price and store evidence.'
+            : 'You are a product growth specialist. Review a catalog product using its actual sales, returns, price and store evidence.';
     }
 
     /**
@@ -120,10 +123,10 @@ class ProductRecovery
     private function goal(?string $class): string
     {
         return match ($class) {
-            Product::STAGNANT => 'recover: revive demand and release the stock tied up in this product',
+            Product::STAGNANT => 'recover: revive demand for this product, which has stopped selling',
             Product::AT_RISK => 'prevent: keep this product from becoming a slow mover',
             Product::AVERAGE => 'lift: move this product toward the store best sellers',
-            Product::WINNER => 'grow and protect: sell more of this best seller and plan restocking without cutting its margin; avoid discounts unless clearly justified',
+            Product::WINNER => 'grow and protect: sell more of this best seller without cutting its margin; avoid discounts unless clearly justified',
             default => 'launch: earn the first steady sales for a product with too little sales history to classify',
         };
     }

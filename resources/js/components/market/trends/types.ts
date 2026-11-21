@@ -51,8 +51,6 @@ export type MineSide = {
     change_pct: number | null;
     catalog_pct: number;
     products: number;
-    in_stock: number;
-    stock: number;
     examples: MineExample[];
 };
 

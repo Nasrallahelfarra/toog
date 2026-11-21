@@ -102,6 +102,9 @@ class AiDesignerTest extends TestCase
         $json = json_encode($insights);
         $this->assertStringNotContainsString('revenue', $json);
         $this->assertStringNotContainsString('99999', $json);
+        // Nor stock: the best seller's four units on record raise no alarm.
+        $this->assertStringNotContainsString('stock', $json);
+        $this->assertNotContains('low_stock', array_column($insights['alerts'], 'type'));
     }
 
     public function test_a_brief_becomes_a_collection_drawn_concept_by_concept_in_demo_mode(): void

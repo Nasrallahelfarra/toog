@@ -48,14 +48,14 @@ export type StagnantProduct = {
     category: string | null;
     image_url: string | null;
     price: string | null;
-    stock: number;
     units_sold: number;
-    turnover_days: number | null;
+    /** Days without a sale; null when the sales data cannot show it. */
+    no_sales_days: number | null;
     performance_score: number | null;
     performance: 'stagnant' | 'at_risk';
     classification_reason:
         | 'no_sales_90'
-        | 'slow_turnover'
+        | 'quiet_period'
         | 'low_performance'
         | 'early_no_sales';
     recovery: Recovery | null;
@@ -66,8 +66,9 @@ export type StagnantSummary = {
     stagnant: number;
     at_risk: number;
     needs_reclassification: boolean;
-    stock: number;
-    stock_value: number;
+    /** Of the stagnant and at-risk products, those with no sale in the year measured. */
+    never_sold: number;
+    longest_quiet: number | null;
     unclassified: number;
 };
 export type StagnantDashboard = StagnantSummary & {
@@ -169,7 +170,7 @@ export function StagnantProductGrid({
     filtered?: boolean;
     stale?: boolean;
 }) {
-    const { t, number, money } = useI18n();
+    const { t, tr, number, money } = useI18n();
     const s = t.stagnant;
     const reduced = useReducedMotion();
     const active = products.some(
@@ -242,10 +243,18 @@ export function StagnantProductGrid({
                             <dl className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-muted/50 p-3 text-xs">
                                 <div>
                                     <dt className="text-muted-foreground">
-                                        {s.stock}
+                                        {s.noSalesDays}
                                     </dt>
                                     <dd className="mt-1 text-base font-semibold">
-                                        {number(product.stock)}
+                                        {product.no_sales_days === null
+                                            ? '—'
+                                            : product.no_sales_days === 0
+                                              ? t.performance.columns.quietNone
+                                              : tr(t.performance.days, {
+                                                    n: number(
+                                                        product.no_sales_days,
+                                                    ),
+                                                })}
                                     </dd>
                                 </div>
                                 <div>

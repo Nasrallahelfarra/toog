@@ -36,7 +36,7 @@ class ProductController extends Controller
         return Inertia::render('store/products/show', RevenueVisibility::apply($store, [
             'product' => [
                 ...$product->only(['id', 'name', 'sku', 'external_id', 'category', 'image_url', 'performance', 'performance_score',
-                    'stock', 'units_sold', 'views', 'turnover_days', 'is_novel']),
+                    'units_sold', 'views', 'no_sales_days', 'is_novel']),
                 'price' => $product->price !== null ? (float) $product->price : null,
                 'revenue' => (float) $product->revenue,
                 'add_to_cart_rate' => (float) $product->add_to_cart_rate,

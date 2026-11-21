@@ -11,40 +11,54 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Separates confirmed stagnant inventory from products at risk of stagnation.
+ * Separates products that have stopped selling from those at risk of it,
+ * by sales alone.
  *
- * Each product gets a 0-100 performance score from its percentile rank in
- * the store on five signals; the weights below are shown to the user so
- * the classification is never a black box.
+ * Stock is never a signal: stores that make pieces to order carry stock
+ * numbers that are not real, so "has stock" proves nothing and "days to
+ * sell the stock" means nothing. A product is stagnant when it has gone
+ * 90 days without a sale, and at risk when it has gone 60, or sells weakly
+ * beside the store's other selling products.
+ *
+ * Each product that sold gets a 0-100 performance score from its
+ * percentile rank among the store's selling products on four signals; the
+ * weights below are shown to the user so the classification is never a
+ * black box. A product that never sold is not ranked: it scores 0.
  */
 class PerformanceClassifier
 {
-    public const VERSION = 2;
+    public const VERSION = 3;
 
     private const WRITE_BATCH = 100;
 
-    private const RESULT_COLUMNS = ['performance', 'performance_score', 'units_sold', 'revenue', 'views', 'add_to_cart_rate', 'return_rate', 'turnover_days'];
+    // turnover_days was stock-based; it is saved as null to clear old values.
+    private const RESULT_COLUMNS = ['performance', 'performance_score', 'units_sold', 'revenue', 'views', 'add_to_cart_rate', 'return_rate', 'turnover_days', 'no_sales_days'];
 
     public const WEIGHTS = [
-        'velocity' => 45,        // units sold per observed month
+        'velocity' => 55,        // units sold per observed month
         'revenue' => 20,
         'add_to_cart' => 15,     // add-to-cart rate
         'returns' => 10,         // lower return rate is better
-        'turnover' => 10,        // fewer days to sell the stock is better
     ];
 
     public const WINNER_FROM = 67;
 
     public const STAGNANT_UNTIL = 33;
 
+    /** Days without a sale that make a product stagnant. */
     public const UNSOLD_AFTER_DAYS = 90;
+
+    /** Days without a sale that warn it is heading there. */
+    public const QUIET_AFTER_DAYS = 60;
 
     public function classify(Store $store, int $months = 12): void
     {
         $products = Product::query()->where('store_id', $store->id)
-            ->get(['id', 'external_id', 'stock', 'launched_at', 'created_at', ...self::RESULT_COLUMNS]);
+            ->get(['id', 'external_id', 'launched_at', 'created_at', ...self::RESULT_COLUMNS]);
         $metrics = $this->metrics($store, $products, $months);
-        $measured = $metrics->filter(fn (array $m) => $m['has_data']);
+        // Ranked among the products that sold: a long tail of never-sold
+        // products would otherwise lift every seller to the top.
+        $measured = $metrics->filter(fn (array $m) => $m['ranked']);
 
         $ranked = collect(array_keys(self::WEIGHTS))->mapWithKeys(fn ($signal) => [
             $signal => $this->percentiles($measured->filter(fn ($m) => $signal !== 'add_to_cart' || $m['views'] > 0)
@@ -58,7 +72,7 @@ class PerformanceClassifier
             if (! $m['has_data']) {
                 $product->fill(['performance' => null, 'performance_score' => null,
                     'units_sold' => 0, 'revenue' => 0, 'views' => 0, 'add_to_cart_rate' => 0,
-                    'return_rate' => 0, 'turnover_days' => null]);
+                    'return_rate' => 0, 'turnover_days' => null, 'no_sales_days' => $m['no_sales_days']]);
                 if ($product->isDirty(self::RESULT_COLUMNS)) {
                     $updates[$product->id] = $product->only(self::RESULT_COLUMNS);
                 }
@@ -71,10 +85,13 @@ class PerformanceClassifier
                 $score += ($ranked[$signal][$product->id] ?? 0) * $weight / 100;
             }
             $score = (int) round($score);
+            $quiet = (int) $m['no_sales_days'];
 
+            // Sales decide, whatever the stock says.
             $class = match (true) {
-                $product->stock > 0 && $m['no_sales_days'] >= self::UNSOLD_AFTER_DAYS => Product::STAGNANT,
-                $product->stock > 0 && ($score <= self::STAGNANT_UNTIL || $m['turnover'] >= 240) => Product::AT_RISK,
+                $quiet >= self::UNSOLD_AFTER_DAYS => Product::STAGNANT,
+                // Recorded but never sold, without the 90 days to call it stagnant.
+                $quiet >= self::QUIET_AFTER_DAYS || $score <= self::STAGNANT_UNTIL || $m['units'] === 0 => Product::AT_RISK,
                 $score >= self::WINNER_FROM && $m['returns'] < 25 => Product::WINNER,
                 default => Product::AVERAGE,
             };
@@ -87,7 +104,8 @@ class PerformanceClassifier
                 'views' => $m['views'],
                 'add_to_cart_rate' => round($m['add_to_cart'], 2),
                 'return_rate' => round($m['returns'], 2),
-                'turnover_days' => $m['turnover'],
+                'turnover_days' => null,
+                'no_sales_days' => $m['no_sales_days'],
             ]);
             if ($product->isDirty(self::RESULT_COLUMNS)) {
                 $updates[$product->id] = $product->only(self::RESULT_COLUMNS);
@@ -134,14 +152,17 @@ class PerformanceClassifier
 
     public static function lowerIsBetter(string $signal): bool
     {
-        return in_array($signal, ['returns', 'turnover'], true);
+        return $signal === 'returns';
     }
 
     /**
      * Each product's raw value on every signal over the last $months.
      *
      * @param  Collection<int, Product>  $products
-     * @return Collection<int, array{units: int, revenue: float, views: int, velocity: float|int, add_to_cart: float|int, returns: float|int, turnover: int, has_data: bool, no_sales_days: int}>
+     *                                              `has_data`: there is enough to classify the product. `ranked`: it has
+     *                                              sales rows, so it takes part in the percentile ranking.
+     *                                              `no_sales_days` is null when the data cannot show a quiet period.
+     * @return Collection<int, array{units: int, revenue: float, views: int, velocity: float|int, add_to_cart: float|int, returns: float|int, has_data: bool, ranked: bool, no_sales_days: int|null}>
      */
     public function metrics(Store $store, Collection $products, int $months = 12): Collection
     {
@@ -181,7 +202,7 @@ class PerformanceClassifier
                     $observedUntil = $last->copy()->addMonth()->min(now()->startOfMonth());
                 }
             }
-            $noSalesDays = 0;
+            $noSalesDays = null;
             if ($observedStart && $observedUntil) {
                 $lastSale = $row?->getAttribute('last_sale_period');
                 // Monthly totals do not reveal the day of the last sale. Assume
@@ -190,7 +211,6 @@ class PerformanceClassifier
                 $noSalesDays = max(0, (int) $quietStart->diffInDays($observedUntil, false));
             }
             $observedMonths = max(1, $observedDays !== null ? $observedDays / 30 : (int) ($row?->getAttribute('observed_months') ?? 0));
-            $dailyUnits = $units / ($observedMonths * 30);
 
             return [$p->id => [
                 'units' => $units,
@@ -199,9 +219,11 @@ class PerformanceClassifier
                 'velocity' => $units / $observedMonths,
                 'add_to_cart' => $views > 0 ? ($row->add_to_cart ?? 0) / $views * 100 : 0,
                 'returns' => $units > 0 ? ($row->returns ?? 0) / $units * 100 : 0,
-                'turnover' => $p->stock <= 0 ? 0 : ($dailyUnits > 0 ? min(365, (int) round($p->stock / $dailyUnits)) : 365),
-                'has_data' => $row !== null || ($p->stock > 0 && $observedDays !== null && $observedDays >= self::UNSOLD_AFTER_DAYS),
-                'no_sales_days' => $noSalesDays,
+                // No sales rows still classifies a product once a complete
+                // import has watched it long enough: it is not selling.
+                'has_data' => $row !== null || ($observedDays !== null && $observedDays >= self::UNSOLD_AFTER_DAYS),
+                'ranked' => $row !== null,
+                'no_sales_days' => $noSalesDays === null ? null : min(65535, $noSalesDays),
             ]];
         });
     }

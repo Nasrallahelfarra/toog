@@ -49,7 +49,6 @@ export const catalog: typeof ar = {
         newest: 'Newest',
         price_low: 'Price: low to high',
         price_high: 'Price: high to low',
-        stock: 'Most stock',
     },
     noProducts: 'No products match your selection.',
     noCategories: 'The catalog has no products yet. Connect your Zid store or import a products file.',
@@ -61,15 +60,14 @@ export const catalog: typeof ar = {
     product: {
         novel: 'New product',
         status: {
-            winner: 'One of your best-selling, fastest-moving products.',
+            winner: 'One of your best-selling products.',
             average: 'Performs about average compared with the rest of the store.',
             unclassified: 'Not enough sales data to classify it yet.',
         },
         kpi: {
             units: 'Units (12 months)',
             revenue: 'Revenue (12 months)',
-            stock: 'Stock',
-            turnover: 'Days to sell out',
+            quiet: 'No sale for',
             returns: 'Return rate',
             cart: 'Add-to-cart rate',
             noViews: 'Not provided by Zid',
@@ -98,11 +96,10 @@ export const catalog: typeof ar = {
             units_sold: 'Units sold',
             revenue: 'Revenue',
             return_rate: 'Return rate',
-            turnover_days: 'Days to sell out',
         },
         expertTitle: 'Expert advice',
         goals: {
-            stagnant: 'A plan to revive demand for this product and free its stock.',
+            stagnant: 'A plan to revive demand for this product, which has stopped selling.',
             at_risk: 'A plan to keep this product from becoming a slow mover.',
             average: 'A plan to lift this product to best-seller level.',
             winner: 'A plan to sell more of this best seller while protecting its margin.',
@@ -112,7 +109,7 @@ export const catalog: typeof ar = {
         checks: {
             image: 'Its design, with new, more appealing designs',
             price: 'Its price against its category',
-            sales: 'Its sales, stock and returns',
+            sales: 'Its sales and returns',
             season: 'Upcoming occasions in the Saudi market',
         },
         expertNote: 'The advice is saved, so it is only paid for again when you ask for a new one.',

@@ -72,8 +72,10 @@ class PerformanceClassificationTest extends TestCase
         $this->assertSame(25, $this->store->products()->whereNull('performance')->count());
     }
 
-    public function test_high_selling_overstock_is_at_risk_not_confirmed_stagnant(): void
+    public function test_a_best_seller_stays_one_however_much_stock_it_shows(): void
     {
+        // Stock is not a signal: stores that make pieces to order carry
+        // numbers that are not real stock.
         $overstocked = $this->product(['stock' => 1000]);
         $other = $this->product(['stock' => 1]);
         $this->sale($overstocked, 100);
@@ -81,9 +83,11 @@ class PerformanceClassificationTest extends TestCase
         app(PerformanceClassifier::class)->classify($this->store);
 
         $this->assertGreaterThanOrEqual(67, $overstocked->fresh()->performance_score);
-        $this->assertSame(300, $overstocked->fresh()->turnover_days);
-        $this->assertSame(Product::AT_RISK, $overstocked->fresh()->performance);
-        $this->assertSame('slow_turnover', $overstocked->fresh()->performanceReason());
+        $this->assertSame(Product::WINNER, $overstocked->fresh()->performance);
+        $this->assertNull($overstocked->fresh()->performanceReason());
+        $this->assertNull($overstocked->fresh()->turnover_days);
+        $this->assertArrayNotHasKey('turnover', PerformanceClassifier::WEIGHTS);
+        $this->assertSame(100, array_sum(PerformanceClassifier::WEIGHTS));
     }
 
     public function test_equal_signals_are_neutral_instead_of_rewarding_or_penalizing_ties(): void
@@ -96,20 +100,25 @@ class PerformanceClassificationTest extends TestCase
         $this->assertSame([Product::AVERAGE], $this->store->products()->pluck('performance')->unique()->values()->all());
     }
 
-    public function test_completed_sales_coverage_includes_old_unsold_stock_but_not_new_or_unknown_products(): void
+    public function test_completed_sales_coverage_includes_old_unsold_products_but_not_new_or_unknown_ones(): void
     {
         $old = $this->product();
         $new = $this->product(['launched_at' => now()->subDays(20)]);
         $unknown = $this->product(['launched_at' => null]);
         $local = $this->product(['external_id' => null]);
+        // No stock on record changes nothing: it has not sold either.
         $empty = $this->product(['stock' => 0]);
         $this->sync();
         app(PerformanceClassifier::class)->classify($this->store);
 
-        $this->assertSame(Product::STAGNANT, $old->fresh()->performance);
-        $this->assertSame(0, $old->fresh()->units_sold);
-        $this->assertSame(365, $old->fresh()->turnover_days);
-        foreach ([$new, $unknown, $local, $empty] as $unclassified) {
+        foreach ([$old, $empty] as $unsold) {
+            $this->assertSame(Product::STAGNANT, $unsold->fresh()->performance);
+            $this->assertSame(0, $unsold->fresh()->units_sold);
+            $this->assertSame(0, $unsold->fresh()->performance_score);
+            $this->assertGreaterThanOrEqual(PerformanceClassifier::UNSOLD_AFTER_DAYS, $unsold->fresh()->no_sales_days);
+            $this->assertSame('no_sales_90', $unsold->fresh()->performanceReason());
+        }
+        foreach ([$new, $unknown, $local] as $unclassified) {
             $this->assertNull($unclassified->fresh()->performance);
         }
         $this->assertDatabaseCount('product_sales', 0);
@@ -141,9 +150,12 @@ class PerformanceClassificationTest extends TestCase
         $this->sync();
         $metrics = app(PerformanceClassifier::class)->metrics($this->store, collect([$product]));
         $this->assertEqualsWithDelta(5, $metrics[$product->id]['velocity'], 0.05);
-        $this->assertSame(365, $metrics[$product->id]['turnover']);
+        $this->assertArrayNotHasKey('turnover', $metrics[$product->id]);
+        $this->assertSame(0, $metrics[$product->id]['no_sales_days']);
         app(PerformanceClassifier::class)->classify($this->store);
-        $this->assertSame(Product::AT_RISK, $product->fresh()->performance);
+        // It sold this month: neither its stock nor its age puts it at risk.
+        $this->assertSame(Product::AVERAGE, $product->fresh()->performance);
+        $this->assertSame(0, $product->fresh()->no_sales_days);
     }
 
     public function test_explicit_zero_sales_months_count_and_old_or_future_rows_are_excluded(): void
@@ -185,7 +197,10 @@ class PerformanceClassificationTest extends TestCase
         $this->assertSame(63, $metrics[$recent->id]['no_sales_days']);
         $classifier->classify($this->store);
         $this->assertSame(Product::STAGNANT, $stopped->fresh()->performance);
+        $this->assertSame(94, $stopped->fresh()->no_sales_days);
+        // Sixty days without a sale is the early warning, by sales alone.
         $this->assertSame(Product::AT_RISK, $recent->fresh()->performance);
+        $this->assertSame('quiet_period', $recent->fresh()->performanceReason());
     }
 
     public function test_explicit_months_prove_inactivity_but_missing_or_partial_months_do_not(): void
@@ -207,14 +222,26 @@ class PerformanceClassificationTest extends TestCase
         $this->assertSame('early_no_sales', $partial->fresh()->performanceReason());
     }
 
-    public function test_products_without_stock_are_not_marked_as_inventory_at_risk_or_stagnant(): void
+    public function test_stock_plays_no_part_in_stagnation(): void
     {
-        $product = $this->product(['stock' => 0]);
+        // The same three months without a sale, with no stock on record and
+        // with a lot of it: both are stagnant, and for the same reason.
+        $none = $this->product(['stock' => 0]);
+        $plenty = $this->product(['stock' => 5000]);
         foreach (['2026-08-01', '2026-09-01', '2026-10-01'] as $month) {
-            $this->sale($product, 0, ['period' => $month]);
+            $this->sale($none, 0, ['period' => $month]);
+            $this->sale($plenty, 0, ['period' => $month]);
         }
+        // And a product that sells is not at risk for showing no stock.
+        $seller = $this->product(['stock' => 0]);
+        $this->sale($seller, 40);
         app(PerformanceClassifier::class)->classify($this->store);
-        $this->assertSame(Product::AVERAGE, $product->fresh()->performance);
+
+        foreach ([$none, $plenty] as $product) {
+            $this->assertSame(Product::STAGNANT, $product->fresh()->performance);
+            $this->assertSame(92, $product->fresh()->no_sales_days);
+        }
+        $this->assertContains($seller->fresh()->performance, [Product::WINNER, Product::AVERAGE]);
     }
 
     public function test_classification_version_is_updated_without_overwriting_store_settings(): void

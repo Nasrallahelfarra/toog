@@ -29,7 +29,7 @@ class PerformanceSignalsTest extends TestCase
         $this->actingAs($store->owner)->get('/store/performance')
             ->assertInertia(fn (Assert $page) => $page->missing('signals')
                 ->reloadOnly('signals', fn (Assert $reload) => $reload
-                    ->where('signals.velocity.weight', 45)
+                    ->where('signals.velocity.weight', 55)
                     ->where('signals.velocity.with_sales', 2)
                     ->where('signals.velocity.products', 3)
                     ->where('signals.velocity.best.0.name', 'Fast')
@@ -37,7 +37,8 @@ class PerformanceSignalsTest extends TestCase
                     ->where('signals.returns.lower_is_better', true)
                     ->where('signals.returns.best.0.name', 'Fast')
                     ->where('signals.returns.best.0.value', 5)
-                    ->where('signals.turnover.best.0.name', 'Fast')
+                    // Stock is not a signal: there is no turnover criterion.
+                    ->missing('signals.turnover')
                     ->where('signals.add_to_cart.measured', 0)
                     ->etc()));
     }

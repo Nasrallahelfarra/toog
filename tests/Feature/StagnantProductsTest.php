@@ -48,7 +48,7 @@ class StagnantProductsTest extends TestCase
         return Product::query()->create([
             'store_id' => $store->id, 'name' => 'Slow product', 'sku' => 'SLOW-1', 'category' => 'Bags',
             'performance' => Product::STAGNANT, 'performance_score' => 12, 'stock' => 50, 'units_sold' => 2,
-            'price' => 100, 'turnover_days' => 365, 'features' => ['colors' => ['black'], 'pattern' => 'floral'],
+            'price' => 100, 'no_sales_days' => 120, 'features' => ['colors' => ['black'], 'pattern' => 'floral'],
             'image_url' => Storage::disk('public')->url('catalog.png'), ...$attributes,
         ]);
     }
@@ -100,7 +100,13 @@ class StagnantProductsTest extends TestCase
             $this->assertSame('model', $presentation['phase']);
             $this->assertNotNull($presentation['started_at']);
             $this->assertNull($presentation['review']);
-            $this->assertSame(50, $context['product_performance']['stock']);
+            // The expert judges by sales; stock never reaches the prompt.
+            $this->assertArrayNotHasKey('stock', $context['product_performance']);
+            $this->assertArrayNotHasKey('turnover_days', $context['product_performance']);
+            $this->assertSame(120, $context['product_performance']['no_sales_days']);
+            $this->assertStringContainsString('Never base advice on inventory levels', $context['inventory_note']);
+            $this->assertStringContainsString('judged by sales alone', $context['classification_definition']);
+            $this->assertStringNotContainsString('sales, stock', $system);
             $this->assertSame(2, $context['product_performance']['units_sold']);
             $this->assertEmpty($context['sources'][0]['data']['stagnant']);
             $this->assertSame($product->store->owner_id, $userId);
@@ -124,7 +130,9 @@ class StagnantProductsTest extends TestCase
         $this->actingAs($product->store->owner)->get('/store')->assertInertia(fn (Assert $page) => $page
             ->where('stagnant.total', 1)->has('stagnant.products', 1)->where('stagnant.products.0.id', $product->id));
         $this->get('/store/stagnant')->assertInertia(fn (Assert $page) => $page->component('store/stagnant')
-            ->where('summary.total', 1)->where('summary.stock_value', 5000)->has('products.data', 1)
+            ->where('summary.total', 1)->where('summary.never_sold', 0)->where('summary.longest_quiet', 120)
+            ->missing('summary.stock')->missing('summary.stock_value')->has('products.data', 1)
+            ->where('products.data.0.no_sales_days', 120)->missing('products.data.0.stock')
             ->where('products.data.0.image_url', $product->image_url));
         $this->get('/store/stagnant?search=SLOW-1&category=Bags')->assertInertia(fn (Assert $page) => $page->has('products.data', 1));
         $this->get('/store/stagnant?search=missing')->assertInertia(fn (Assert $page) => $page->has('products.data', 0)->where('summary.total', 1));
@@ -144,15 +152,15 @@ class StagnantProductsTest extends TestCase
     public function test_stagnant_and_at_risk_counts_filters_and_dashboard_use_the_same_classes(): void
     {
         $stagnant = $this->product();
-        $risk = $stagnant->store->products()->create(['name' => 'Overstock seller', 'sku' => 'RISK', 'stock' => 100,
-            'units_sold' => 10, 'performance' => Product::AT_RISK, 'turnover_days' => 300]);
+        $risk = $stagnant->store->products()->create(['name' => 'Quiet seller', 'sku' => 'RISK', 'stock' => 100,
+            'units_sold' => 10, 'performance' => Product::AT_RISK, 'no_sales_days' => 70]);
         $this->product(['performance' => Product::AT_RISK, 'name' => 'Other store risk']);
         $this->actingAs($stagnant->store->owner)->get('/store/stagnant')->assertInertia(fn (Assert $page) => $page
             ->where('summary.total', 2)->where('summary.stagnant', 1)->where('summary.at_risk', 1)
             ->where('summary.needs_reclassification', true)->has('products.data', 2));
         $this->get('/store/stagnant?class=at_risk&search=RISK')->assertInertia(fn (Assert $page) => $page
             ->has('products.data', 1)->where('products.data.0.id', $risk->id)
-            ->where('products.data.0.performance', 'at_risk')->where('products.data.0.classification_reason', 'slow_turnover')
+            ->where('products.data.0.performance', 'at_risk')->where('products.data.0.classification_reason', 'quiet_period')
             ->where('summary.stagnant', 1)->where('summary.at_risk', 1));
         $this->get('/store/stagnant?class=stagnant')->assertInertia(fn (Assert $page) => $page
             ->has('products.data', 1)->where('products.data.0.id', $stagnant->id));
@@ -482,7 +490,9 @@ class StagnantProductsTest extends TestCase
             $this->assertEquals(100, $context['pricing']['category_median']);
             $this->assertSame(33, $context['pricing']['cheaper_peers_share']);
             $this->assertSame(['beige' => 1], $context['category_best_sellers']['colors']);
-            $this->assertEquals(5000, $context['inventory']['stock_value']);
+            $this->assertArrayNotHasKey('inventory', $context);
+            $this->assertSame(['units_last_12_months' => 2, 'days_without_a_sale' => 120], $context['sales']);
+            $this->assertStringContainsString('never mention limited stock or clearance', $system);
             $this->assertSame('اليوم الوطني', $context['occasions'][0]['name_ar']);
             $this->assertContains('marketing_plan', $schema['required']);
 

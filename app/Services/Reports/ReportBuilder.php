@@ -118,8 +118,7 @@ class ReportBuilder
                 'revenue' => (float) $rows->sum('revenue'),
                 'add_to_cart_rate' => (float) $p->add_to_cart_rate,
                 'return_rate' => (float) $p->return_rate,
-                'turnover_days' => $p->turnover_days,
-                'stock' => $p->stock,
+                'no_sales_days' => $p->no_sales_days,
             ];
         });
 
@@ -146,7 +145,7 @@ class ReportBuilder
                 ['units', 'القطع المباعة', 'Units', 'number'], ['revenue', 'الإيرادات', 'Revenue', 'money'],
                 ['add_to_cart_rate', 'نسبة الإضافة للسلة', 'Add-to-cart rate', 'percent'],
                 ['return_rate', 'نسبة المرتجعات', 'Return rate', 'percent'],
-                ['turnover_days', 'أيام دوران المخزون', 'Turnover days', 'number'], ['stock', 'المخزون', 'Stock', 'number'],
+                ['no_sales_days', 'أيام بلا بيع', 'Days without a sale', 'number'],
             ], $productRows),
             $this->section('categories', 'الأداء حسب الفئة', 'Performance by category', [
                 ['category', 'الفئة', 'Category'], ['products', 'المنتجات', 'Products', 'number'],

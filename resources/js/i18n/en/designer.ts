@@ -197,7 +197,6 @@ export const designer: typeof ar = {
         units3m: '{n} units in 3 months',
         orders: '{n} orders',
         growth: '{n}% vs the previous period',
-        stockMonths: 'Stock covers {n} months',
         dna: 'Your winning DNA',
         dnaHint: 'Attributes that sell above their share of your catalog',
         dnaIndex: 'Index {n}',

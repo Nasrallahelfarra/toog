@@ -1,5 +1,5 @@
 import { Link, router } from '@inertiajs/react';
-import { AlertTriangle, Banknote, Package, Search, Turtle } from 'lucide-react';
+import { AlertTriangle, CalendarClock, Package, Search, Turtle } from 'lucide-react';
 import { useState } from 'react';
 import { PageBody, PageHeader } from '@/components/mojo/page-header';
 import { Pagination } from '@/components/mojo/pagination';
@@ -34,7 +34,7 @@ export default function Stagnant({
     categories,
     classification,
 }: Props) {
-    const { t, tr, number, money } = useI18n();
+    const { t, tr, number } = useI18n();
     const s = t.stagnant;
     const [search, setSearch] = useState(filters.search ?? '');
     const [category, setCategory] = useState(filters.category ?? '');
@@ -78,16 +78,16 @@ export default function Stagnant({
                     tone="warning"
                 />
                 <StatCard
-                    label={s.stock}
-                    value={summary.stock}
+                    label={s.neverSold}
+                    value={summary.never_sold}
                     icon={Package}
+                    hint={s.neverSoldHint}
                 />
                 <StatCard
-                    label={s.stockValue}
-                    value={summary.stock_value}
-                    format={money}
-                    icon={Banknote}
-                    hint={s.stockValueHint}
+                    label={s.longestQuiet}
+                    value={summary.longest_quiet}
+                    format={(n) => tr(t.performance.days, { n: number(n) })}
+                    icon={CalendarClock}
                     tone="gold"
                 />
             </div>

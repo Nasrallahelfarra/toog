@@ -420,12 +420,12 @@ class MarketTrends
             'attrs' => $this->attributes($p->features ?? [], FashionVocabulary::garmentFor($p->category, $p->name)),
             'now' => (int) ($now[$p->id] ?? 0),
             'before' => (int) ($before[$p->id] ?? 0),
-            'live' => $p->stock > 0 || ($p->launched_at && $p->launched_at->gte(now()->subYear())),
         ]);
         $out = [];
 
         foreach (self::TYPES as $type) {
-            $liveWithType = $rows->filter(fn (array $r) => $r['live'] && $r['attrs'][$type] !== []);
+            // Every catalog product counts as on offer: stock is not a signal.
+            $liveWithType = $rows->filter(fn (array $r) => $r['attrs'][$type] !== []);
 
             foreach ($rows->flatMap(fn (array $r) => $r['attrs'][$type])->unique() as $value) {
                 $carriers = $rows->filter(fn (array $r) => in_array($value, $r['attrs'][$type], true));
@@ -442,8 +442,6 @@ class MarketTrends
                     'change_pct' => $trusted ? (int) round(($shareNow - $shareBefore) / $shareBefore * 100) : null,
                     'catalog_pct' => $liveWithType->isEmpty() ? 0 : (int) round($liveWithType->filter(fn (array $r) => in_array($value, $r['attrs'][$type], true))->count() / $liveWithType->count() * 100),
                     'products' => $carriers->count(),
-                    'in_stock' => $carriers->filter(fn (array $r) => $r['product']->stock > 0)->count(),
-                    'stock' => (int) $carriers->sum(fn (array $r) => max(0, (int) $r['product']->stock)),
                     'examples' => $carriers->sortByDesc('now')->take(3)->map(fn (array $r) => [
                         'id' => $r['product']->id,
                         'name' => $r['product']->name,
@@ -491,7 +489,7 @@ class MarketTrends
             $strong && ! $neutral && $absent => 'opportunity',
             $strong && ! $neutral && $change !== null && $change >= 15 && $mine['units'] >= 8 => 'focus',
             $change !== null && $change >= 25 && $mine['units'] >= 8 => 'mine_rising',
-            $change !== null && $change <= -25 && $mine['units_before'] >= 8 && $mine['in_stock'] > 0 => 'cooling',
+            $change !== null && $change <= -25 && $mine['units_before'] >= 8 => 'cooling',
             default => null,
         };
 

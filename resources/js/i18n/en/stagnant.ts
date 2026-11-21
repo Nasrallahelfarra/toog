@@ -11,26 +11,26 @@ export const stagnant: typeof ar = {
     allStatuses: 'All products needing attention',
     statusFilter: 'Filter by stagnation status',
     refreshNeeded:
-        'These counts use the previous classification. Refresh classification to separate stagnant inventory from at-risk products using the new rules.',
+        'These counts use the previous classification, which relied on stock. Refresh classification to judge stagnation by sales alone.',
     reasons: {
         no_sales_90:
-            'Stock remains with no sales for at least 90 consecutive days covered by reliable data.',
-        slow_turnover:
-            'The product sells, but clearing its stock would take about 240 days or more at the recorded rate.',
+            'No sale for at least 90 consecutive days, covered by reliable sales data.',
+        quiet_period:
+            'No sale for 60 days or more; it becomes stagnant if the pause reaches 90 days.',
         low_performance:
-            'Sales performance is low relative to store products; an early warning, not confirmed stagnation.',
+            'Sales are weak beside the products that sell in your store; an early warning, not confirmed stagnation.',
         early_no_sales:
             'Available records show no sales, but coverage does not establish 90 consecutive days of inactivity.',
     },
-    stock: 'Units in stock',
-    stockValue: 'Stock value at selling price',
-    stockValueHint: 'An estimate at selling price, not inventory cost',
+    neverSold: 'Not sold in 12 months',
+    neverSoldHint: 'Among the stagnant and at-risk products',
+    longestQuiet: 'Longest without a sale',
+    noSalesDays: 'No sale for',
     units: 'Units sold',
     period: 'Latest classification, using up to 12 months of imported sales',
-    turnover: 'Days to clear stock',
     price: 'Product price',
     classification:
-        'Stagnant: stock with no sales for at least 90 consecutive days covered by sufficient data. At risk: stock with a score of 33 or below, or 240+ days to clear, without confirmed stagnation. Stock and value figures include both groups.',
+        'Classification uses sales only; stock plays no part. Stagnant: no sale for at least 90 consecutive days covered by sufficient data. At risk: no sale for 60 days, or a sales score of 33 or below among the products that sell in your store.',
     reclassify: 'Refresh classification',
     reclassifying: 'Refreshing classification',
     reclassifyHint:
@@ -72,7 +72,7 @@ export const stagnant: typeof ar = {
     phaseHints: {
         queued: 'Your request is saved. AI analysis has not started yet.',
         context:
-            'Gathering sales, stock and available evidence for this product.',
+            'Gathering sales and available evidence for this product.',
         image: 'Preparing the original image so suggestions refer to this exact product.',
         model: 'The request has been sent to Gemini. Response time varies with the image and requested detail.',
         saving: 'Checking and saving the analysis for you to review.',

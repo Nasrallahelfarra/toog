@@ -148,7 +148,7 @@ class CompetitorAssortment
                 $position = $this->position($item['price'], $item['currency'], $item['platform'], $band);
 
                 $verb = match (true) {
-                    $match['status'] === 'similar' && $match['product'] && $match['product']->stock <= 0 => 'restock',
+                    // You already carry it; there is nothing to add.
                     $match['status'] === 'similar' => null,
                     $position['status'] !== null && $position['status'] !== 'within' => 'price_fit',
                     $brands < 2 || $newGarment => 'test_small',
@@ -265,7 +265,7 @@ class CompetitorAssortment
             return ['status' => 'unknown', 'product' => null, 'differs' => null];
         }
 
-        // Out-of-stock products count too: a similar one sold out means "restock".
+        // Every catalog product counts, whatever its stock: pieces are made to order.
         $live = $this->mine->filter(fn (Product $p) => FashionVocabulary::garmentFor($p->category, $p->name) === $garment && ! empty($p->features['colors']));
         if ($live->isEmpty()) {
             return ['status' => 'none', 'product' => null, 'differs' => null];
@@ -360,7 +360,7 @@ class CompetitorAssortment
         $have = match ($match['status']) {
             'none' => $ar ? 'وليس في كتالوجك مثله' : 'and you have nothing like it',
             'close' => $ar ? "وأقرب منتج لك «{$match['product']?->name}»" : "and your closest is “{$match['product']?->name}”",
-            'similar' => $ar ? "ولديك مشابه «{$match['product']?->name}» نفد مخزونه" : "and your similar “{$match['product']?->name}” is out of stock",
+            'similar' => $ar ? "ولديك مشابه «{$match['product']?->name}»" : "and you have the similar “{$match['product']?->name}”",
             default => '',
         };
         $price = $item['price'] !== null && $band
@@ -373,11 +373,10 @@ class CompetitorAssortment
         $lead = [
             'add_now' => $ar ? 'أضف الآن' : 'Add now',
             'price_fit' => $ar ? 'قدّمه ضمن نطاق سعرك' : 'Offer it within your price band',
-            'test_small' => $ar ? 'جرّب كمية صغيرة' : 'Test a small run',
-            'restock' => $ar ? 'أعد توفيره' : 'Restock it',
+            'test_small' => $ar ? 'جرّبه بتصميم واحد أولًا' : 'Try it with one design first',
             'watch' => $ar ? 'راقب' : 'Watch',
         ][$verb];
-        $tail = $verb === 'restock' ? '' : ($ar ? ' ميّزه بتغيير القصّة أو موضع التفاصيل.' : ' Set it apart by changing the cut or where the details sit.');
+        $tail = $ar ? ' ميّزه بتغيير القصّة أو موضع التفاصيل.' : ' Set it apart by changing the cut or where the details sit.';
 
         return "{$lead}: {$look} — ".implode($ar ? '، ' : ', ', $why).($have !== '' ? ($ar ? '، ' : ', ').$have : '').'.'.$price.$tail;
     }

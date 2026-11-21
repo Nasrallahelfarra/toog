@@ -20,7 +20,7 @@ use RuntimeException;
  */
 class CatalogImporter
 {
-    public const PRODUCT_COLUMNS = ['external_id', 'name', 'category', 'price', 'stock', 'image_url', 'colors', 'pattern', 'material', 'style', 'season', 'launched_at'];
+    public const PRODUCT_COLUMNS = ['external_id', 'name', 'category', 'price', 'image_url', 'colors', 'pattern', 'material', 'style', 'season', 'launched_at'];
 
     public const SALES_COLUMNS = ['product', 'month', 'orders', 'units', 'revenue', 'views', 'add_to_cart', 'returns'];
 
@@ -88,7 +88,6 @@ class CatalogImporter
                     'name' => $row['name'],
                     'category' => ($row['category'] ?? '') ?: null,
                     'price' => ($row['price'] ?? '') !== '' ? (float) $row['price'] : null,
-                    'stock' => ($row['stock'] ?? '') !== '' ? (int) $row['stock'] : null,
                     'image_url' => ($row['image_url'] ?? '') ?: null,
                     'launched_at' => $launched,
                 ], fn ($v) => $v !== null));

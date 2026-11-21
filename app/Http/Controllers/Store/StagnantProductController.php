@@ -30,7 +30,8 @@ class StagnantProductController extends Controller
             ->when($filters['class'] ?? null, fn ($q, $class) => $q->where('performance', $class))
             ->when($filters['search'] ?? null, fn ($q, $search) => $q->where(fn ($q) => $q->where('name', 'like', "%{$search}%")->orWhere('sku', 'like', "%{$search}%")))
             ->when($filters['category'] ?? null, fn ($q, $category) => $q->where('category', $category))
-            ->orderByDesc('stock')->orderBy('performance_score')->orderBy('id')->paginate(12)->withQueryString()
+            // The longest without a sale first.
+            ->orderByRaw('COALESCE(no_sales_days, 0) DESC')->orderBy('performance_score')->orderBy('id')->paginate(12)->withQueryString()
             ->through(fn (Product $p) => $catalog->product($p));
 
         if ($products->currentPage() > $products->lastPage()) {
@@ -63,7 +64,7 @@ class StagnantProductController extends Controller
 
             return ProductRecommendation::query()->create([
                 'store_id' => $product->store_id, 'product_id' => $product->id, 'user_id' => $request->user()->id,
-                'status' => 'pending', 'snapshot' => [...$locked->only(['name', 'category', 'price', 'image_url', 'features', 'stock', 'units_sold', 'revenue', 'views', 'add_to_cart_rate', 'return_rate', 'turnover_days', 'performance_score', 'performance']), 'classification_reason' => $locked->performanceReason()],
+                'status' => 'pending', 'snapshot' => [...$locked->only(['name', 'category', 'price', 'image_url', 'features', 'units_sold', 'revenue', 'views', 'add_to_cart_rate', 'return_rate', 'no_sales_days', 'performance_score', 'performance']), 'classification_reason' => $locked->performanceReason()],
             ]);
         });
         if ($run) {

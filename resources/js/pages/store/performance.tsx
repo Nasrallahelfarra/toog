@@ -62,7 +62,6 @@ type IssueKey =
     | 'duplicate_names'
     | 'duplicate_ids'
     | 'returns_exceed_units'
-    | 'negative_stock'
     | 'no_sales_history';
 
 type Product = {
@@ -81,8 +80,8 @@ type Product = {
     views: number;
     add_to_cart_rate: number;
     return_rate: number;
-    turnover_days: number | null;
-    stock: number;
+    /** Days without a sale; null when the sales data cannot show it. */
+    no_sales_days: number | null;
     is_novel: boolean;
     launched_at: string | null;
     history: { period: string; units: number; revenue: number }[];
@@ -844,7 +843,7 @@ function ProductsSection({ products, filters, categoryNames }: Pick<Props, 'prod
                             {showRevenue && <TableHead>{p.columns.revenue}</TableHead>}
                             <TableHead>{p.columns.addToCart}</TableHead>
                             <TableHead>{p.columns.returnRate}</TableHead>
-                            <TableHead>{p.columns.turnover}</TableHead>
+                            <TableHead>{p.columns.quiet}</TableHead>
                             <TableHead className="pe-5">{p.columns.features}</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -872,8 +871,8 @@ function ProductsSection({ products, filters, categoryNames }: Pick<Props, 'prod
                                 {showRevenue && <TableCell className="num">{money(product.revenue)}</TableCell>}
                                 <TableCell className="num">{percent(product.add_to_cart_rate, 1)}</TableCell>
                                 <TableCell className={cn('num', product.return_rate >= 15 && 'text-danger')}>{percent(product.return_rate, 1)}</TableCell>
-                                <TableCell className={cn('num', (product.turnover_days ?? 0) >= 180 && 'text-warning')}>
-                                    {product.turnover_days !== null ? tr(p.days, { n: number(product.turnover_days) }) : '—'}
+                                <TableCell className={cn('num', (product.no_sales_days ?? 0) >= 90 ? 'text-danger' : (product.no_sales_days ?? 0) >= 60 && 'text-warning')}>
+                                    {product.no_sales_days === null ? '—' : product.no_sales_days === 0 ? p.columns.quietNone : tr(p.days, { n: number(product.no_sales_days) })}
                                 </TableCell>
                                 <TableCell className="pe-5">
                                     <ColorChips colors={product.features.colors ?? []} showLabels={false} />
@@ -925,8 +924,7 @@ function ProductDrawer({ product, onClose }: { product: Product | null; onClose:
               [p.views, number(product.views)],
               [p.columns.addToCart, percent(product.add_to_cart_rate, 1)],
               [p.columns.returnRate, percent(product.return_rate, 1)],
-              [p.columns.turnover, product.turnover_days !== null ? tr(p.days, { n: number(product.turnover_days) }) : '—'],
-              [p.columns.stock, number(product.stock)],
+              [p.columns.quiet, product.no_sales_days === null ? '—' : product.no_sales_days === 0 ? p.columns.quietNone : tr(p.days, { n: number(product.no_sales_days) })],
               [p.launched, date(product.launched_at)],
           ]
         : [];

@@ -33,7 +33,7 @@ export const dashboard: typeof ar = {
     kpiDiversity: 'Catalog diversity index',
     kpiDiversityHint: 'Innovative {novel}% of a {target}% target',
     kpiAtRisk: 'Products at risk of stalling',
-    kpiAtRiskHint: 'falling sales, high stock',
+    kpiAtRiskHint: 'weak or stalled sales',
     kpiRevenue: 'Revenue this month',
 
     evaluationsByMonth: 'Evaluations per month',
@@ -59,11 +59,11 @@ export const dashboard: typeof ar = {
     launchOverdue: 'Prep window has started — launch now',
     noEvents: 'No upcoming seasons',
 
-    atRiskTitle: 'Products at risk of becoming dead stock',
+    atRiskTitle: 'Products at risk of stagnation',
     atRiskHint: 'Early warnings from the latest classification, separate from confirmed stagnant products',
-    overstock: 'Overstock',
+    quietFor: 'No sale for {days} days',
     decline: 'down {value}%',
-    monthsOfStock: '{value} months of stock',
+    unitsInYear: '{units} units in 12 months',
     noAtRisk: 'No products at risk right now',
 
     recentEvaluations: 'Recent evaluations',

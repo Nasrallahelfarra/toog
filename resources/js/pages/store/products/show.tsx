@@ -6,7 +6,6 @@ import {
     Coins,
     ImageIcon,
     ImageOff,
-    Layers,
     Loader2,
     Minus,
     Package,
@@ -58,17 +57,17 @@ type Props = {
         performance: ClassKey | null;
         performance_score: number | null;
         price: number | null;
-        stock: number;
         units_sold: number;
         revenue: number;
         views: number;
         add_to_cart_rate: number;
         return_rate: number;
-        turnover_days: number | null;
+        /** Days without a sale; null when the sales data cannot show it. */
+        no_sales_days: number | null;
         is_novel: boolean;
         launched_at: string | null;
         features: { colors?: string[]; pattern?: string | null; material?: string | null; style?: string | null; season?: string | null };
-        classification_reason: 'no_sales_90' | 'slow_turnover' | 'low_performance' | 'early_no_sales' | null;
+        classification_reason: 'no_sales_90' | 'quiet_period' | 'low_performance' | 'early_no_sales' | null;
     };
     history: { period: string; units: number; revenue: number; orders: number; returns: number }[];
     category: {
@@ -76,7 +75,7 @@ type Props = {
         name: string | null;
         products: number;
         rank: number;
-        median: { price: number | null; units_sold: number | null; revenue: number | null; return_rate: number | null; turnover_days: number | null };
+        median: { price: number | null; units_sold: number | null; revenue: number | null; return_rate: number | null };
     };
     similar: { id: number; name: string; image_url: string | null; performance: string | null; units_sold: number; price: number | null }[];
     recovery: Recovery | null;
@@ -150,8 +149,7 @@ export default function ProductShow({ product, history, category, similar, recov
     const kpis: { icon: LucideIcon; label: string; value: string; hint?: string }[] = ([
         { icon: Package, label: p.kpi.units, value: number(product.units_sold) },
         { icon: Wallet, label: p.kpi.revenue, value: money(product.revenue) },
-        { icon: Layers, label: p.kpi.stock, value: number(product.stock) },
-        { icon: Timer, label: p.kpi.turnover, value: product.turnover_days !== null ? tr(t.performance.days, { n: number(product.turnover_days) }) : '—' },
+        { icon: Timer, label: p.kpi.quiet, value: product.no_sales_days === null ? '—' : product.no_sales_days === 0 ? t.performance.columns.quietNone : tr(t.performance.days, { n: number(product.no_sales_days) }) },
         { icon: RotateCcw, label: p.kpi.returns, value: percent(product.return_rate, 1) },
         { icon: ShoppingCart, label: p.kpi.cart, value: product.views > 0 ? percent(product.add_to_cart_rate, 1) : '—', hint: product.views > 0 ? undefined : p.kpi.noViews },
         { icon: Trophy, label: p.kpi.rank, value: tr(p.kpi.rankValue, { rank: number(category.rank), total: number(category.products) }) },
@@ -491,7 +489,6 @@ function CategoryComparison({ product, category }: { product: Props['product']; 
         { key: 'units_sold', value: product.units_sold, better: 'higher', format: (n) => number(n) },
         { key: 'revenue', value: product.revenue, better: 'higher', format: (n) => money(n) },
         { key: 'return_rate', value: product.return_rate, better: 'lower', format: (n) => percent(n, 1) },
-        { key: 'turnover_days', value: product.turnover_days, better: 'lower', format: (n) => tr(t.performance.days, { n: number(n) }) },
     ];
     const rows = all.filter((row) => showRevenue || row.key !== 'revenue');
 
