@@ -1,5 +1,4 @@
 import { Form, Head } from '@inertiajs/react';
-import { ShieldCheck, Store } from 'lucide-react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
@@ -17,27 +16,8 @@ type Props = {
     canResetPassword: boolean;
 };
 
-const demoAccounts = [
-    { key: 'demoAdmin', email: 'admin@mojo.ai', icon: ShieldCheck },
-    { key: 'demoOwner', email: 'tooog4ai@gmail.com', icon: Store },
-] as const;
-
 export default function Login({ status, canResetPassword }: Props) {
     const { t } = useI18n();
-    // Demo shortcut: fill the form with a seeded account and submit it.
-    const fillDemo = (email: string) => {
-        const input = document.getElementById('email') as HTMLInputElement | null;
-        const form = input?.form;
-
-        if (!input || !form) {
-            return;
-        }
-
-        input.value = email;
-        (form.elements.namedItem('password') as HTMLInputElement).value = 'password';
-        form.requestSubmit();
-    };
-
     return (
         <>
             <Head title={t.auth.login} />
@@ -96,32 +76,9 @@ export default function Login({ status, canResetPassword }: Props) {
                             {processing && <Spinner />}
                             {t.auth.login}
                         </Button>
-
                     </>
                 )}
             </Form>
-
-            <div className="space-y-2.5 rounded-2xl border border-dashed p-4">
-                <p className="text-muted-foreground text-xs font-medium">{t.auth.demoAccounts}</p>
-                <div className="grid grid-cols-2 gap-2">
-                    {demoAccounts.map((account) => (
-                        <button
-                            key={account.email}
-                            type="button"
-                            onClick={() => fillDemo(account.email)}
-                            className="hover:border-primary/40 hover:bg-primary/5 flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-start transition-colors"
-                        >
-                            <account.icon className="text-primary size-4 shrink-0" />
-                            <span className="min-w-0">
-                                <span className="block text-xs font-medium">{t.auth[account.key]}</span>
-                                <span className="text-muted-foreground block truncate text-[11px]" dir="ltr">
-                                    {account.email}
-                                </span>
-                            </span>
-                        </button>
-                    ))}
-                </div>
-            </div>
         </>
     );
 }

@@ -367,7 +367,8 @@ class SyncStoreData implements ShouldQueue
     {
         $productCount = 0;
         foreach ($products as $row) {
-            $product = Product::query()->firstOrNew(['store_id' => $this->store->id, 'external_id' => $row['external_id']]);
+            // A hidden (accessory) row is still this product: find it, do not duplicate it.
+            $product = Product::withExcluded()->firstOrNew(['store_id' => $this->store->id, 'external_id' => $row['external_id']]);
             $product->fill(array_filter($row, fn ($v) => $v !== null));
             $product->launched_at ??= $row['launched_at'];
             $product->save();

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -24,6 +25,15 @@ use Illuminate\Support\Carbon;
 #[Fillable(['store_id', 'product_id', 'period', 'orders', 'units', 'revenue', 'views', 'add_to_cart', 'returns'])]
 class ProductSale extends Model
 {
+    protected static function booted(): void
+    {
+        // Sales of accessories stay out of every total, as the products do.
+        static::addGlobalScope('visible', fn (Builder $query) => $query->whereNotIn(
+            $query->qualifyColumn('product_id'),
+            fn ($products) => $products->select('id')->from('products')->where('excluded', true),
+        ));
+    }
+
     protected function casts(): array
     {
         return [

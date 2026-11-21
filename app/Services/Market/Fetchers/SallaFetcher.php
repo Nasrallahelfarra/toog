@@ -147,7 +147,7 @@ class SallaFetcher implements CompetitorFetcher
                 $regular = is_numeric($item['regular_price'] ?? null) ? (float) $item['regular_price'] : null;
                 $sold = ! empty($item['is_hidded_quantity']) ? null : (is_numeric($item['sold_quantity'] ?? null) ? (int) $item['sold_quantity'] : null);
                 $category = is_array($item['category'] ?? null) ? ($item['category']['name'] ?? null) : null;
-                $existing = CompetitorProduct::query()->where('competitor_id', $competitor->id)->where('external_id', $id)->first();
+                $existing = CompetitorProduct::withExcluded()->where('competitor_id', $competitor->id)->where('external_id', $id)->first();
                 $data = [
                     'store_id' => $competitor->store_id,
                     'name' => Str::limit((string) $item['name'], 250, ''),
