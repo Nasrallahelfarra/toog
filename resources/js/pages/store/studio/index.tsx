@@ -127,11 +127,13 @@ type Props = {
     insights?: Insights;
 };
 
-type Mode = 'designer' | 'modify' | 'idea' | 'mockup';
+// A free idea covers display and marketing shots too: the output type
+// chosen in the form decides what is drawn, so they share one tab.
+type Mode = 'designer' | 'modify' | 'idea';
 type ClassicMode = Exclude<Mode, 'designer'>;
 
-const MODES: Mode[] = ['designer', 'modify', 'idea', 'mockup'];
-const modeIcons: Record<Mode, LucideIcon> = { designer: Sparkles, modify: RefreshCw, idea: Lightbulb, mockup: Camera };
+const MODES: Mode[] = ['designer', 'modify', 'idea'];
+const modeIcons: Record<Mode, LucideIcon> = { designer: Sparkles, modify: RefreshCw, idea: Lightbulb };
 
 const outputIcons: Record<OutputType, LucideIcon> = {
     product_photo: Camera,
@@ -254,7 +256,7 @@ function ClassicStudio({ source, prefillPrompt, brand, trends, categories, reque
     const running = requests.some((r) => r.status === 'pending' || r.status === 'processing');
 
     const form = useForm({
-        type: (mode === 'modify' && source ? 'modification' : mode === 'mockup' ? 'mockup' : 'new_idea') as RequestType,
+        type: (mode === 'modify' && source ? 'modification' : 'new_idea') as RequestType,
         title: source?.name ?? '',
         prompt: source?.prompt ?? prefillPrompt ?? '',
         category: source?.category ?? '',

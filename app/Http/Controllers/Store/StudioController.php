@@ -89,8 +89,11 @@ class StudioController extends Controller
         $since = $request->integer('since') ?: (($source || $refine)
             ? (int) DesignRequest::query()->where('store_id', $store->id)->max('id') : 0);
 
-        // The AI designer is the studio's first mode; older links keep their mode.
-        $mode = in_array($request->query('mode'), ['designer', 'modify', 'idea', 'mockup'], true) ? $request->query('mode') : match (true) {
+        // The AI designer is the studio's first mode; older links keep their
+        // mode. Display shots are part of the free-idea tab now, so an old
+        // "mockup" link opens that tab.
+        $asked = $request->query('mode') === 'mockup' ? 'idea' : $request->query('mode');
+        $mode = in_array($asked, ['designer', 'modify', 'idea'], true) ? $asked : match (true) {
             $source !== null => 'modify',
             $request->filled('prompt') || $refine !== null || $request->integer('since') > 0 => 'idea',
             default => 'designer',
@@ -288,11 +291,7 @@ class StudioController extends Controller
      */
     private static function modeFor(DesignRequest $designRequest): string
     {
-        return match ($designRequest->type) {
-            'modification' => 'modify',
-            'mockup' => 'mockup',
-            default => 'idea',
-        };
+        return $designRequest->type === 'modification' ? 'modify' : 'idea';
     }
 
     public function retry(DesignRequest $designRequest): RedirectResponse
