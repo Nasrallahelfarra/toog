@@ -7,6 +7,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Background workers
+    |--------------------------------------------------------------------------
+    |
+    | One queue worker runs one job at a time: a second person's design would
+    | wait for the first to finish. `php artisan dev` therefore starts this
+    | many workers. On a server, run the same number of `queue:work`
+    | processes from the process manager (see the README).
+    |
+    */
+
+    'queue' => [
+        'dev_workers' => max(1, (int) env('QUEUE_DEV_WORKERS', 3)),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | AI provider
     |--------------------------------------------------------------------------
     |

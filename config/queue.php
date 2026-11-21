@@ -29,6 +29,11 @@ return [
     |
     */
 
+    // A reserved job is handed to another worker once "retry_after" passes.
+    // With several workers that must be longer than the longest job (a
+    // design collection, 900 seconds), or a second worker would take a job
+    // the first is still drawing and mark it failed. So the setting has a
+    // floor: an older server value below it is raised, never obeyed.
     'connections' => [
 
         'sync' => [
@@ -40,7 +45,7 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 660),
+            'retry_after' => max(960, (int) env('DB_QUEUE_RETRY_AFTER', 960)),
             'after_commit' => false,
         ],
 
@@ -48,7 +53,7 @@ return [
             'driver' => 'beanstalkd',
             'host' => env('BEANSTALKD_QUEUE_HOST', 'localhost'),
             'queue' => env('BEANSTALKD_QUEUE', 'default'),
-            'retry_after' => (int) env('BEANSTALKD_QUEUE_RETRY_AFTER', 660),
+            'retry_after' => max(960, (int) env('BEANSTALKD_QUEUE_RETRY_AFTER', 960)),
             'block_for' => 0,
             'after_commit' => false,
         ],
@@ -68,7 +73,7 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 660),
+            'retry_after' => max(960, (int) env('REDIS_QUEUE_RETRY_AFTER', 960)),
             'block_for' => null,
             'after_commit' => false,
         ],

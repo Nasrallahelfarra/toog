@@ -185,7 +185,7 @@ class StudioController extends Controller
             'evaluation_id' => $evaluation?->id,
             'product_recommendation_id' => $recovery?->id,
             'type' => $data['type'],
-            'title' => $data['title'] ?: $evaluation?->name,
+            'title' => ($data['title'] ?? null) ?: $evaluation?->name,
             'prompt' => $data['prompt'],
             'category' => $data['category'] ?? $evaluation?->category,
             'output_type' => $data['output_type'],
