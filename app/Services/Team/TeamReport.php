@@ -46,6 +46,7 @@ class TeamReport
 
         $products = DB::table('products')
             ->where('store_id', $store->id)
+            ->where('excluded', false)
             ->groupBy('assigned_user_id')
             ->selectRaw('assigned_user_id AS user_id, COUNT(*) AS products,
                 SUM(CASE WHEN performance = ? THEN 1 ELSE 0 END) AS winners,
@@ -257,6 +258,7 @@ class TeamReport
     {
         return DB::table('product_sales')
             ->join('products', 'products.id', '=', 'product_sales.product_id')
+            ->where('products.excluded', false)
             ->where('product_sales.store_id', $store->id)
             ->where('product_sales.period', '>=', $from)
             ->where('product_sales.period', '<', $to);

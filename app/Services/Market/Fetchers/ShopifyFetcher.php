@@ -155,7 +155,7 @@ class ShopifyFetcher implements CompetitorFetcher
                 $variants = is_array($item['variants'] ?? null) ? $item['variants'] : [];
                 $price = collect($variants)->pluck('price')->filter(fn ($p) => is_numeric($p) && $p >= 0)->map(fn ($p) => (float) $p)->min();
                 $handle = $item['handle'] ?? rawurldecode(basename(parse_url($item['url'], PHP_URL_PATH) ?: ''));
-                $existing = CompetitorProduct::query()->where('competitor_id', $competitor->id)->where('external_id', $id)->first();
+                $existing = CompetitorProduct::withExcluded()->where('competitor_id', $competitor->id)->where('external_id', $id)->first();
                 $tags = is_array($item['tags'] ?? null) ? implode(' ', $item['tags']) : (string) ($item['tags'] ?? '');
                 $description = Str::limit(trim(strip_tags($item['body_html'] ?? '')), 1500, '');
                 $data = [

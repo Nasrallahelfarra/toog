@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Services\Analytics\PerformanceClassifier;
+use App\Support\ExcludedProducts;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -15,6 +17,7 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property int $store_id
+ * @property bool $excluded An accessory: left out of every page, total and prompt.
  * @property string|null $external_id
  * @property string|null $sku
  * @property string $name
@@ -55,6 +58,32 @@ class Product extends Model
 
     public const STAGNANT = 'stagnant';
 
+    protected static function booted(): void
+    {
+        // Accessories are left out of the platform. Every query skips them
+        // unless it asks for them with withExcluded().
+        static::addGlobalScope('visible', fn (Builder $query) => $query->where($query->qualifyColumn('excluded'), false));
+
+        // The mark follows the product's own name and section, so a renamed
+        // or re-filed product is re-judged on its next save.
+        static::saving(function (Product $product): void {
+            if (! $product->exists || $product->isDirty(['name', 'category'])) {
+                $product->excluded = ExcludedProducts::matches($product->category, $product->name);
+            }
+        });
+    }
+
+    /**
+     * Every product, accessories included: for the writes that must find
+     * a row that is hidden (the sync and the file import).
+     *
+     * @return Builder<static>
+     */
+    public static function withExcluded(): Builder
+    {
+        return static::withoutGlobalScope('visible');
+    }
+
     /**
      * Why the product is stagnant or at risk, in terms of its sales only.
      */
@@ -83,6 +112,7 @@ class Product extends Model
             'add_to_cart_rate' => 'decimal:2',
             'return_rate' => 'decimal:2',
             'is_novel' => 'boolean',
+            'excluded' => 'boolean',
             'launched_at' => 'date',
             'assigned_at' => 'datetime',
         ];

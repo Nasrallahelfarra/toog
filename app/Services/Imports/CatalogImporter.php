@@ -81,8 +81,8 @@ class CatalogImporter
 
                 $externalId = ($row['external_id'] ?? '') !== '' ? $row['external_id'] : null;
                 $product = $externalId
-                    ? Product::query()->firstOrNew(['store_id' => $store->id, 'external_id' => $externalId])
-                    : Product::query()->firstOrNew(['store_id' => $store->id, 'name' => $row['name']]);
+                    ? Product::withExcluded()->firstOrNew(['store_id' => $store->id, 'external_id' => $externalId])
+                    : Product::withExcluded()->firstOrNew(['store_id' => $store->id, 'name' => $row['name']]);
 
                 $product->fill(array_filter([
                     'name' => $row['name'],

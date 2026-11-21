@@ -101,6 +101,7 @@ class ProductAssignments
      */
     private function products(Store $store, array $ids): Builder
     {
-        return DB::table('products')->where('store_id', $store->id)->whereIn('id', $ids);
+        // Accessories are not on the platform, so they cannot be held.
+        return DB::table('products')->where('store_id', $store->id)->where('excluded', false)->whereIn('id', $ids);
     }
 }
