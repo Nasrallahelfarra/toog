@@ -119,6 +119,28 @@ class ConcurrentDesignWorkTest extends TestCase
         $this->assertNotNull($old->fresh());
     }
 
+    public function test_display_shots_are_asked_for_from_the_free_idea_tab(): void
+    {
+        Queue::fake();
+        $sara = $this->designer('Sara');
+
+        // The separate "product shots" tab is gone; an old link to it opens
+        // the free-idea tab, which offers the same output types.
+        $this->actingAs($sara)->get('/store/studio?mode=mockup')
+            ->assertInertia(fn (Assert $page) => $page->where('mode', 'idea')
+                ->where('outputTypes', DesignRequest::OUTPUT_TYPES));
+
+        $this->post('/store/studio', ['type' => 'new_idea', 'prompt' => 'Black abaya on a model', 'output_type' => 'mockup_model', 'aspect_ratio' => '4:5', 'variants_count' => 1])
+            ->assertSessionHasNoErrors()->assertRedirect('/store/studio?mode=idea');
+        $this->assertSame('mockup_model', DesignRequest::query()->sole()->output_type);
+
+        // A request saved from the old tab still retries, back on this tab.
+        $old = DesignRequest::query()->create(['store_id' => $this->store->id, 'user_id' => $sara->id, 'type' => 'mockup', 'prompt' => 'Lifestyle shot',
+            'output_type' => 'lifestyle', 'aspect_ratio' => '1:1', 'variants_count' => 1, 'status' => 'failed']);
+        $this->from('/store/studio?mode=mockup')->post("/store/studio/{$old->id}/retry")->assertRedirect('/store/studio?mode=idea');
+        $this->assertSame('pending', $old->fresh()->status);
+    }
+
     public function test_no_job_runs_longer_than_the_window_after_which_another_worker_would_take_it(): void
     {
         $longest = 0;

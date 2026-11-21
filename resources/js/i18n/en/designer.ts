@@ -5,13 +5,11 @@ export const designer: typeof ar = {
         designer: 'AI designer',
         modify: 'Edit a product',
         idea: 'Free idea',
-        mockup: 'Product shots',
     },
     modeHints: {
         designer: 'A full collection from your fabric',
         modify: 'Develop an existing product',
-        idea: 'Describe it in your words',
-        mockup: 'Display and marketing shots',
+        idea: 'A new design, or display and marketing shots',
     },
     eyebrow: 'Your own designer — working from your store data',
     subtitle:

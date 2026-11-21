@@ -4,13 +4,11 @@ export const designer = {
         designer: 'المصمم الذكي',
         modify: 'تعديل منتج',
         idea: 'فكرة حرّة',
-        mockup: 'صور عرض',
     },
     modeHints: {
         designer: 'مجموعة تصاميم كاملة من قماشك',
         modify: 'طوّر منتجًا قائمًا',
-        idea: 'صف فكرتك بكلماتك',
-        mockup: 'صور عرض وتسويق',
+        idea: 'تصميم جديد أو صور عرض وتسويق',
     },
     eyebrow: 'مصمّمك الخاص — يعمل من بيانات متجرك',
     subtitle:
