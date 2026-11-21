@@ -32,7 +32,7 @@ class DesignRefinementTest extends TestCase
         Queue::fake();
         $this->store = app(CreateStore::class)->handle(User::factory()->create(), ['name' => 'Studio store']);
         Storage::disk('public')->put("designs/{$this->store->id}/a.png", 'png-bytes');
-        $request = DesignRequest::query()->create(['store_id' => $this->store->id, 'type' => 'new_idea', 'prompt' => 'Abaya', 'category' => 'Abayas',
+        $request = DesignRequest::query()->create(['store_id' => $this->store->id, 'user_id' => $this->store->owner_id, 'type' => 'new_idea', 'prompt' => 'Abaya', 'category' => 'Abayas',
             'output_type' => 'product_photo', 'aspect_ratio' => '4:5', 'variants_count' => 1, 'status' => 'completed']);
         $this->design = Design::query()->create(['store_id' => $this->store->id, 'design_request_id' => $request->id, 'title' => 'Abaya · 1',
             'image_path' => "designs/{$this->store->id}/a.png", 'output_type' => 'product_photo', 'aspect_ratio' => '4:5', 'palette' => ['#000000'], 'status' => 'draft']);
@@ -72,12 +72,13 @@ class DesignRefinementTest extends TestCase
     public function test_editing_opens_a_clean_workspace_without_earlier_finished_designs(): void
     {
         $owner = $this->store->owner;
-        $running = DesignRequest::query()->create(['store_id' => $this->store->id, 'type' => 'new_idea', 'prompt' => 'Kaftan',
+        $running = DesignRequest::query()->create(['store_id' => $this->store->id, 'user_id' => $owner->id, 'type' => 'new_idea', 'prompt' => 'Kaftan',
             'output_type' => 'product_photo', 'aspect_ratio' => '1:1', 'variants_count' => 1, 'status' => 'processing']);
 
-        // The plain studio keeps the full history.
+        // The plain studio shows the latest request only; the earlier
+        // finished one is in the library.
         $this->actingAs($owner)->get('/store/studio')->assertInertia(fn (Assert $page) => $page
-            ->where('since', null)->has('requests', 2));
+            ->where('since', null)->has('requests', 1)->where('requests.0.id', $running->id));
 
         // Opening a design to edit hides finished work; anything still generating stays.
         $this->get("/store/studio?refine={$this->design->id}")->assertInertia(fn (Assert $page) => $page
