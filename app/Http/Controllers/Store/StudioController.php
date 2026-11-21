@@ -119,9 +119,18 @@ class StudioController extends Controller
                 ->get(['id', 'type', 'value', 'name_ar', 'name_en', 'momentum', 'saturation', 'in_catalog']),
             'categories' => fn () => Product::query()->where('store_id', $store->id)->whereNotNull('category')->distinct()->pluck('category'),
             'since' => $since ?: null,
+            // The studio is each person's own bench: their latest request, and
+            // whatever of theirs is still generating. Earlier results, and
+            // everyone else's, are in the library. While editing, the requests
+            // of that edit (newer than `since`) are listed instead.
             'requests' => fn () => DesignRequest::query()
                 ->where('store_id', $store->id)
-                ->when($since, fn ($q) => $q->where(fn ($q) => $q->where('id', '>', $since)->orWhereIn('status', ['pending', 'processing'])))
+                ->where('user_id', $request->user()->id)
+                ->where(fn ($q) => $q
+                    ->whereIn('status', ['pending', 'processing'])
+                    ->when($since,
+                        fn ($q) => $q->orWhere('id', '>', $since),
+                        fn ($q) => $q->orWhere('id', DesignRequest::query()->where('store_id', $store->id)->where('user_id', $request->user()->id)->max('id'))))
                 ->with(['designs' => fn ($q) => $q->orderBy('id'), 'parentDesign'])
                 ->latest()
                 ->orderByDesc('id')

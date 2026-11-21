@@ -78,10 +78,45 @@ class ConcurrentDesignWorkTest extends TestCase
             Queue::assertPushed(GenerateDesignCollection::class, fn ($job) => $job->collectionId === $collection->id);
         }
 
-        // Each of them follows the work from the studio while it runs.
+        // Each of them follows their own request from the studio while it runs.
         $this->actingAs($noor)->get('/store/studio?mode=designer')
             ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->has('collections', 3)->has('requests', 2));
+            ->assertInertia(fn (Assert $page) => $page->has('collections', 3)
+                ->has('requests', 1)->where('requests.0.id', $requests[0]->id));
+    }
+
+    public function test_the_studio_keeps_only_a_members_latest_request_and_what_is_still_generating(): void
+    {
+        $sara = $this->designer('Sara');
+        $noor = $this->designer('Noor');
+        $request = fn (User $by, string $status) => DesignRequest::query()->create(['store_id' => $this->store->id, 'user_id' => $by->id,
+            'type' => 'new_idea', 'prompt' => 'Abaya', 'output_type' => 'product_photo', 'aspect_ratio' => '4:5', 'variants_count' => 1, 'status' => $status]);
+
+        $old = $request($sara, 'completed');
+        $stillRunning = $request($sara, 'processing');
+        $latest = $request($sara, 'completed');
+        $noors = $request($noor, 'completed');
+
+        // Sara: her latest and the one still generating, newest first. Not
+        // her earlier finished request, and nothing of Noor's.
+        $this->actingAs($sara)->get('/store/studio?mode=idea')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('requests', 2)
+                ->where('requests.0.id', $latest->id)
+                ->where('requests.1.id', $stillRunning->id));
+
+        // Once it finishes, only the latest remains.
+        $stillRunning->update(['status' => 'completed']);
+        $this->get('/store/studio?mode=idea')
+            ->assertInertia(fn (Assert $page) => $page->has('requests', 1)->where('requests.0.id', $latest->id));
+
+        $this->actingAs($noor)->get('/store/studio?mode=idea')
+            ->assertInertia(fn (Assert $page) => $page->has('requests', 1)->where('requests.0.id', $noors->id));
+
+        // Someone who has not asked for anything sees an empty bench.
+        $this->actingAs($this->store->owner)->get('/store/studio?mode=idea')
+            ->assertInertia(fn (Assert $page) => $page->has('requests', 0));
+        $this->assertNotNull($old->fresh());
     }
 
     public function test_no_job_runs_longer_than_the_window_after_which_another_worker_would_take_it(): void

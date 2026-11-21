@@ -533,14 +533,12 @@ function ClassicStudio({ source, prefillPrompt, brand, trends, categories, reque
                     {/* Requests with variants side by side (FR-4.9) */}
                     <div className="space-y-4">
                         <h2 className="text-[15px] font-semibold">{since ? s.requests.workspaceTitle : s.requests.title}</h2>
-                        {since && (
+                        {/* Only the latest request is kept here; the rest is in the library. */}
+                        {(since || requests.length > 0) && (
                             <p className="bg-muted/50 text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-4 py-3 text-xs leading-relaxed">
-                                <span>{s.requests.workspaceHint}</span>
+                                <span>{since ? s.requests.workspaceHint : s.requests.latestHint}</span>
                                 <Link href="/store/library" className="text-primary hover:underline">
                                     {s.openLibrary}
-                                </Link>
-                                <Link href="/store/studio" className="text-primary hover:underline">
-                                    {s.requests.showAll}
                                 </Link>
                             </p>
                         )}
