@@ -26,7 +26,8 @@ class RecoveryMarketing
 
     /**
      * Facts only, never instructions: price position in the category, what
-     * the category's best sellers look like, stock pressure and occasions.
+     * the category's best sellers look like, how long the product has gone
+     * without a sale, and occasions. Stock is left out: it is not a signal.
      *
      * @param  array<string, mixed>  $snapshot
      * @return array<string, mixed>
@@ -59,11 +60,9 @@ class RecoveryMarketing
                 'patterns' => $this->top($winners->map(fn (Product $p) => $p->features['pattern'] ?? null)),
                 'styles' => $this->top($winners->map(fn (Product $p) => $p->features['style'] ?? null)),
             ],
-            'inventory' => [
-                'stock' => $snapshot['stock'] ?? null,
-                'days_to_sell_out' => $snapshot['turnover_days'] ?? null,
-                'stock_value' => $price !== null ? round($price * (int) ($snapshot['stock'] ?? 0), 2) : null,
+            'sales' => [
                 'units_last_12_months' => $snapshot['units_sold'] ?? null,
+                'days_without_a_sale' => $snapshot['no_sales_days'] ?? null,
             ],
             'occasions' => $ctx->upcomingEvents
                 ->filter(fn ($e) => $e->starts_on->lte(now()->addDays(self::HORIZON)))
@@ -93,11 +92,13 @@ class RecoveryMarketing
         - hashtags: 3-6 Arabic hashtags shoppers in Saudi Arabia actually search
           (product type, occasion), each starting with # and without spaces.
         - offer: one type from the allowed list with a concrete value in SAR or percent
-          and a duration of 3-30 days. Weigh stock value, days to sell out and the price
-          against category_median; margins are unknown, so prefer bundles, gifts or free
-          shipping before deep discounts on premium items, and do not go below
-          category_min unless days_to_sell_out justifies clearance. installments means
-          payment messaging (for example Tabby or Tamara) for higher prices.
+          and a duration of 3-30 days. Weigh sales.days_without_a_sale, the units sold
+          and the price against category_median; margins are unknown, so prefer bundles,
+          gifts or free shipping before deep discounts on premium items, and do not go
+          below category_min. The goal is to win orders for the design, not to clear
+          stock: there may be none, so never mention limited stock or clearance.
+          installments means payment messaging (for example Tabby or Tamara) for
+          higher prices.
         - channels: up to 3 from the allowed list, each with one concrete execution
           idea for that channel (short video hook, carousel, WhatsApp broadcast to past
           buyers, store banner).

@@ -132,8 +132,7 @@ export const radar: typeof ar = {
         verbs: {
             add_now: 'Add now',
             price_fit: 'Offer it within your band',
-            test_small: 'Test a small run',
-            restock: 'Restock it',
+            test_small: 'Try one design',
             watch: 'Watch',
         },
         novelty: {

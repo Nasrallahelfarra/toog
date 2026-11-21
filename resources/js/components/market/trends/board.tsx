@@ -595,16 +595,11 @@ export function MoverRow({
                                     mine.products,
                                     b.count.products,
                                 ),
-                                inStock: number(mine.in_stock),
                             })}
                         </span>
                     </div>
                     {kind === 'cooling' ? (
                         <p className="text-[11px] text-muted-foreground">
-                            {tr(b.inStock, {
-                                units: count(mine.stock, b.count.units),
-                            })}
-                            {' · '}
                             {strong ? b.coolingMarket : b.coolingAlone}
                         </p>
                     ) : (

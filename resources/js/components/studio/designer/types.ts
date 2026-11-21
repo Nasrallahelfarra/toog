@@ -117,8 +117,6 @@ export type Insights = {
         orders: number;
         return_pct: number;
         growth_pct: number | null;
-        stock: number;
-        months_of_stock: number | null;
     })[];
     dna: {
         attribute: string;
@@ -133,13 +131,11 @@ export type Insights = {
         units: number;
         units_before: number;
         change_pct: number;
-        stock: number;
     })[];
     fading: (ProductCard & {
         units: number;
         units_before: number;
         change_pct: number;
-        stock: number;
     })[];
     competitor_hits: {
         id: number;

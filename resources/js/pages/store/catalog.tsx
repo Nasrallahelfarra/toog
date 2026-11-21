@@ -54,8 +54,7 @@ type Product = {
     /** Sales in the chosen month, when one is picked. */
     month_units: number | null;
     month_revenue: number | null;
-    stock: number;
-    turnover_days: number | null;
+    no_sales_days: number | null;
     return_rate: number;
     features: { colors?: string[]; pattern?: string; material?: string; style?: string };
     launched_at: string | null;
@@ -91,7 +90,7 @@ type Props = {
 const UNCATEGORIZED = '__none__';
 const ALL = '__all__';
 const CLASSES = ['winner', 'average', 'at_risk', 'stagnant', 'unclassified'] as const;
-const SORTS = ['revenue', 'units', 'newest', 'price_low', 'price_high', 'stock'] as const;
+const SORTS = ['revenue', 'units', 'newest', 'price_low', 'price_high'] as const;
 
 type Params = { months: Range; month?: string | null; category: string | null } & Filters;
 

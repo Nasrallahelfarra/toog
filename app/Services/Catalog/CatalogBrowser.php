@@ -207,7 +207,6 @@ class CatalogBrowser
                 'newest' => $q->orderByRaw('products.launched_at IS NULL')->orderByDesc('products.launched_at'),
                 'price_low' => $q->orderByRaw('products.price IS NULL')->orderBy('products.price'),
                 'price_high' => $q->orderByRaw('products.price IS NULL')->orderByDesc('products.price'),
-                'stock' => $q->orderByDesc('products.stock'),
                 default => $month ? $q->orderByRaw('COALESCE(month_sales.month_revenue, 0) DESC') : $q->orderByDesc('products.revenue'),
             })
             ->orderBy('products.id')
@@ -237,8 +236,7 @@ class CatalogBrowser
                 'revenue' => (float) $p->revenue,
                 'month_units' => $month ? (int) $p->getAttribute('month_units') : null,
                 'month_revenue' => $month ? round((float) $p->getAttribute('month_revenue'), 2) : null,
-                'stock' => $p->stock,
-                'turnover_days' => $p->turnover_days,
+                'no_sales_days' => $p->no_sales_days,
                 'return_rate' => (float) $p->return_rate,
                 'features' => $p->features ?? [],
                 'launched_at' => $p->launched_at?->toDateString(),
@@ -266,7 +264,7 @@ class CatalogBrowser
             ->groupBy(fn (ProductSale $s) => $this->month($s));
 
         $peers = $this->inCategory($store, $product->category ?? self::UNCATEGORIZED)
-            ->get(['id', 'name', 'image_url', 'price', 'performance', 'units_sold', 'revenue', 'return_rate', 'turnover_days']);
+            ->get(['id', 'name', 'image_url', 'price', 'performance', 'units_sold', 'revenue', 'return_rate']);
         $median = fn (string $field) => ($values = $peers->pluck($field)->filter(fn ($v) => $v !== null)->map(fn ($v) => (float) $v))->isEmpty()
             ? null : round((float) $values->median(), 2);
 
@@ -289,7 +287,6 @@ class CatalogBrowser
                     'units_sold' => $median('units_sold'),
                     'revenue' => $median('revenue'),
                     'return_rate' => $median('return_rate'),
-                    'turnover_days' => $median('turnover_days'),
                 ],
             ],
             'similar' => array_values($peers->where('id', '!=', $product->id)->sortByDesc('revenue')->take(4)

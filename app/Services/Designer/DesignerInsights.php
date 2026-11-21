@@ -171,7 +171,6 @@ class DesignerInsights
             ->take(8)
             ->map(function (array $row) {
                 [$p, $now, $before, $net, $returnPct] = $row;
-                $perMonth = $now['units'] / 3;
 
                 return [
                     ...$this->productCard($p),
@@ -179,8 +178,6 @@ class DesignerInsights
                     'orders' => $now['orders'],
                     'return_pct' => $returnPct,
                     'growth_pct' => $before['units'] > 0 ? (int) round(($now['units'] - $before['units']) / $before['units'] * 100) : null,
-                    'stock' => $p->stock,
-                    'months_of_stock' => $perMonth > 0 ? round($p->stock / $perMonth, 1) : null,
                     'spark' => $this->spark($p->id),
                     'prefill' => $this->prefillFromProduct($p, 'bestseller'),
                 ];
@@ -256,14 +253,13 @@ class DesignerInsights
             'units' => $r[1]['units'],
             'units_before' => $r[2]['units'],
             'change_pct' => (int) round($r[3]),
-            'stock' => $r[0]->stock,
             'spark' => $this->spark($r[0]->id),
             'prefill' => $this->prefillFromProduct($r[0], 'rising'),
         ];
 
         return [
             'rising' => $scored->filter(fn ($r) => $r[1]['units'] >= 6 && $r[3] >= 40)->sortByDesc(fn ($r) => $r[3])->take(5)->map($card)->values()->all(),
-            'fading' => $scored->filter(fn ($r) => $r[2]['units'] >= 6 && $r[3] <= -40 && $r[0]->stock > 0)->sortBy(fn ($r) => $r[3])->take(5)->map($card)->values()->all(),
+            'fading' => $scored->filter(fn ($r) => $r[2]['units'] >= 6 && $r[3] <= -40)->sortBy(fn ($r) => $r[3])->take(5)->map($card)->values()->all(),
         ];
     }
 
@@ -389,7 +385,9 @@ class DesignerInsights
             $market->push(['features' => ['colors' => $post['colors'], 'pattern' => $post['pattern']], 'competitor' => 'social:'.$post['competitor'], 'weight' => 1.5]);
         }
 
-        $live = $this->products->filter(fn (Product $p) => $p->stock > 0 || ($p->launched_at && $p->launched_at->gte(now()->subYear())));
+        // Whatever is in the catalog is on offer: pieces are made to order,
+        // so stock says nothing about what the store carries.
+        $live = $this->products;
         $rising = Trend::query()->where('store_id', $this->store->id)->where('status', 'rising')->get();
         $out = [];
 
@@ -468,7 +466,7 @@ class DesignerInsights
     private function saturation(): array
     {
         $out = [];
-        $live = $this->products->filter(fn (Product $p) => $p->stock > 0 && ! empty($p->features['colors']));
+        $live = $this->products->filter(fn (Product $p) => ! empty($p->features['colors']));
 
         foreach ($live->groupBy(fn (Product $p) => $p->category ?: '—') as $category => $items) {
             $signatures = $items->groupBy(fn (Product $p) => implode('|', [$p->features['colors'][0] ?? '', $p->features['pattern'] ?? '', $p->features['style'] ?? '']));
@@ -497,7 +495,7 @@ class DesignerInsights
 
     /**
      * M6 — seasons in the next 120 days, the prep window and whether the
-     * catalog is ready (three or more in-stock products for the season).
+     * catalog is ready (three or more products for the season).
      *
      * @return list<array<string, mixed>>
      */
@@ -510,7 +508,7 @@ class DesignerInsights
             ->where('starts_on', '<=', now()->addDays(120)->toDateString())
             ->orderBy('starts_on')->limit(3)->get()
             ->map(function (SeasonalEvent $e) {
-                $ready = $e->season_key ? $this->products->filter(fn (Product $p) => ($p->features['season'] ?? null) === $e->season_key && $p->stock > 0)->count() : 0;
+                $ready = $e->season_key ? $this->products->filter(fn (Product $p) => ($p->features['season'] ?? null) === $e->season_key)->count() : 0;
                 $prep = $e->starts_on->copy()->subWeeks($e->prep_weeks);
                 $status = match (true) {
                     $ready >= 3 => 'ready',
@@ -587,19 +585,9 @@ class DesignerInsights
 
         foreach ($movers['fading'] as $p) {
             $add('fading_product', 'warning',
-                "تراجعت مبيعات «{$p['name']}» بنسبة ".abs($p['change_pct'])."% خلال آخر 3 أشهر، والمخزون {$p['stock']} قطعة.",
-                "Sales of “{$p['name']}” fell ".abs($p['change_pct'])."% over the last 3 months; {$p['stock']} units in stock.",
+                "تراجعت مبيعات «{$p['name']}» بنسبة ".abs($p['change_pct']).'% خلال آخر 3 أشهر.',
+                "Sales of “{$p['name']}” fell ".abs($p['change_pct']).'% over the last 3 months.',
                 null, "/store/products/{$p['id']}", $p['image_url']);
-        }
-
-        foreach (collect(array_merge($bestsellers, $movers['rising']))->unique('id') as $p) {
-            $months = $p['months_of_stock'] ?? null;
-            if ($months !== null && $months < 1) {
-                $add('low_stock', $p['stock'] <= 0 ? 'danger' : 'warning',
-                    "«{$p['name']}» يبيع بقوة ({$p['units']} قطعة في 3 أشهر) والمخزون يكفي أقل من شهر.",
-                    "“{$p['name']}” sells strongly ({$p['units']} units in 3 months) and stock covers less than a month.",
-                    $p['prefill'], "/store/products/{$p['id']}", $p['image_url']);
-            }
         }
 
         foreach ($movers['rising'] as $p) {

@@ -127,8 +127,7 @@ export const radar = {
         verbs: {
             add_now: 'أضف الآن',
             price_fit: 'قدّمه ضمن نطاق سعرك',
-            test_small: 'جرّب كمية صغيرة',
-            restock: 'أعد توفيره',
+            test_small: 'جرّبه بتصميم واحد',
             watch: 'راقب',
         },
         novelty: {

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Analytics\PerformanceClassifier;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -28,8 +29,9 @@ use Illuminate\Support\Carbon;
  * @property int $views
  * @property string $add_to_cart_rate
  * @property string $return_rate
- * @property int|null $turnover_days
- * @property int $stock
+ * @property int|null $turnover_days Retired: was stock-based, now always null.
+ * @property int|null $no_sales_days Days without a sale, when the sales data can show it.
+ * @property int $stock Retired: no longer imported, read or shown. Pieces are made to order, so it was never real.
  * @property bool $is_novel
  * @property Carbon|null $launched_at
  * @property int|null $assigned_user_id
@@ -41,7 +43,7 @@ use Illuminate\Support\Carbon;
 #[Fillable([
     'store_id', 'external_id', 'sku', 'name', 'category', 'price', 'image_url', 'features',
     'performance', 'performance_score', 'units_sold', 'revenue', 'views', 'add_to_cart_rate',
-    'return_rate', 'turnover_days', 'stock', 'is_novel', 'launched_at',
+    'return_rate', 'turnover_days', 'no_sales_days', 'stock', 'is_novel', 'launched_at',
 ])]
 class Product extends Model
 {
@@ -53,6 +55,9 @@ class Product extends Model
 
     public const STAGNANT = 'stagnant';
 
+    /**
+     * Why the product is stagnant or at risk, in terms of its sales only.
+     */
     public function performanceReason(): ?string
     {
         if ($this->performance === self::STAGNANT) {
@@ -62,7 +67,11 @@ class Product extends Model
             return null;
         }
 
-        return $this->units_sold === 0 ? 'early_no_sales' : ($this->turnover_days >= 240 ? 'slow_turnover' : 'low_performance');
+        return match (true) {
+            $this->units_sold === 0 => 'early_no_sales',
+            (int) $this->no_sales_days >= PerformanceClassifier::QUIET_AFTER_DAYS => 'quiet_period',
+            default => 'low_performance',
+        };
     }
 
     protected function casts(): array

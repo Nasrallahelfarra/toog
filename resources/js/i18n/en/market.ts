@@ -143,7 +143,7 @@ export const market: typeof ar = {
         },
         focus: {
             title: 'Focus on: strong in the market and rising in your sales',
-            hint: 'Two signals agree: competitors push it and your sales of it are rising. Prioritise extensions and stock.',
+            hint: 'Two signals agree: competitors push it and your sales of it are rising. Prioritise extending it with new designs.',
             empty: 'Nothing is rising in both the market and your sales right now.',
         },
         rising: {
@@ -153,7 +153,7 @@ export const market: typeof ar = {
         },
         cooling: {
             title: 'Cooling in your sales',
-            hint: 'Its share of your sales fell and you still hold stock of it.',
+            hint: 'Its share of your sales fell against the period before.',
             empty: 'No notable decline in your sales.',
         },
         pulse: {
@@ -193,13 +193,12 @@ export const market: typeof ar = {
         lastMonths: 'Last 3 months',
         monthsBefore: 'The 3 before',
         ofSales: '{pct} of your sales',
-        catalogLine: '{products} in your catalog · {inStock} in stock',
-        inStock: '{units} in stock',
+        catalogLine: '{products} in your catalog',
         alsoMarket: 'Strong at competitors too',
         notMarket: 'Not prominent at competitors',
         coolingMarket:
             'Still present at competitors; review presentation and price before clearing.',
-        coolingAlone: 'Reorder less and sell through current stock.',
+        coolingAlone: 'Add fewer new designs of it and watch its sales.',
         purchases: '{n} purchases shown',
         bestSeller: 'Best seller',
         topSellers: 'Your best sellers',

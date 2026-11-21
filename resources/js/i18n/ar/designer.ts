@@ -177,7 +177,6 @@ export const designer = {
         units3m: '{n} قطعة خلال 3 أشهر',
         orders: '{n} طلب',
         growth: '{n}% عن الفترة السابقة',
-        stockMonths: 'المخزون يكفي {n} شهر',
         dna: 'بصمتك الرابحة',
         dnaHint: 'سمات تبيع أكثر من حصتها في كتالوجك',
         dnaIndex: 'مؤشر {n}',

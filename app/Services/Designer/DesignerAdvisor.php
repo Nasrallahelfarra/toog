@@ -29,11 +29,12 @@ class DesignerAdvisor
             operation: 'designer_advice',
             store: $store,
             system: 'You are the head designer and merchandiser advising a Saudi modest-fashion online store. '
-                .'Give at most five short, practical recommendations about what to design, extend, restock or avoid next, ranked by impact. '
+                .'Give at most five short, practical recommendations about what to design, extend or avoid next, ranked by impact. '
                 .'Base every item ONLY on the facts JSON: cite at least one id from it in refs, and use no number that is not in the facts. '
                 .'Never mention revenue, profit or money earned. A competitor best-seller label is the merchant\'s own claim; homepage placement is not ad spend; engagement is not sales. '
                 .'Phrase causes as hypotheses. title is at most 8 words; body at most 35 words. '
-                .'action is one of design, restock, redesign, watch. Arabic in Modern Standard, Saudi-friendly; English plain.',
+                .'The store makes pieces to order: there are no stock figures, so never advise restocking, clearing stock or scarcity. '
+                .'action is one of design, redesign, watch. Arabic in Modern Standard, Saudi-friendly; English plain.',
             prompt: json_encode($facts, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
             schema: ['type' => 'object', 'properties' => [
                 'items' => ['type' => 'array', 'maxItems' => 5, 'items' => ['type' => 'object', 'properties' => [
@@ -71,10 +72,10 @@ class DesignerAdvisor
             'window' => $i['window'],
             'coverage' => $i['coverage'],
             'my_bestsellers' => array_map(fn ($p) => ['id' => "P:{$p['id']}", 'name' => $p['name'], 'category' => $p['category'], 'units_3m' => $p['units'], 'orders_3m' => $p['orders'],
-                'return_pct' => $p['return_pct'], 'growth_pct' => $p['growth_pct'], 'stock' => $p['stock'], 'months_of_stock' => $p['months_of_stock'], 'colors' => $p['colors'], 'pattern' => $p['pattern']], $i['bestsellers']),
+                'return_pct' => $p['return_pct'], 'growth_pct' => $p['growth_pct'], 'colors' => $p['colors'], 'pattern' => $p['pattern']], $i['bestsellers']),
             'dna' => array_map(fn ($d) => ['id' => "D:{$d['attribute']}:{$d['value']}", 'attribute' => $d['attribute'], 'value' => $d['value'], 'sales_index' => $d['index'], 'products' => $d['products']], $i['dna']),
-            'rising' => array_map(fn ($p) => ['id' => "R:{$p['id']}", 'name' => $p['name'], 'units_3m' => $p['units'], 'share_change_pct' => $p['change_pct'], 'stock' => $p['stock']], $i['rising']),
-            'fading' => array_map(fn ($p) => ['id' => "F:{$p['id']}", 'name' => $p['name'], 'units_3m' => $p['units'], 'share_change_pct' => $p['change_pct'], 'stock' => $p['stock']], $i['fading']),
+            'rising' => array_map(fn ($p) => ['id' => "R:{$p['id']}", 'name' => $p['name'], 'units_3m' => $p['units'], 'share_change_pct' => $p['change_pct']], $i['rising']),
+            'fading' => array_map(fn ($p) => ['id' => "F:{$p['id']}", 'name' => $p['name'], 'units_3m' => $p['units'], 'share_change_pct' => $p['change_pct']], $i['fading']),
             'competitor_hits' => array_map(fn ($h) => ['id' => "C:{$h['id']}", 'competitor' => $h['competitor'], 'name' => $h['name'], 'signals' => $h['signals'],
                 'price_drop_pct' => $h['drop_pct'], 'colors' => $h['colors'], 'pattern' => $h['pattern'], 'similar_to' => $h['similar_to'] ? "P:{$h['similar_to']['id']}" : null], $i['competitor_hits']),
             'social' => array_map(fn ($s) => ['id' => "S:{$s['id']}", 'competitor' => $s['competitor'], 'times_usual_engagement' => $s['times_median'], 'colors' => $s['colors']], $i['social']),
@@ -119,7 +120,7 @@ class DesignerAdvisor
                 'title_ar' => trim($item['title_ar']), 'body_ar' => trim($item['body_ar']),
                 'title_en' => trim((string) ($item['title_en'] ?? '')), 'body_en' => trim((string) ($item['body_en'] ?? '')),
                 'refs' => $item['refs'],
-                'action' => in_array($item['action'] ?? null, ['design', 'restock', 'redesign', 'watch'], true) ? $item['action'] : 'watch',
+                'action' => in_array($item['action'] ?? null, ['design', 'redesign', 'watch'], true) ? $item['action'] : 'watch',
                 'prefill' => collect($item['refs'])->map(fn ($r) => $prefills[$r] ?? null)->filter()->first(),
                 'href' => $this->href($item['refs'][0]),
             ])
@@ -156,8 +157,8 @@ class DesignerAdvisor
                 'refs' => ["E:{$e['id']}"], 'action' => 'design', 'prefill' => $e['prefill'], 'href' => null];
         }
         if ($f = $i['fading'][0] ?? null) {
-            $out[] = ['title_ar' => "أعد التفكير في «{$f['name']}»", 'body_ar' => 'حصته من المبيعات تراجعت '.abs($f['change_pct'])."% والمخزون {$f['stock']} قطعة. افتح صفحة المنتج لاقتراح إعادة تصميم.",
-                'title_en' => "Rethink “{$f['name']}”", 'body_en' => 'Its share of sales fell '.abs($f['change_pct'])."% with {$f['stock']} units in stock. Open the product for a redesign.",
+            $out[] = ['title_ar' => "أعد التفكير في «{$f['name']}»", 'body_ar' => 'حصته من المبيعات تراجعت '.abs($f['change_pct']).'%. افتح صفحة المنتج لاقتراح إعادة تصميم.',
+                'title_en' => "Rethink “{$f['name']}”", 'body_en' => 'Its share of sales fell '.abs($f['change_pct']).'%. Open the product for a redesign.',
                 'refs' => ["F:{$f['id']}"], 'action' => 'redesign', 'prefill' => null, 'href' => "/store/products/{$f['id']}"];
         }
         if ($h = $i['competitor_hits'][0] ?? null) {

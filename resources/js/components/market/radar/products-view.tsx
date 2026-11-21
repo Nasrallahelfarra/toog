@@ -35,7 +35,6 @@ export function ProductsView({ radar }: { radar: RadarData }) {
             'add_now',
             'price_fit',
             'test_small',
-            'restock',
             'watch',
         ] as Verb[]
     ).filter(

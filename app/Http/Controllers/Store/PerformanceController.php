@@ -47,7 +47,8 @@ class PerformanceController extends Controller
                 fn (Builder $q, $sort) => match ($sort) {
                     'revenue' => $q->orderByDesc('revenue'),
                     'units' => $q->orderByDesc('units_sold'),
-                    'turnover' => $q->orderByDesc('turnover_days'),
+                    // The longest without a sale first.
+                    'quiet' => $q->orderByRaw('COALESCE(no_sales_days, 0) DESC'),
                     'returns' => $q->orderByDesc('return_rate'),
                     default => $q->orderByRaw('performance_score IS NULL')->orderByDesc('performance_score'),
                 },
@@ -73,8 +74,7 @@ class PerformanceController extends Controller
             'views' => $p->views,
             'add_to_cart_rate' => (float) $p->add_to_cart_rate,
             'return_rate' => (float) $p->return_rate,
-            'turnover_days' => $p->turnover_days,
-            'stock' => $p->stock,
+            'no_sales_days' => $p->no_sales_days,
             'is_novel' => $p->is_novel,
             'launched_at' => $p->launched_at?->toDateString(),
             'history' => $history[$p->id] ?? [],

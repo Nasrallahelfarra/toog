@@ -18,9 +18,12 @@ class StagnantProducts
     /** @return array<string, mixed> */
     public function summary(Store $store): array
     {
-        $totals = $this->query($store)->selectRaw('COUNT(*) as total, SUM(CASE WHEN performance = ? THEN 1 ELSE 0 END) AS stagnant, SUM(CASE WHEN performance = ? THEN 1 ELSE 0 END) AS at_risk, COALESCE(SUM(stock), 0) as stock, COALESCE(SUM(stock * price), 0) as stock_value', [Product::STAGNANT, Product::AT_RISK])->firstOrFail();
+        // Counted by sales alone: how many never sold in the year measured,
+        // and the longest any of them has gone without a sale.
+        $totals = $this->query($store)->selectRaw('COUNT(*) as total, SUM(CASE WHEN performance = ? THEN 1 ELSE 0 END) AS stagnant, SUM(CASE WHEN performance = ? THEN 1 ELSE 0 END) AS at_risk, SUM(CASE WHEN units_sold = 0 THEN 1 ELSE 0 END) AS never_sold, MAX(no_sales_days) AS longest_quiet', [Product::STAGNANT, Product::AT_RISK])->firstOrFail();
 
-        return ['total' => (int) $totals->getAttribute('total'), 'stock' => (int) $totals->stock, 'stock_value' => (float) $totals->getAttribute('stock_value'),
+        return ['total' => (int) $totals->getAttribute('total'), 'never_sold' => (int) $totals->getAttribute('never_sold'),
+            'longest_quiet' => $totals->getAttribute('longest_quiet') !== null ? (int) $totals->getAttribute('longest_quiet') : null,
             'stagnant' => (int) $totals->getAttribute('stagnant'), 'at_risk' => (int) $totals->getAttribute('at_risk'),
             'needs_reclassification' => ($store->settings['performance_classification_version'] ?? 0) < PerformanceClassifier::VERSION && $store->products()->whereNotNull('performance')->exists(),
             'unclassified' => $store->products()->whereNull('performance')->count()];
@@ -29,7 +32,7 @@ class StagnantProducts
     /** @return array<string, mixed> */
     public function product(Product $product): array
     {
-        return [...$product->only(['id', 'name', 'sku', 'category', 'image_url', 'price', 'stock', 'units_sold', 'turnover_days', 'performance_score', 'performance']),
+        return [...$product->only(['id', 'name', 'sku', 'category', 'image_url', 'price', 'units_sold', 'no_sales_days', 'performance_score', 'performance']),
             'classification_reason' => $product->performanceReason(),
             'recovery' => $product->recovery?->presentation()];
     }
@@ -38,6 +41,6 @@ class StagnantProducts
     public function dashboard(Store $store): array
     {
         return [...$this->summary($store), 'products' => $this->query($store)->with('recovery')
-            ->orderByDesc('stock')->orderBy('performance_score')->orderBy('id')->limit(4)->get()->map(fn (Product $p) => $this->product($p))];
+            ->orderByRaw('COALESCE(no_sales_days, 0) DESC')->orderBy('performance_score')->orderBy('id')->limit(4)->get()->map(fn (Product $p) => $this->product($p))];
     }
 }

@@ -99,7 +99,6 @@ class ZidMapper
             'name' => mb_substr($name, 0, 255),
             'category' => $category === null ? null : mb_substr($category, 0, 255),
             'price' => $this->number($p['sale_price'] ?? null) ?: $this->number($p['price'] ?? null),
-            'stock' => (int) ($p['quantity'] ?? $p['stock'] ?? 0),
             'image_url' => $image !== null && strlen($image) <= 255 ? $image : null,
             'launched_at' => $this->date($p['created_at'] ?? null),
         ];

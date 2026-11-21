@@ -74,12 +74,13 @@ type SeasonEvent = {
 
 type AtRisk = {
     id: number;
-    reason: 'slow_turnover' | 'low_performance' | 'early_no_sales';
+    reason: 'quiet_period' | 'low_performance' | 'early_no_sales';
     name: string;
     category: string | null;
     performance: string;
-    stock: number;
-    months_of_stock: number | null;
+    units_sold: number;
+    /** Days without a sale; null when the sales data cannot show it. */
+    no_sales_days: number | null;
     colors: string[];
 };
 
@@ -636,12 +637,12 @@ function AtRiskCard({ items }: { items: AtRisk[] }) {
                                     <p className="mt-1 text-xs leading-6 text-muted-foreground">{t.stagnant.reasons[item.reason]}</p>
                                 </div>
                                 <div className="shrink-0 space-y-1 text-end">
-                                    {item.reason === 'slow_turnover' && (
-                                        <span className="bg-warning-soft text-warning inline-block rounded-full px-2 py-0.5 text-[11px] font-medium">
-                                            {d.overstock}
+                                    {item.no_sales_days !== null && item.no_sales_days > 0 && (
+                                        <span className="bg-warning-soft text-warning inline-block rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap">
+                                            {tr(d.quietFor, { days: number(item.no_sales_days) })}
                                         </span>
                                     )}
-                                    {item.months_of_stock !== null && <div className="text-muted-foreground text-[11px]">{tr(d.monthsOfStock, { value: number(item.months_of_stock, 1) })}</div>}
+                                    <div className="text-muted-foreground text-[11px]">{tr(d.unitsInYear, { units: number(item.units_sold) })}</div>
                                 </div>
                             </div>
                         </StaggerItem>

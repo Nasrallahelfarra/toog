@@ -119,7 +119,7 @@ export type Recommendation = {
         status: 'within' | 'above' | 'below' | null;
         pct: number | null;
     };
-    verb: 'add_now' | 'price_fit' | 'test_small' | 'restock' | 'watch';
+    verb: 'add_now' | 'price_fit' | 'test_small' | 'watch';
     text: string;
     prefill: Prefill;
 };

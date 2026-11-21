@@ -55,9 +55,10 @@ class StorePerformance
      */
     public function signals(Store $store): array
     {
-        $products = Product::query()->where('store_id', $store->id)->get(['id', 'name', 'stock', 'external_id', 'launched_at', 'created_at']);
+        $products = Product::query()->where('store_id', $store->id)->get(['id', 'name', 'external_id', 'launched_at', 'created_at']);
         $names = $products->pluck('name', 'id');
-        $metrics = $this->classifier->metrics($store, $products)->filter(fn (array $m) => $m['has_data']);
+        // The same pool the classifier ranks: products with sales rows.
+        $metrics = $this->classifier->metrics($store, $products)->filter(fn (array $m) => $m['ranked']);
 
         return collect(PerformanceClassifier::WEIGHTS)->map(function (int $weight, string $signal) use ($metrics, $names, $products) {
             $measured = $signal === 'add_to_cart' ? $metrics->filter(fn (array $m) => $m['views'] > 0) : $metrics;
@@ -200,7 +201,6 @@ class StorePerformance
             $issue('duplicate_names', 'warning', $dupNames),
             $issue('duplicate_ids', 'danger', $dupIds),
             $issue('returns_exceed_units', 'danger', $products->filter(fn (Product $p) => $badReturns->has($p->id))),
-            $issue('negative_stock', 'warning', $products->filter(fn (Product $p) => $p->stock < 0)),
             $issue('no_sales_history', 'info', $products->filter(fn (Product $p) => ! $withSales->has($p->id))),
         ])->filter(fn ($i) => $i['count'] > 0)->values()->all();
     }
@@ -216,15 +216,16 @@ class StorePerformance
         return Product::query()
             ->where('store_id', $store->id)
             ->where('performance', Product::AT_RISK)
-            ->orderByDesc('stock')->orderBy('performance_score')->orderBy('id')->limit($limit)->get()
+            // Closest to stagnant first: the longest without a sale.
+            ->orderByRaw('COALESCE(no_sales_days, 0) DESC')->orderBy('performance_score')->orderBy('id')->limit($limit)->get()
             ->map(fn (Product $p) => [
                 'reason' => $p->performanceReason(),
                 'id' => $p->id,
                 'name' => $p->name,
                 'category' => $p->category,
                 'performance' => $p->performance,
-                'stock' => $p->stock,
-                'months_of_stock' => $p->units_sold > 0 && $p->turnover_days !== null ? round($p->turnover_days / 30, 1) : null,
+                'units_sold' => $p->units_sold,
+                'no_sales_days' => $p->no_sales_days,
                 'colors' => $p->features['colors'] ?? [],
             ])
             ->all();

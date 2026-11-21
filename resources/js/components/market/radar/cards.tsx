@@ -306,7 +306,6 @@ export function RecommendCard({
         add_now: 'bg-gold text-gold-foreground',
         price_fit: 'bg-navy text-white dark:text-background',
         test_small: 'bg-info-soft text-info',
-        restock: 'bg-success-soft text-success',
         watch: 'bg-muted text-muted-foreground',
     }[rec.verb];
     const sar =

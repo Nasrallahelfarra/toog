@@ -15,8 +15,7 @@ export type SignalKey =
     | 'velocity'
     | 'revenue'
     | 'add_to_cart'
-    | 'returns'
-    | 'turnover';
+    | 'returns';
 
 export type SignalStats = {
     weight: number;
@@ -43,7 +42,7 @@ export function SignalDetails({
 }) {
     const { t, tr, number, money, percent, isRtl } = useI18n();
     const p = t.performance;
-    // Every signal has the same four texts; returns and turnover add a rule, add-to-cart a no-data note.
+    // Every signal has the same four texts; returns adds a rule, add-to-cart a no-data note.
     const d: {
         what: string;
         how: string;
@@ -58,7 +57,6 @@ export function SignalDetails({
         if (signal === 'velocity')
             return tr(p.signalPerMonth, { n: number(value, 1) });
         if (signal === 'revenue') return money(value);
-        if (signal === 'turnover') return tr(p.days, { n: number(value) });
         return percent(value, 1);
     };
 
@@ -117,8 +115,7 @@ export function SignalDetails({
                                 />
                                 <p className="text-sm leading-relaxed text-muted-foreground">
                                     {tr(
-                                        signal === 'returns' ||
-                                            signal === 'turnover'
+                                        signal === 'returns'
                                             ? p.signalWeightLower
                                             : p.signalWeightHigher,
                                         { weight },

@@ -32,7 +32,7 @@ export const dashboard = {
     kpiDiversity: 'مؤشر تنوع الكتالوج',
     kpiDiversityHint: 'المبتكر {novel}% من {target}% مستهدف',
     kpiAtRisk: 'منتجات معرّضة للركود',
-    kpiAtRiskHint: 'مبيعات متراجعة ومخزون مرتفع',
+    kpiAtRiskHint: 'مبيعات ضعيفة أو متوقفة',
     kpiRevenue: 'إيرادات هذا الشهر',
 
     evaluationsByMonth: 'التقييمات شهريًا',
@@ -58,11 +58,11 @@ export const dashboard = {
     launchOverdue: 'بدأت فترة التجهيز — اطرح الآن',
     noEvents: 'لا توجد مواسم قادمة',
 
-    atRiskTitle: 'منتجات معرّضة للتحول إلى مخزون راكد',
+    atRiskTitle: 'منتجات معرّضة للركود',
     atRiskHint: 'إنذار مبكر من آخر تصنيف، منفصل عن المنتجات الراكدة فعلًا',
-    overstock: 'مخزون زائد',
+    quietFor: 'بلا بيع منذ {days} يومًا',
     decline: 'تراجع {value}%',
-    monthsOfStock: 'مخزون {value} شهر',
+    unitsInYear: '{units} قطعة في 12 شهرًا',
     noAtRisk: 'لا توجد منتجات معرّضة للركود حاليًا',
 
     recentEvaluations: 'أحدث التقييمات',
