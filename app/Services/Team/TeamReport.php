@@ -165,12 +165,19 @@ class TeamReport
      * shows the ones other members hold, so it is clear why they are not
      * on offer.
      *
+     * With $withSales off (a staff member's own view) the rows carry no
+     * sales, performance class or history. $sort is "newest" or, with
+     * sales, "units".
+     *
      * @param  array{search?: string|null, category?: string|null}  $filters
      * @return array<string, mixed> the paginator as sent to the page
      */
-    public function products(Store $store, User $member, string $tab, array $filters, int $months, ?string $month = null, bool $withTaken = false): array
+    public function products(Store $store, User $member, string $tab, array $filters, int $months, ?string $month = null, bool $withTaken = false, bool $withSales = true, string $sort = 'newest'): array
     {
-        $period = $this->catalog->period($store, $months, $month);
+        // Sales and performance are the store manager's to see. For a staff
+        // member they are not read at all, so they cannot reach the page.
+        $period = $withSales ? $this->catalog->period($store, $months, $month) : null;
+        $bySales = $withSales && $sort === 'units';
 
         $page = Product::query()
             ->where('products.store_id', $store->id)
@@ -181,50 +188,66 @@ class TeamReport
                 fn (Builder $q) => $q->where(fn (Builder $w) => $w
                     ->whereNull('products.assigned_user_id')
                     ->when($withTaken, fn (Builder $w) => $w->orWhere('products.assigned_user_id', '!=', $member->id))))
-            ->leftJoinSub(ProductSale::query()
-                ->selectRaw('product_id, SUM(units) AS period_units, SUM(orders) AS period_orders, SUM(revenue) AS period_revenue')
-                ->where('store_id', $store->id)
-                ->where('period', '>=', $period['from'])
-                ->where('period', '<', $period['to'])
-                ->groupBy('product_id'), 'period_sales', 'period_sales.product_id', '=', 'products.id')
-            ->addSelect('period_sales.period_units', 'period_sales.period_orders', 'period_sales.period_revenue')
+            ->when($period, fn (Builder $q) => $q
+                ->leftJoinSub(ProductSale::query()
+                    ->selectRaw('product_id, SUM(units) AS period_units, SUM(orders) AS period_orders, SUM(revenue) AS period_revenue')
+                    ->where('store_id', $store->id)
+                    ->where('period', '>=', $period['from'])
+                    ->where('period', '<', $period['to'])
+                    ->groupBy('product_id'), 'period_sales', 'period_sales.product_id', '=', 'products.id')
+                ->addSelect('period_sales.period_units', 'period_sales.period_orders', 'period_sales.period_revenue'))
             ->when($filters['search'] ?? null, fn (Builder $q, string $search) => $q->where(fn (Builder $w) => $w
                 ->where('products.name', 'like', "%{$search}%")
                 ->orWhere('products.sku', 'like', "%{$search}%")))
             ->when($filters['category'] ?? null, fn (Builder $q, string $category) => $category === CatalogBrowser::UNCATEGORIZED
                 ? $q->whereNull('products.category')
                 : $q->where('products.category', $category))
-            // Free products first, then the best sellers of the period.
+            // Products another member holds go last.
             ->orderByRaw('CASE WHEN products.assigned_user_id IS NOT NULL AND products.assigned_user_id != ? THEN 1 ELSE 0 END', [$member->id])
-            ->orderByRaw('COALESCE(period_sales.period_units, 0) DESC')
-            ->orderBy('products.name')
-            ->orderBy('products.id')
+            ->when($bySales,
+                fn (Builder $q) => $q->orderByRaw('COALESCE(period_sales.period_units, 0) DESC')->orderBy('products.name'),
+                // Newest first, so a product just added leads its list: the
+                // one taken last among the member's own, the one launched
+                // last among those on offer.
+                fn (Builder $q) => $tab === 'mine'
+                    ? $q->orderByDesc('products.assigned_at')
+                    : $q->orderByRaw('COALESCE(products.launched_at, products.created_at) DESC'))
+            ->orderByDesc('products.id')
             ->paginate(20)
             ->withQueryString();
 
-        $history = ProductSale::query()
+        $history = $period ? ProductSale::query()
             ->whereIn('product_id', $page->getCollection()->modelKeys())
             ->where('period', '>=', $period['months'][0].'-01')
             ->where('period', '<', $period['to'])
             ->get(['product_id', 'period', 'units', 'revenue'])
-            ->groupBy('product_id');
+            ->groupBy('product_id') : collect();
 
         return $page->through(function (Product $p) use ($history, $period) {
-            $rows = $history->get($p->id, collect())->groupBy(fn (ProductSale $s) => substr((string) $s->getRawOriginal('period'), 0, 7));
-
-            return [
+            $row = [
                 'id' => $p->id,
                 'name' => $p->name,
                 'sku' => $p->sku,
                 'category' => $p->category,
                 'price' => $p->price !== null ? (float) $p->price : null,
                 'image_url' => $p->image_url,
+                'assignee' => $p->assignee ? ['id' => $p->assignee->id, 'name' => $p->assignee->name] : null,
+                'assigned_at' => $p->assigned_at?->toIso8601String(),
+                'launched_at' => $p->launched_at?->toDateString(),
+            ];
+
+            if (! $period) {
+                return $row;
+            }
+
+            $rows = $history->get($p->id, collect())->groupBy(fn (ProductSale $s) => substr((string) $s->getRawOriginal('period'), 0, 7));
+
+            return [
+                ...$row,
                 'performance' => $p->performance,
                 'units' => (int) $p->getAttribute('period_units'),
                 'orders' => (int) $p->getAttribute('period_orders'),
                 'revenue' => round((float) $p->getAttribute('period_revenue'), 2),
-                'assignee' => $p->assignee ? ['id' => $p->assignee->id, 'name' => $p->assignee->name] : null,
-                'assigned_at' => $p->assigned_at?->toIso8601String(),
                 'history' => array_map(fn (string $m) => [
                     'period' => $m.'-01',
                     'units' => (int) $rows->get($m, collect())->sum('units'),
