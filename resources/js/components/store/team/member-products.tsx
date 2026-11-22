@@ -32,14 +32,19 @@ type ProductRow = {
     category: string | null;
     price: number | null;
     image_url: string | null;
-    performance: string | null;
-    units: number;
-    orders: number;
-    revenue: number | null;
     assignee: { id: number; name: string } | null;
     assigned_at: string | null;
-    history: MonthPoint[];
+    launched_at: string | null;
+    // How the product sells: sent to the store manager only, never to the
+    // staff member who holds it.
+    performance?: string | null;
+    units?: number;
+    orders?: number;
+    revenue?: number | null;
+    history?: MonthPoint[];
 };
+
+type Sort = 'newest' | 'units';
 
 type Tab = 'mine' | 'add';
 
@@ -52,6 +57,9 @@ export type MemberProductsProps = {
     availableMonths: string[];
     tab: Tab;
     filters: { search?: string; category?: string };
+    /** Newest first by default; the manager can rank by units sold. */
+    sort: Sort;
+    /** Null for the staff member: their sales are the manager's to see. */
     stats: MemberFigures | null;
     counts: { mine: number; free: number; categories: string[] };
     products: Paginated<ProductRow>;
@@ -61,13 +69,14 @@ const ALL = '__all__';
 const UNCATEGORIZED = '__none__';
 
 /**
- * One member's products and how each sells month by month: the member's
- * own "my products" page, and the owner's view of that member. A product
- * another member holds is shown as taken and cannot be added; the owner
- * alone can move it.
+ * One member's products: the member's own "my products" page, and the
+ * store manager's view of that member. Sales and performance (figures,
+ * class, month by month) show for the manager only; the member sees the
+ * list itself, newest first. A product another member holds is shown as
+ * taken and cannot be added; the manager alone can move it.
  */
 export function MemberProducts(props: MemberProductsProps) {
-    const { t, tr, number, money, percent } = useI18n();
+    const { t, tr, number, money, percent, date } = useI18n();
     const p = t.team.products;
     const showRevenue = useRevenueVisible();
     const { can } = useStoreAccess();
@@ -81,20 +90,23 @@ export function MemberProducts(props: MemberProductsProps) {
     const [busy, setBusy] = useState<Set<number>>(new Set());
     const [confirmRelease, setConfirmRelease] = useState(false);
 
-    const visit = (next: { tab?: Tab; search?: string; category?: string; months?: Range; month?: string | null }, only?: string[]) => {
+    const visit = (next: { tab?: Tab; search?: string; category?: string; months?: Range; month?: string | null; sort?: Sort }, only?: string[]) => {
         const query = {
             tab: next.tab ?? tab,
-            months: next.months ?? props.months,
-            month: next.month === undefined ? props.month : next.month,
+            // The period and the ranking by sales belong to the manager's view.
+            months: asOwner ? (next.months ?? props.months) : null,
+            month: asOwner ? (next.month === undefined ? props.month : next.month) : null,
+            sort: next.sort ?? props.sort,
             search: next.search === undefined ? props.filters.search : next.search,
             category: next.category === undefined ? props.filters.category : next.category,
         };
+        const isDefault = (key: string, v: unknown) => (key === 'tab' && v === 'mine') || (key === 'sort' && v === 'newest');
 
         setSelected(new Set());
         router.get(
             base,
-            Object.fromEntries(Object.entries(query).filter(([key, v]) => v !== null && v !== undefined && v !== '' && !(key === 'tab' && v === 'mine'))),
-            { preserveState: true, preserveScroll: true, replace: true, ...(only ? { only: [...only, 'tab', 'filters', 'months', 'month'] } : {}) },
+            Object.fromEntries(Object.entries(query).filter(([key, v]) => v !== null && v !== undefined && v !== '' && !isDefault(key, v))),
+            { preserveState: true, preserveScroll: true, replace: true, ...(only ? { only: [...only, 'tab', 'filters', 'months', 'month', 'sort'] } : {}) },
         );
     };
 
@@ -165,11 +177,13 @@ export function MemberProducts(props: MemberProductsProps) {
                     ) : undefined
                 }
                 actions={
-                    <PeriodPicker
-                        period={{ months: props.months, month: props.month }}
-                        available={props.availableMonths}
-                        onChange={(next: Period) => visit({ months: next.months, month: next.month }, ['stats', 'products'])}
-                    />
+                    asOwner ? (
+                        <PeriodPicker
+                            period={{ months: props.months, month: props.month }}
+                            available={props.availableMonths}
+                            onChange={(next: Period) => visit({ months: next.months, month: next.month }, ['stats', 'products'])}
+                        />
+                    ) : undefined
                 }
             />
 
@@ -281,6 +295,17 @@ export function MemberProducts(props: MemberProductsProps) {
                                 </SelectContent>
                             </Select>
                         )}
+                        {asOwner && (
+                            <Select value={props.sort} onValueChange={(v) => visit({ sort: v as Sort }, ['products'])}>
+                                <SelectTrigger className="w-40" aria-label={p.sortBy}>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="newest">{p.sort.newest}</SelectItem>
+                                    <SelectItem value="units">{p.sort.units}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        )}
                     </div>
                 </div>
 
@@ -319,11 +344,17 @@ export function MemberProducts(props: MemberProductsProps) {
                                             />
                                         </TableHead>
                                         <TableHead>{p.columns.product}</TableHead>
-                                        <TableHead>{p.columns.class}</TableHead>
-                                        <TableHead className="text-end">{p.columns.units}</TableHead>
-                                        <TableHead className="text-end">{p.columns.orders}</TableHead>
-                                        {showRevenue && <TableHead className="text-end">{p.columns.revenue}</TableHead>}
-                                        <TableHead>{p.columns.trend}</TableHead>
+                                        {asOwner ? (
+                                            <>
+                                                <TableHead>{p.columns.class}</TableHead>
+                                                <TableHead className="text-end">{p.columns.units}</TableHead>
+                                                <TableHead className="text-end">{p.columns.orders}</TableHead>
+                                                {showRevenue && <TableHead className="text-end">{p.columns.revenue}</TableHead>}
+                                                <TableHead>{p.columns.trend}</TableHead>
+                                            </>
+                                        ) : (
+                                            <TableHead>{tab === 'mine' ? p.columns.addedAt : p.columns.launchedAt}</TableHead>
+                                        )}
                                         <TableHead className="w-44" />
                                     </TableRow>
                                 </TableHeader>
@@ -332,8 +363,8 @@ export function MemberProducts(props: MemberProductsProps) {
                                         const taken = product.assignee !== null && product.assignee.id !== member.id;
                                         const working = busy.has(product.id);
                                         const expanded = open.has(product.id);
-                                        // A member without the catalog pages opens only the products they hold.
-                                        const linked = asOwner || tab === 'mine' || can('catalog', 'performance', 'stagnant');
+                                        // The product page is its sales: it opens for those who may see them.
+                                        const linked = asOwner || can('catalog', 'performance', 'stagnant');
 
                                         return (
                                             <Fragment key={product.id}>
@@ -364,25 +395,33 @@ export function MemberProducts(props: MemberProductsProps) {
                                                             </div>
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell>
-                                                        <PerformanceBadge value={product.performance} />
-                                                    </TableCell>
-                                                    <TableCell className="num text-end font-semibold">{number(product.units)}</TableCell>
-                                                    <TableCell className="num text-end">{number(product.orders)}</TableCell>
-                                                    {showRevenue && <TableCell className="num text-end">{money(product.revenue)}</TableCell>}
-                                                    <TableCell>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => toggleOpen(product.id)}
-                                                            aria-expanded={expanded}
-                                                            aria-label={expanded ? p.hideMonths : p.showMonths}
-                                                            title={expanded ? p.hideMonths : p.showMonths}
-                                                            className="hover:bg-muted flex cursor-pointer items-center gap-1.5 rounded-lg px-1.5 py-1"
-                                                        >
-                                                            <Sparkline data={product.history.map((point) => point.units)} width={84} height={26} />
-                                                            <ChevronDown className={cn('text-muted-foreground size-4 transition-transform', expanded && 'rotate-180')} />
-                                                        </button>
-                                                    </TableCell>
+                                                    {asOwner ? (
+                                                        <>
+                                                            <TableCell>
+                                                                <PerformanceBadge value={product.performance} />
+                                                            </TableCell>
+                                                            <TableCell className="num text-end font-semibold">{number(product.units)}</TableCell>
+                                                            <TableCell className="num text-end">{number(product.orders)}</TableCell>
+                                                            {showRevenue && <TableCell className="num text-end">{money(product.revenue)}</TableCell>}
+                                                            <TableCell>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => toggleOpen(product.id)}
+                                                                    aria-expanded={expanded}
+                                                                    aria-label={expanded ? p.hideMonths : p.showMonths}
+                                                                    title={expanded ? p.hideMonths : p.showMonths}
+                                                                    className="hover:bg-muted flex cursor-pointer items-center gap-1.5 rounded-lg px-1.5 py-1"
+                                                                >
+                                                                    <Sparkline data={(product.history ?? []).map((point) => point.units)} width={84} height={26} />
+                                                                    <ChevronDown className={cn('text-muted-foreground size-4 transition-transform', expanded && 'rotate-180')} />
+                                                                </button>
+                                                            </TableCell>
+                                                        </>
+                                                    ) : (
+                                                        <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                                                            {date(tab === 'mine' ? product.assigned_at : product.launched_at)}
+                                                        </TableCell>
+                                                    )}
                                                     <TableCell className="text-end">
                                                         {tab === 'mine' ? (
                                                             <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-danger h-8" disabled={working} onClick={() => release([product.id])}>
@@ -405,7 +444,7 @@ export function MemberProducts(props: MemberProductsProps) {
                                                 {expanded && (
                                                     <TableRow className="hover:bg-transparent">
                                                         <TableCell colSpan={columns} className="bg-muted/30 pt-0 pb-4">
-                                                            <MonthCells history={product.history} />
+                                                            <MonthCells history={product.history ?? []} />
                                                         </TableCell>
                                                     </TableRow>
                                                 )}

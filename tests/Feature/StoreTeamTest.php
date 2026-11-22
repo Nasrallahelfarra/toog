@@ -377,7 +377,7 @@ class StoreTeamTest extends TestCase
         $this->assertSame($member->id, $dress->fresh()->assigned_user_id);
     }
 
-    public function test_staff_open_a_product_page_only_for_products_they_can_reach(): void
+    public function test_holding_a_product_does_not_open_its_sales_page(): void
     {
         $limited = $this->staff([], name: 'Limited');
         $browser = $this->staff(['catalog'], name: 'Browser');
@@ -385,11 +385,89 @@ class StoreTeamTest extends TestCase
         $other = $this->product('Other');
         $this->claim($limited, [$mine->id]);
 
-        $this->actingAs($limited)->get("/store/products/{$mine->id}")
-            ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->where('assignee.name', 'Limited')->where('similar', [])->where('recovery', null));
+        // The product page is its sales and performance: the manager's to
+        // see, and a staff member's only through a page the manager gave.
+        $this->actingAs($limited)->get("/store/products/{$mine->id}")->assertForbidden();
         $this->actingAs($limited)->get("/store/products/{$other->id}")->assertForbidden();
         $this->actingAs($browser)->get("/store/products/{$other->id}")->assertOk();
+        $this->actingAs($this->owner)->get("/store/products/{$mine->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('assignee.name', 'Limited'));
+    }
+
+    public function test_a_staff_member_sees_their_products_without_sales_or_performance(): void
+    {
+        $sara = $this->staff([], name: 'Sara');
+        $dress = $this->product('Dress', ['performance' => Product::WINNER, 'performance_score' => 90]);
+        $free = $this->product('Free abaya', ['performance' => Product::STAGNANT]);
+        $this->sale($dress, 0, 10, price: 300);
+        $this->sale($free, 0, 4);
+        $this->claim($sara, [$dress->id]);
+        $this->store->update(['settings' => ['show_revenue' => true]]);
+
+        $noSales = fn (Assert $page) => $page
+            ->where('asOwner', false)
+            ->where('stats', null)
+            ->where('availableMonths', [])
+            ->has('products.data', 1)
+            ->missing('products.data.0.units')
+            ->missing('products.data.0.orders')
+            ->missing('products.data.0.revenue')
+            ->missing('products.data.0.history')
+            ->missing('products.data.0.performance');
+
+        // Her own products: the list, and nothing about how it sells.
+        $this->actingAs($sara)->get('/store/my-products')
+            ->assertInertia(fn (Assert $page) => $noSales($page)->where('products.data.0.name', 'Dress')->where('counts.mine', 1));
+        // The products on offer: the same. Asking to rank by sales is ignored.
+        $this->get('/store/my-products?tab=add&sort=units')
+            ->assertInertia(fn (Assert $page) => $noSales($page)->where('products.data.0.name', 'Free abaya')->where('sort', 'newest'));
+
+        // The manager sees it all for that member.
+        $this->actingAs($this->owner)->get("/store/team/{$sara->id}?sort=units")
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('asOwner', true)
+                ->where('sort', 'units')
+                ->where('stats.units', 10)
+                ->where('products.data.0.units', 10)
+                ->where('products.data.0.revenue', 3000)
+                ->where('products.data.0.performance', Product::WINNER)
+                ->has('products.data.0.history', 12));
+    }
+
+    public function test_a_newly_added_product_comes_first(): void
+    {
+        $sara = $this->staff([], name: 'Sara');
+        $old = $this->product('Old dress', ['launched_at' => now()->subMonths(8)]);
+        $best = $this->product('Best seller', ['launched_at' => now()->subMonths(5)]);
+        $new = $this->product('New arrival', ['launched_at' => now()->subDay()]);
+        $this->sale($best, 0, 50);
+
+        // On offer: the product launched last leads, whatever sells most.
+        $this->actingAs($sara)->get('/store/my-products?tab=add')
+            ->assertInertia(fn (Assert $page) => $page->where('sort', 'newest')
+                ->where('products.data.0.id', $new->id)
+                ->where('products.data.1.id', $best->id)
+                ->where('products.data.2.id', $old->id));
+
+        // Her own: the one she added last leads, even though it is the oldest product.
+        $this->claim($sara, [$new->id]);
+        $this->travel(5)->minutes();
+        $this->claim($sara, [$best->id]);
+        $this->travel(5)->minutes();
+        $this->claim($sara, [$old->id]);
+
+        $this->actingAs($sara)->get('/store/my-products')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('products.data.0.id', $old->id)
+                ->where('products.data.1.id', $best->id)
+                ->where('products.data.2.id', $new->id));
+
+        // The manager gets the same order, and can rank by units instead.
+        $this->actingAs($this->owner)->get("/store/team/{$sara->id}")
+            ->assertInertia(fn (Assert $page) => $page->where('sort', 'newest')->where('products.data.0.id', $old->id));
+        $this->get("/store/team/{$sara->id}?sort=units")
+            ->assertInertia(fn (Assert $page) => $page->where('products.data.0.id', $best->id));
     }
 
     // ---- The owner's comparison -----------------------------------------

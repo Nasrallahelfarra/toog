@@ -22,7 +22,10 @@ trait ShowsMemberProducts
     protected function memberProductsProps(Request $request, Store $store, User $member, bool $asOwner): array
     {
         $report = app(TeamReport::class);
-        [$months, $month, $available] = TeamController::period($request, $store, app(CatalogBrowser::class));
+        // How the products sell is the store manager's to see. A staff
+        // member gets their list of products and nothing about its sales.
+        [$months, $month, $available] = $asOwner ? TeamController::period($request, $store, app(CatalogBrowser::class)) : [12, null, []];
+        $sort = $asOwner && $request->input('sort') === 'units' ? 'units' : 'newest';
         $tab = $request->input('tab') === 'add' ? 'add' : 'mine';
         $filters = $request->only(['search', 'category']);
         // The owner can move a product from another member, so they always
@@ -38,9 +41,10 @@ trait ShowsMemberProducts
             'availableMonths' => $available,
             'tab' => $tab,
             'filters' => $filters,
-            'stats' => fn () => RevenueVisibility::apply($store, $report->member($store, $member, $months, $month)),
+            'sort' => $sort,
+            'stats' => fn () => $asOwner ? RevenueVisibility::apply($store, $report->member($store, $member, $months, $month)) : null,
             'counts' => fn () => $report->counts($store, $member),
-            'products' => fn () => RevenueVisibility::apply($store, $report->products($store, $member, $tab, $filters, $months, $month, $withTaken)),
+            'products' => fn () => RevenueVisibility::apply($store, $report->products($store, $member, $tab, $filters, $months, $month, $withTaken, withSales: $asOwner, sort: $sort)),
         ];
     }
 
