@@ -50,6 +50,16 @@ class StoreTeamTest extends TestCase
         return $member;
     }
 
+    /**
+     * The pages stored for a member, as the database holds them.
+     *
+     * @return list<string>
+     */
+    private function pagesOf(User $member, ?Store $store = null): array
+    {
+        return json_decode(($store ?? $this->store)->members()->whereKey($member->id)->sole()->pivot->permissions, true);
+    }
+
     private function product(string $name, array $attributes = []): Product
     {
         return $this->store->products()->create(['name' => $name, 'external_id' => $name, 'price' => 100, ...$attributes]);
@@ -142,10 +152,12 @@ class StoreTeamTest extends TestCase
         $member = $this->staff(['catalog']);
 
         $this->actingAs($this->owner)->put("/store/team/{$member->id}", [
-            'name' => 'Renamed', 'email' => $member->email, 'permissions' => ['performance', 'dashboard'],
+            'name' => 'Renamed', 'email' => 'renamed@example.com',
         ])->assertSessionHasNoErrors();
         $this->assertSame('Renamed', $member->fresh()->name);
-        $this->assertSame(['dashboard', 'performance'], json_decode($this->store->members()->whereKey($member->id)->first()->pivot->permissions, true));
+        $this->assertSame('renamed@example.com', $member->fresh()->email);
+        // Editing who they are leaves what they may open alone.
+        $this->assertSame(['catalog'], $this->pagesOf($member));
 
         $this->actingAs($this->owner)->post("/store/team/{$member->id}/disable")->assertSessionHasNoErrors();
         $this->assertSame(User::STATUS_DISABLED, $member->fresh()->status);
@@ -159,6 +171,77 @@ class StoreTeamTest extends TestCase
         $this->assertTrue(password_verify('another-pass-2', $member->fresh()->password));
     }
 
+    public function test_the_owner_changes_the_pages_of_any_member_and_it_applies_at_once(): void
+    {
+        $member = $this->staff(['catalog', 'reports']);
+        $this->actingAs($member)->get('/store/studio')->assertRedirect();
+
+        // Sent in any order, with a page added and a page taken away.
+        $this->actingAs($this->owner)->put("/store/team/{$member->id}/permissions", [
+            'permissions' => ['studio', 'catalog', 'dashboard'],
+        ])->assertSessionHasNoErrors();
+        $this->assertSame(['dashboard', 'catalog', 'studio'], $this->pagesOf($member));
+
+        $change = ActivityLog::query()->where('action', 'team.member_permissions_changed')->sole();
+        $this->assertSame(['dashboard', 'studio'], $change->properties['added']);
+        $this->assertSame(['reports'], $change->properties['removed']);
+
+        // The member is still signed in; their next request already follows it.
+        $this->app->forgetScopedInstances();
+        $this->actingAs($member)->get('/store/studio')->assertOk();
+        $this->app->forgetScopedInstances();
+        $this->actingAs($member)->get('/store/reports')->assertRedirect();
+
+        // Saving the same pages again changes nothing and records nothing.
+        $this->app->forgetScopedInstances();
+        $this->actingAs($this->owner)->put("/store/team/{$member->id}/permissions", [
+            'permissions' => ['dashboard', 'catalog', 'studio'],
+        ])->assertSessionHasNoErrors();
+        $this->assertSame(1, ActivityLog::query()->where('action', 'team.member_permissions_changed')->count());
+    }
+
+    public function test_every_page_can_be_taken_away_and_a_disabled_member_can_still_be_changed(): void
+    {
+        $member = $this->staff(['catalog', 'studio']);
+        $this->actingAs($this->owner)->post("/store/team/{$member->id}/disable")->assertSessionHasNoErrors();
+
+        $this->actingAs($this->owner)->put("/store/team/{$member->id}/permissions", ['permissions' => []])->assertSessionHasNoErrors();
+        $this->assertSame([], $this->pagesOf($member));
+    }
+
+    public function test_only_grantable_pages_can_be_given_and_only_by_the_owner(): void
+    {
+        $member = $this->staff(['catalog']);
+        $colleague = $this->staff(['catalog', 'settings'], name: 'Colleague');
+
+        // The Zid connection and the team itself are not pages to hand out.
+        foreach (['integration', 'team', 'nonsense'] as $page) {
+            $this->actingAs($this->owner)->put("/store/team/{$member->id}/permissions", ['permissions' => ['catalog', $page]])
+                ->assertSessionHasErrors('permissions.1');
+        }
+        $this->actingAs($this->owner)->put("/store/team/{$member->id}/permissions", [])->assertSessionHasErrors('permissions');
+
+        // A staff member cannot widen anyone's access, their own included.
+        $this->app->forgetScopedInstances();
+        $this->actingAs($colleague)->put("/store/team/{$member->id}/permissions", ['permissions' => ['dashboard']])->assertForbidden();
+        $this->app->forgetScopedInstances();
+        $this->actingAs($colleague)->put("/store/team/{$colleague->id}/permissions", ['permissions' => StoreSections::all()])->assertForbidden();
+
+        $this->assertSame(['catalog'], $this->pagesOf($member));
+        $this->assertSame(['catalog', 'settings'], $this->pagesOf($colleague));
+    }
+
+    public function test_the_members_page_carries_their_pages_for_the_owner(): void
+    {
+        $member = $this->staff(['studio', 'catalog']);
+
+        $this->actingAs($this->owner)->get("/store/team/{$member->id}")
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('store/team/show')
+                ->where('pages.granted', ['catalog', 'studio'])
+                ->where('pages.groups', StoreSections::GROUPS));
+    }
+
     public function test_team_management_reaches_only_this_stores_staff(): void
     {
         $elsewhere = app(CreateStore::class)->handle(User::factory()->create(), ['name' => 'Other']);
@@ -166,6 +249,9 @@ class StoreTeamTest extends TestCase
 
         // Neither another store's staff nor the owner themselves.
         $this->actingAs($this->owner)->post("/store/team/{$outsider->id}/disable")->assertNotFound();
+        $this->actingAs($this->owner)->put("/store/team/{$outsider->id}/permissions", ['permissions' => []])->assertNotFound();
+        $this->actingAs($this->owner)->put("/store/team/{$this->owner->id}/permissions", ['permissions' => []])->assertNotFound();
+        $this->assertSame(['catalog'], $this->pagesOf($outsider, $elsewhere));
         $this->actingAs($this->owner)->delete("/store/team/{$this->owner->id}")->assertNotFound();
         $this->assertSame(User::STATUS_ACTIVE, $outsider->fresh()->status);
     }

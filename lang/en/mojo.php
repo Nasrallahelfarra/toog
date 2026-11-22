@@ -44,7 +44,8 @@ return [
     'designer_fabric_unknown' => 'This fabric is no longer in your list; choose another.',
     // Store team
     'member_created' => 'Team member added.',
-    'permissions_saved' => 'Member details and access updated.',
+    'member_updated' => ':name’s details were updated.',
+    'permissions_saved' => ':name’s access was updated.',
     'member_removed' => ':name was removed from the team.',
     'member_not_managed' => 'This account is linked to more than one store; the platform admin manages it.',
     'section_forbidden' => 'This page is not available to your account.',

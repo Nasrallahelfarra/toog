@@ -18,6 +18,8 @@ Route::post('team', [TeamController::class, 'store'])->name('team.store');
 // The comparison as a printable page the browser saves to PDF
 Route::get('team/export', [TeamController::class, 'export'])->name('team.export');
 Route::put('team/{member}', [TeamController::class, 'update'])->whereNumber('member')->name('team.update');
+// The pages a member may open, changed on their own
+Route::put('team/{member}/permissions', [TeamController::class, 'permissions'])->whereNumber('member')->name('team.permissions');
 Route::put('team/{member}/password', [TeamController::class, 'password'])->whereNumber('member')->name('team.password');
 Route::post('team/{member}/disable', [TeamController::class, 'disable'])->whereNumber('member')->name('team.disable');
 Route::post('team/{member}/enable', [TeamController::class, 'enable'])->whereNumber('member')->name('team.enable');

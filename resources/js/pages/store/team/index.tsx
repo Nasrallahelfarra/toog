@@ -10,6 +10,7 @@ import {
     Pencil,
     Plus,
     Search,
+    ShieldCheck,
     ShieldOff,
     ShoppingBag,
     Table2,
@@ -33,7 +34,7 @@ import { FadeIn, Stagger, StaggerItem } from '@/components/mojo/motion';
 import { PageBody, PageHeader } from '@/components/mojo/page-header';
 import { SectionCard } from '@/components/mojo/section-card';
 import { StatCard } from '@/components/mojo/stat-card';
-import { MemberFormDialog, MemberPasswordDialog, RemoveMemberDialog } from '@/components/store/team/member-dialogs';
+import { MemberAccessDialog, MemberFormDialog, MemberPasswordDialog, RemoveMemberDialog } from '@/components/store/team/member-dialogs';
 import { MonthlyMatrix, PeriodPicker } from '@/components/store/team/shared';
 import type { MatrixRow, MemberFigures, Period, Range, TeamMember } from '@/components/store/team/shared';
 import { MemberFocus, TeamLeaderboard } from '@/components/store/team/team-report';
@@ -66,7 +67,7 @@ type Props = {
 };
 
 type SortKey = 'units' | 'products' | 'avg_per_product' | 'avg_per_month' | 'orders' | 'revenue';
-type MemberAction = 'edit' | 'password' | 'twoFactor' | 'disable' | 'enable' | 'remove';
+type MemberAction = 'access' | 'edit' | 'password' | 'twoFactor' | 'disable' | 'enable' | 'remove';
 type DialogState = { kind: 'create' } | { kind: MemberAction; member: TeamMember } | null;
 
 export default function Team({ months, month, availableMonths, sections, requireTwoFactor, report }: Props) {
@@ -326,8 +327,18 @@ export default function Team({ months, month, availableMonths, sections, require
                                     members={report.members}
                                     months={report.months}
                                     totalPages={totalPages}
-                                    accessLine={(granted, total) => <AccessLine granted={granted} total={total} />}
-                                    actions={<MemberMenu member={focused} onPick={(kind) => setDialog({ kind, member: focused })} />}
+                                    accessLine={(granted, total) => (
+                                        <AccessChip granted={granted} total={total} onClick={() => setDialog({ kind: 'access', member: focused })} />
+                                    )}
+                                    actions={
+                                        <>
+                                            <Button variant="outline" size="sm" onClick={() => setDialog({ kind: 'access', member: focused })}>
+                                                <ShieldCheck className="size-4" />
+                                                {m.access.button}
+                                            </Button>
+                                            <MemberMenu member={focused} onPick={(kind) => setDialog({ kind, member: focused })} />
+                                        </>
+                                    }
                                 />
                             </FadeIn>
                         )}
@@ -375,19 +386,28 @@ export default function Team({ months, month, availableMonths, sections, require
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Link href={`/store/team/${member.id}`} prefetch className="group flex items-center gap-3">
-                                                        <Initials name={member.name} />
-                                                        <span className="min-w-0">
-                                                            <span className="flex items-center gap-2 font-medium">
+                                                    <div className="flex items-center gap-3">
+                                                        <Link href={`/store/team/${member.id}`} prefetch tabIndex={-1} aria-hidden>
+                                                            <Initials name={member.name} />
+                                                        </Link>
+                                                        <div className="min-w-0">
+                                                            <Link href={`/store/team/${member.id}`} prefetch className="group flex items-center gap-2 font-medium">
                                                                 <span className="max-w-44 truncate group-hover:underline" dir="auto">
                                                                     {member.name}
                                                                 </span>
                                                                 <TwoFactorMark on={member.two_factor} onLabel={m.security.on} offLabel={m.security.off} />
                                                                 {member.status === 'disabled' && <UserStatusBadge status={member.status} />}
+                                                            </Link>
+                                                            {/* The row selects the member; the chip opens their pages instead. */}
+                                                            <span onClick={(event) => event.stopPropagation()}>
+                                                                <AccessChip
+                                                                    granted={member.permissions}
+                                                                    total={totalPages}
+                                                                    onClick={() => setDialog({ kind: 'access', member })}
+                                                                />
                                                             </span>
-                                                            <AccessLine granted={member.permissions} total={totalPages} />
-                                                        </span>
-                                                    </Link>
+                                                        </div>
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell className="text-end">
                                                     <span className="num font-semibold">{number(member.products)}</span>
@@ -490,6 +510,12 @@ export default function Team({ months, month, availableMonths, sections, require
                 member={dialog?.kind === 'edit' ? dialog.member : null}
                 sections={sections}
             />
+            <MemberAccessDialog
+                open={dialog?.kind === 'access'}
+                onOpenChange={(open) => !open && close()}
+                member={dialog?.kind === 'access' ? dialog.member : null}
+                sections={sections}
+            />
             <MemberPasswordDialog open={dialog?.kind === 'password'} onOpenChange={(open) => !open && close()} member={target} />
             <ConfirmModal
                 open={dialog?.kind === 'disable'}
@@ -535,28 +561,33 @@ export default function Team({ months, month, availableMonths, sections, require
     );
 }
 
-/** "6 of 15 pages", with the page names on hover. */
-function AccessLine({ granted, total }: { granted: string[]; total: number }) {
+/**
+ * "6 of 14 pages" as a button that opens the member's pages, with the page
+ * names on hover. Where the owner sees what a member can open is also where
+ * they change it.
+ */
+function AccessChip({ granted, total, onClick }: { granted: string[]; total: number; onClick: () => void }) {
     const { t, tr } = useI18n();
     const a = t.team.access;
-
-    if (granted.length === 0) {
-        return <span className="text-muted-foreground block text-xs">{a.none}</span>;
-    }
-
-    if (granted.length >= total) {
-        return <span className="text-muted-foreground block text-xs">{a.all}</span>;
-    }
+    const label = granted.length === 0 ? a.none : granted.length >= total ? a.all : tr(a.some, { count: granted.length, total });
+    const partial = granted.length > 0 && granted.length < total;
 
     return (
         <Tooltip>
             <TooltipTrigger asChild>
-                <span className="text-muted-foreground block w-fit text-xs underline decoration-dotted underline-offset-4">
-                    {tr(a.some, { count: granted.length, total })}
-                </span>
+                <button
+                    type="button"
+                    onClick={onClick}
+                    className="group/access text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus-visible:ring-ring mt-1 inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors outline-none focus-visible:ring-2"
+                >
+                    <ShieldCheck className="size-3" />
+                    <span className="num">{label}</span>
+                    <Pencil className="size-3 opacity-40 transition-opacity group-hover/access:opacity-100" />
+                </button>
             </TooltipTrigger>
             <TooltipContent className="max-w-64">
-                {granted.map((key) => (STORE_SECTIONS[key] ? t.nav[STORE_SECTIONS[key].label] : key)).join(' · ')}
+                {partial && <span className="block">{granted.map((key) => (STORE_SECTIONS[key] ? t.nav[STORE_SECTIONS[key].label] : key)).join(' · ')}</span>}
+                <span className={cn('block', partial && 'mt-1 opacity-70')}>{a.change}</span>
             </TooltipContent>
         </Tooltip>
     );
@@ -579,6 +610,10 @@ function MemberMenu({ member, onPick }: { member: TeamMember; onPick: (kind: Mem
                         <PackageCheck className="size-4" />
                         {a.products}
                     </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onPick('access')}>
+                    <ShieldCheck className="size-4" />
+                    {a.access}
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => onPick('edit')}>
                     <Pencil className="size-4" />
