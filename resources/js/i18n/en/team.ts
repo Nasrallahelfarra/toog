@@ -126,9 +126,26 @@ export const team: typeof ar = {
         products: 'Products and sales',
         edit: 'Edit details and access',
         password: 'Set a password',
+        resetTwoFactor: 'Reset two-factor sign-in',
         disable: 'Disable account',
         enable: 'Enable account',
         remove: 'Remove from team',
+    },
+
+    security: {
+        title: 'Team account protection',
+        description: 'Two-factor sign-in asks for a code from the authenticator app on the member’s phone, so a password alone is not enough.',
+        count: '{count} of {total} turned it on',
+        missing: 'Not on yet: {names}',
+        all: 'The whole team has it on',
+        require: 'Require it of every member',
+        requireHint: 'Anyone without it is sent to their security page and cannot open the store until they turn it on.',
+        on: 'Two-factor sign-in on',
+        off: 'Two-factor sign-in off',
+    },
+    resetTwoFactor: {
+        title: 'Reset two-factor sign-in for “{name}”',
+        description: 'For a member who lost their phone. Their old codes stop working and they are signed out everywhere; they sign in with their password and turn it on again from their security page.',
     },
 
     empty: {

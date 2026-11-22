@@ -1,5 +1,5 @@
 import { Link, router } from '@inertiajs/react';
-import { KeyRound, MoreHorizontal, Pencil, Plus, Search, Trash2, UserCheck, UserX, Users } from 'lucide-react';
+import { KeyRound, MoreHorizontal, Pencil, Plus, Search, ShieldOff, Trash2, UserCheck, UserX, Users } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Initials, RoleBadge, UserStatusBadge } from '@/components/admin/badges';
@@ -15,6 +15,7 @@ import { FadeIn } from '@/components/mojo/motion';
 import { PageBody, PageHeader } from '@/components/mojo/page-header';
 import { Pagination } from '@/components/mojo/pagination';
 import type { Paginated } from '@/components/mojo/pagination';
+import { TwoFactorMark } from '@/components/store/team/team-security';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -37,7 +38,7 @@ type Props = {
     me: number;
 };
 
-type DialogState = { kind: 'create' } | { kind: 'edit' | 'password' | 'disable' | 'enable' | 'delete'; user: AdminUserRow } | null;
+type DialogState = { kind: 'create' } | { kind: 'edit' | 'password' | 'twoFactor' | 'disable' | 'enable' | 'delete'; user: AdminUserRow } | null;
 
 /**
  * Validation errors from row actions (e.g. disabling yourself) as a toast.
@@ -141,6 +142,7 @@ export default function AdminUsers({ users, filters: initial, counts, stores, me
                                             <div className="min-w-0">
                                                 <p className="flex items-center gap-2 font-medium">
                                                     <span className="max-w-52 truncate">{user.name}</span>
+                                                    <TwoFactorMark on={Boolean(user.two_factor)} onLabel={u.twoFactorOn} offLabel={t.team.security.off} />
                                                     {user.id === me && <span className="bg-primary/10 text-primary rounded-md px-1.5 text-[11px]">{u.you}</span>}
                                                 </p>
                                                 <p className="text-muted-foreground max-w-60 truncate text-xs" dir="ltr">
@@ -197,6 +199,12 @@ export default function AdminUsers({ users, filters: initial, counts, stores, me
                                                     <KeyRound className="size-4" />
                                                     {u.resetPassword}
                                                 </DropdownMenuItem>
+                                                {user.two_factor && (
+                                                    <DropdownMenuItem onSelect={() => setDialog({ kind: 'twoFactor', user })}>
+                                                        <ShieldOff className="size-4" />
+                                                        {u.resetTwoFactor}
+                                                    </DropdownMenuItem>
+                                                )}
                                                 {user.id !== me && (
                                                     <>
                                                         <DropdownMenuSeparator />
@@ -252,6 +260,17 @@ export default function AdminUsers({ users, filters: initial, counts, stores, me
                 description={u.enableDescription}
                 confirmLabel={u.enable}
                 onConfirm={(done) => post(`/admin/users/${target?.id}/enable`, {}, done)}
+            />
+            <ConfirmModal
+                open={dialog?.kind === 'twoFactor'}
+                onOpenChange={(open) => !open && close()}
+                title={tr(u.resetTwoFactorTitle, { name: target?.name ?? '' })}
+                description={u.resetTwoFactorDescription}
+                confirmLabel={u.resetTwoFactor}
+                destructive
+                onConfirm={(done) =>
+                    router.delete(`/admin/users/${target?.id}/two-factor`, { preserveScroll: true, onSuccess: close, onError: showErrors, onFinish: done })
+                }
             />
             <DeleteUserDialog user={dialog?.kind === 'delete' ? target : null} open={dialog?.kind === 'delete'} onOpenChange={(open) => !open && close()} />
         </PageBody>

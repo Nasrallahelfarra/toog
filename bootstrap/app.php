@@ -6,6 +6,7 @@ use App\Http\Middleware\EnsureStoreSelected;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RequireStaffTwoFactor;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\UseVisitedAssetDomain;
 use Illuminate\Foundation\Application;
@@ -42,6 +43,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => EnsureAdmin::class,
             'store' => EnsureStoreSelected::class,
             'store.access' => EnsureSectionAllowed::class,
+            'store.two-factor' => RequireStaffTwoFactor::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -21,7 +21,7 @@ Route::middleware(['auth', 'verified', 'admin'])
 
 // Store dashboard (the owner, staff inside the sections the owner granted
 // them, or the admin acting inside a store)
-Route::middleware(['auth', 'verified', 'store', 'store.access'])
+Route::middleware(['auth', 'verified', 'store', 'store.access', 'store.two-factor'])
     ->prefix('store')
     ->name('store.')
     ->group(function () {

@@ -116,6 +116,19 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     }
 
     /**
+     * Forget the authenticator app and recovery codes, as when the phone
+     * is lost. The user signs in by password and sets it up again.
+     */
+    public function clearTwoFactor(): void
+    {
+        $this->forceFill([
+            'two_factor_secret' => null,
+            'two_factor_recovery_codes' => null,
+            'two_factor_confirmed_at' => null,
+        ])->save();
+    }
+
+    /**
      * Admins may open any store; everyone else only their own.
      */
     public function canAccessStore(Store $store): bool

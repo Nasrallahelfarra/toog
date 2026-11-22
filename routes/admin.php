@@ -31,6 +31,7 @@ Route::put('users/{user}', [UserController::class, 'update'])->name('users.updat
 Route::post('users/{user}/disable', [UserController::class, 'disable'])->name('users.disable');
 Route::post('users/{user}/enable', [UserController::class, 'enable'])->name('users.enable');
 Route::put('users/{user}/password', [UserController::class, 'password'])->name('users.password');
+Route::delete('users/{user}/two-factor', [UserController::class, 'resetTwoFactor'])->name('users.two-factor.reset');
 Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
 
 Route::get('ai-costs', [AiCostController::class, 'index'])->name('ai-costs.index');

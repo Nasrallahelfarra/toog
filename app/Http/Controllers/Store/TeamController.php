@@ -46,6 +46,7 @@ class TeamController extends Controller
             'month' => $month,
             'availableMonths' => $available,
             'sections' => StoreSections::GROUPS,
+            'requireTwoFactor' => $store->requiresStaffTwoFactor(),
             'report' => fn () => RevenueVisibility::apply($store, $report->comparison($store, $months, $month)),
         ]);
     }
@@ -157,6 +158,46 @@ class TeamController extends Controller
 
         Activity::log('team.member_password_reset', $user, ['name' => $user->name]);
         Inertia::flash('toast', ['type' => 'success', 'message' => __('mojo.password_reset')]);
+
+        return back();
+    }
+
+    /**
+     * For a member who lost the phone with their authenticator app: the
+     * old codes stop working, they are signed out everywhere, and they set
+     * it up again from their security page after signing in by password.
+     */
+    public function resetTwoFactor(int $member): RedirectResponse
+    {
+        $user = $this->managed($this->member($this->current->require(), $member));
+
+        if (! $user->two_factor_secret) {
+            throw ValidationException::withMessages(['member' => __('mojo.two_factor_not_enabled')]);
+        }
+
+        $user->clearTwoFactor();
+        DB::table('sessions')->where('user_id', $user->id)->delete();
+
+        Activity::log('team.member_two_factor_reset', $user, ['name' => $user->name]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('mojo.two_factor_reset', ['name' => $user->name])]);
+
+        return back();
+    }
+
+    /**
+     * Turn the team-wide two-factor requirement on or off. Staff without it
+     * are held at their security page on their next request.
+     */
+    public function security(Request $request): RedirectResponse
+    {
+        $store = $this->current->require();
+        $data = $request->validate(['require_two_factor' => ['required', 'boolean']]);
+        $required = (bool) $data['require_two_factor'];
+
+        $store->update(['settings' => [...($store->settings ?? []), 'require_staff_two_factor' => $required]]);
+
+        Activity::log('team.two_factor_policy', $store, ['required' => $required]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __($required ? 'mojo.two_factor_policy_on' : 'mojo.two_factor_policy_off')]);
 
         return back();
     }

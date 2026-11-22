@@ -18,8 +18,8 @@ import {
     InputOTPSlot,
 } from '@/components/ui/input-otp';
 import { Spinner } from '@/components/ui/spinner';
-import { useAppearance } from '@/hooks/use-appearance';
 import { useClipboard } from '@/hooks/use-clipboard';
+import { useI18n } from '@/hooks/use-i18n';
 import { OTP_MAX_LENGTH } from '@/hooks/use-two-factor-auth';
 import { confirm } from '@/routes/two-factor';
 
@@ -55,14 +55,17 @@ function TwoFactorSetupStep({
     buttonText,
     onNextStep,
     errors,
+    note,
 }: {
     qrCodeSvg: string | null;
     manualSetupKey: string | null;
     buttonText: string;
     onNextStep: () => void;
     errors: string[];
+    note?: string;
 }) {
-    const { resolvedAppearance } = useAppearance();
+    const { t } = useI18n();
+    const m = t.account.twoFactor.modal;
     const [copiedText, copy] = useClipboard();
     const IconComponent = copiedText === manualSetupKey ? Check : Copy;
 
@@ -75,17 +78,12 @@ function TwoFactorSetupStep({
                     <div className="mx-auto flex max-w-md overflow-hidden">
                         <div className="mx-auto aspect-square w-64 rounded-lg border border-border">
                             <div className="z-10 flex h-full w-full items-center justify-center p-5">
+                                {/* Always dark on white: many authenticator apps cannot read an inverted code. */}
                                 {qrCodeSvg ? (
                                     <div
                                         className="aspect-square w-full rounded-lg bg-white p-2 [&_svg]:size-full"
                                         dangerouslySetInnerHTML={{
                                             __html: qrCodeSvg,
-                                        }}
-                                        style={{
-                                            filter:
-                                                resolvedAppearance === 'dark'
-                                                    ? 'invert(1) brightness(1.5)'
-                                                    : undefined,
                                         }}
                                     />
                                 ) : (
@@ -95,7 +93,9 @@ function TwoFactorSetupStep({
                         </div>
                     </div>
 
-                    <div className="flex w-full space-x-5">
+                    {note && <p className="text-muted-foreground text-center text-xs leading-relaxed">{note}</p>}
+
+                    <div className="flex w-full gap-5">
                         <Button className="w-full" onClick={onNextStep}>
                             {buttonText}
                         </Button>
@@ -103,12 +103,12 @@ function TwoFactorSetupStep({
 
                     <div className="relative flex w-full items-center justify-center">
                         <div className="absolute inset-0 top-1/2 h-px w-full bg-border" />
-                        <span className="relative bg-card px-2 py-1">
-                            or, enter the code manually
+                        <span className="text-muted-foreground relative bg-background px-2 py-1 text-xs">
+                            {m.manual}
                         </span>
                     </div>
 
-                    <div className="flex w-full space-x-2">
+                    <div className="flex w-full" dir="ltr">
                         <div className="flex w-full items-stretch overflow-hidden rounded-xl border border-border">
                             {!manualSetupKey ? (
                                 <div className="flex h-full w-full items-center justify-center bg-muted p-3">
@@ -120,10 +120,14 @@ function TwoFactorSetupStep({
                                         type="text"
                                         readOnly
                                         value={manualSetupKey}
-                                        className="h-full w-full bg-background p-3 text-foreground outline-none"
+                                        aria-label={m.manual}
+                                        className="h-full w-full bg-background p-3 font-mono text-sm tracking-wide text-foreground outline-none"
                                     />
                                     <button
+                                        type="button"
                                         onClick={() => copy(manualSetupKey)}
+                                        aria-label={m.copyKey}
+                                        title={m.copyKey}
                                         className="border-l border-border px-3 hover:bg-muted"
                                     >
                                         <IconComponent className="w-4" />
@@ -145,6 +149,8 @@ function TwoFactorVerificationStep({
     onClose: () => void;
     onBack: () => void;
 }) {
+    const { t } = useI18n();
+    const m = t.account.twoFactor.modal;
     const [code, setCode] = useState<string>('');
     const pinInputContainerRef = useRef<HTMLDivElement>(null);
 
@@ -173,7 +179,7 @@ function TwoFactorVerificationStep({
                         ref={pinInputContainerRef}
                         className="relative w-full space-y-3"
                     >
-                        <div className="flex w-full flex-col items-center space-y-3 py-2">
+                        <div className="flex w-full flex-col items-center space-y-3 py-2" dir="ltr">
                             <InputOTP
                                 id="otp"
                                 name="code"
@@ -202,7 +208,7 @@ function TwoFactorVerificationStep({
                             />
                         </div>
 
-                        <div className="flex w-full space-x-5">
+                        <div className="flex w-full gap-5">
                             <Button
                                 type="button"
                                 variant="outline"
@@ -210,7 +216,7 @@ function TwoFactorVerificationStep({
                                 onClick={onBack}
                                 disabled={processing}
                             >
-                                Back
+                                {m.back}
                             </Button>
                             <Button
                                 type="submit"
@@ -219,7 +225,7 @@ function TwoFactorVerificationStep({
                                     processing || code.length < OTP_MAX_LENGTH
                                 }
                             >
-                                Confirm
+                                {m.confirm}
                             </Button>
                         </div>
                     </div>
@@ -252,6 +258,8 @@ export default function TwoFactorSetupModal({
     fetchSetupData,
     errors,
 }: Props) {
+    const { t } = useI18n();
+    const m = t.account.twoFactor.modal;
     const [showVerificationStep, setShowVerificationStep] =
         useState<boolean>(false);
 
@@ -259,32 +267,33 @@ export default function TwoFactorSetupModal({
         title: string;
         description: string;
         buttonText: string;
+        note?: string;
     }>(() => {
+        // Already on: the same key again, to scan on another device.
         if (twoFactorEnabled) {
             return {
-                title: 'Two-factor authentication enabled',
-                description:
-                    'Two-factor authentication is now enabled. Scan the QR code or enter the setup key in your authenticator app.',
-                buttonText: 'Close',
+                title: m.addDeviceTitle,
+                description: m.addDeviceDescription,
+                buttonText: m.done,
+                note: m.addDeviceWarning,
             };
         }
 
         if (showVerificationStep) {
             return {
-                title: 'Verify authentication code',
-                description:
-                    'Enter the 6-digit code from your authenticator app',
-                buttonText: 'Continue',
+                title: m.verifyTitle,
+                description: m.verifyDescription,
+                buttonText: m.next,
             };
         }
 
         return {
-            title: 'Enable two-factor authentication',
-            description:
-                'To finish enabling two-factor authentication, scan the QR code or enter the setup key in your authenticator app',
-            buttonText: 'Continue',
+            title: m.setupTitle,
+            description: m.setupDescription,
+            buttonText: m.next,
+            note: m.setupDevicesTip,
         };
-    }, [twoFactorEnabled, showVerificationStep]);
+    }, [twoFactorEnabled, showVerificationStep, m]);
 
     const resetModalState = useCallback(() => {
         if (twoFactorEnabled) {
@@ -344,7 +353,8 @@ export default function TwoFactorSetupModal({
                             qrCodeSvg={qrCodeSvg}
                             manualSetupKey={manualSetupKey}
                             buttonText={modalConfig.buttonText}
-                            onNextStep={handleModalNextStep}
+                            note={modalConfig.note}
+                            onNextStep={twoFactorEnabled ? handleClose : handleModalNextStep}
                             errors={errors}
                         />
                     )}

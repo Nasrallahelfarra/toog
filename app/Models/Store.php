@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection as SupportCollection;
 
 /**
  * @property int $id
@@ -117,6 +118,30 @@ class Store extends Model
     public function showsRevenue(): bool
     {
         return (bool) ($this->settings['show_revenue'] ?? false);
+    }
+
+    /**
+     * The owner's switch: every staff member must sign in with an
+     * authenticator app code. Off by default; the owner is never forced.
+     */
+    public function requiresStaffTwoFactor(): bool
+    {
+        return (bool) ($this->settings['require_staff_two_factor'] ?? false);
+    }
+
+    /**
+     * Stores where this user is staff and the owner asks for two-factor.
+     *
+     * @return SupportCollection<int, string>
+     */
+    public static function requiringTwoFactorOf(User $user): SupportCollection
+    {
+        return $user->stores()
+            ->wherePivot('role', self::ROLE_STAFF)
+            ->get(['stores.id', 'stores.name', 'stores.settings'])
+            ->filter(fn (Store $store) => $store->requiresStaffTwoFactor())
+            ->pluck('name')
+            ->values();
     }
 
     public function isActive(): bool

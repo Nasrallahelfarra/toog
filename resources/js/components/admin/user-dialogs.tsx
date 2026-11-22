@@ -25,6 +25,8 @@ export type AdminUserRow = {
     /** Added by a store owner with limited pages, rather than owning a store. */
     staff?: boolean;
     status: 'active' | 'disabled';
+    /** Signs in with an authenticator app code as well as the password. */
+    two_factor?: boolean;
     disabled_reason: string | null;
     disabled_at: string | null;
     last_login_at: string | null;

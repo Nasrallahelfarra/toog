@@ -5,15 +5,19 @@ namespace App\Providers;
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Models\User;
+use App\Support\Activity;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
+use Laravel\Fortify\Events\TwoFactorAuthenticationConfirmed;
+use Laravel\Fortify\Events\TwoFactorAuthenticationDisabled;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
 
@@ -35,6 +39,17 @@ class FortifyServiceProvider extends ServiceProvider
         $this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();
+        $this->recordTwoFactorChanges();
+    }
+
+    /**
+     * Turning two-factor sign-in on or off shows in the store's activity,
+     * so the owner can see who on the team has it.
+     */
+    private function recordTwoFactorChanges(): void
+    {
+        Event::listen(TwoFactorAuthenticationConfirmed::class, fn () => Activity::log('account.two_factor_enabled'));
+        Event::listen(TwoFactorAuthenticationDisabled::class, fn () => Activity::log('account.two_factor_disabled'));
     }
 
     /**
