@@ -55,4 +55,10 @@ return [
     'products_released' => '{0} Nothing to remove.|{1} Product removed from the list.|[2,*] :count products removed from the list.',
     'products_assigned' => '{0} :name already holds these products.|{1} Product assigned to :name.|[2,*] :count products assigned to :name.',
     'designer_reference_not_garment' => 'The picture does not show a garment that can be designed; pick another product or post.',
+    // Two-factor sign-in
+    'two_factor_required' => 'The store owner requires two-factor sign-in for the whole team. Turn it on here to carry on.',
+    'two_factor_reset' => 'Two-factor sign-in was reset for :name. They sign in with their password and set it up again.',
+    'two_factor_not_enabled' => 'This account has not turned on two-factor sign-in.',
+    'two_factor_policy_on' => 'Two-factor sign-in is now required for every staff member.',
+    'two_factor_policy_off' => 'Two-factor sign-in is now optional for staff.',
 ];

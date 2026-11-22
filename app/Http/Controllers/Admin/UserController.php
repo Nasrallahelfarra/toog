@@ -43,6 +43,7 @@ class UserController extends Controller
                 // Added to a store by its owner, with limited pages.
                 'staff' => $u->stores->contains(fn (Store $s) => $s->pivot->role === Store::ROLE_STAFF),
                 'status' => $u->status,
+                'two_factor' => $u->hasEnabledTwoFactorAuthentication(),
                 'disabled_reason' => $u->disabled_reason,
                 'disabled_at' => $u->disabled_at?->toIso8601String(),
                 'last_login_at' => $u->last_login_at?->toIso8601String(),
@@ -157,6 +158,28 @@ class UserController extends Controller
 
         Activity::log('admin.user_enabled', $user);
         Inertia::flash('toast', ['type' => 'success', 'message' => __('mojo.user_enabled')]);
+
+        return back();
+    }
+
+    /**
+     * For an owner (or anyone) who lost the phone with their authenticator
+     * app: they sign in by password and set it up again.
+     */
+    public function resetTwoFactor(Request $request, User $user): RedirectResponse
+    {
+        if (! $user->two_factor_secret) {
+            throw ValidationException::withMessages(['user' => __('mojo.two_factor_not_enabled')]);
+        }
+
+        $user->clearTwoFactor();
+
+        if (! $user->is($request->user())) {
+            DB::table('sessions')->where('user_id', $user->id)->delete();
+        }
+
+        Activity::log('admin.user_two_factor_reset', $user);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('mojo.two_factor_reset', ['name' => $user->name])]);
 
         return back();
     }

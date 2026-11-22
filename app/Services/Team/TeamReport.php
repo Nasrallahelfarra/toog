@@ -111,6 +111,7 @@ class TeamReport
             'name' => $member->name,
             'email' => $member->email,
             'status' => $member->status,
+            'two_factor' => $member->hasEnabledTwoFactorAuthentication(),
             'last_login_at' => $member->last_login_at?->toIso8601String(),
             'joined_at' => ($joined = $member->pivot->created_at) ? Carbon::parse($joined)->toIso8601String() : null,
             'permissions' => StoreSections::clean((array) json_decode((string) ($member->pivot->permissions ?? '[]'), true)),

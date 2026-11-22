@@ -32,6 +32,8 @@ export type TeamMember = MemberFigures & {
     name: string;
     email: string;
     status: 'active' | 'disabled';
+    /** Signs in with an authenticator app code as well as the password. */
+    two_factor: boolean;
     last_login_at: string | null;
     joined_at: string | null;
     permissions: string[];

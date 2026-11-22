@@ -10,6 +10,7 @@ import {
     Pencil,
     Plus,
     Search,
+    ShieldOff,
     ShoppingBag,
     Table2,
     Trash2,
@@ -36,6 +37,7 @@ import { MemberFormDialog, MemberPasswordDialog, RemoveMemberDialog } from '@/co
 import { MonthlyMatrix, PeriodPicker } from '@/components/store/team/shared';
 import type { MatrixRow, MemberFigures, Period, Range, TeamMember } from '@/components/store/team/shared';
 import { MemberFocus, TeamLeaderboard } from '@/components/store/team/team-report';
+import { TeamSecurityCard, TwoFactorMark } from '@/components/store/team/team-security';
 import type { BoardMetric } from '@/components/store/team/team-report';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,6 +55,7 @@ type Props = {
     month: string | null;
     availableMonths: string[];
     sections: Record<string, string[]>;
+    requireTwoFactor: boolean;
     report: {
         months: string[];
         length: number;
@@ -63,9 +66,10 @@ type Props = {
 };
 
 type SortKey = 'units' | 'products' | 'avg_per_product' | 'avg_per_month' | 'orders' | 'revenue';
-type DialogState = { kind: 'create' } | { kind: 'edit' | 'password' | 'disable' | 'enable' | 'remove'; member: TeamMember } | null;
+type MemberAction = 'edit' | 'password' | 'twoFactor' | 'disable' | 'enable' | 'remove';
+type DialogState = { kind: 'create' } | { kind: MemberAction; member: TeamMember } | null;
 
-export default function Team({ months, month, availableMonths, sections, report }: Props) {
+export default function Team({ months, month, availableMonths, sections, requireTwoFactor, report }: Props) {
     const { t, tr, number, money, percent } = useI18n();
     const m = t.team;
     const showRevenue = useRevenueVisible();
@@ -248,6 +252,10 @@ export default function Team({ months, month, availableMonths, sections, report 
                         )}
                     </Stagger>
 
+                    <FadeIn delay={0.02}>
+                        <TeamSecurityCard members={report.members} required={requireTwoFactor} />
+                    </FadeIn>
+
                     <FadeIn delay={0.03} className="flex flex-col gap-2 lg:flex-row lg:items-center">
                         <div className="relative lg:w-80">
                             <Search className="text-muted-foreground pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2" />
@@ -374,6 +382,7 @@ export default function Team({ months, month, availableMonths, sections, report 
                                                                 <span className="max-w-44 truncate group-hover:underline" dir="auto">
                                                                     {member.name}
                                                                 </span>
+                                                                <TwoFactorMark on={member.two_factor} onLabel={m.security.on} offLabel={m.security.off} />
                                                                 {member.status === 'disabled' && <UserStatusBadge status={member.status} />}
                                                             </span>
                                                             <AccessLine granted={member.permissions} total={totalPages} />
@@ -499,6 +508,22 @@ export default function Team({ months, month, availableMonths, sections, report 
                 confirmLabel={m.actions.enable}
                 onConfirm={(done) => post(`/store/team/${target?.id}/enable`, done)}
             />
+            <ConfirmModal
+                open={dialog?.kind === 'twoFactor'}
+                onOpenChange={(open) => !open && close()}
+                title={tr(m.resetTwoFactor.title, { name: target?.name ?? '' })}
+                description={m.resetTwoFactor.description}
+                confirmLabel={m.actions.resetTwoFactor}
+                destructive
+                onConfirm={(done) =>
+                    router.delete(`/store/team/${target?.id}/two-factor`, {
+                        preserveScroll: true,
+                        onSuccess: close,
+                        onError: (errors) => toast.error(Object.values(errors)[0]),
+                        onFinish: done,
+                    })
+                }
+            />
             <RemoveMemberDialog
                 open={dialog?.kind === 'remove'}
                 onOpenChange={(open) => !open && close()}
@@ -537,7 +562,7 @@ function AccessLine({ granted, total }: { granted: string[]; total: number }) {
     );
 }
 
-function MemberMenu({ member, onPick }: { member: TeamMember; onPick: (kind: 'edit' | 'password' | 'disable' | 'enable' | 'remove') => void }) {
+function MemberMenu({ member, onPick }: { member: TeamMember; onPick: (kind: MemberAction) => void }) {
     const { t } = useI18n();
     const a = t.team.actions;
 
@@ -563,6 +588,12 @@ function MemberMenu({ member, onPick }: { member: TeamMember; onPick: (kind: 'ed
                     <KeyRound className="size-4" />
                     {a.password}
                 </DropdownMenuItem>
+                {member.two_factor && (
+                    <DropdownMenuItem onSelect={() => onPick('twoFactor')}>
+                        <ShieldOff className="size-4" />
+                        {a.resetTwoFactor}
+                    </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 {member.status === 'disabled' ? (
                     <DropdownMenuItem onSelect={() => onPick('enable')} className="text-success focus:text-success">

@@ -21,6 +21,9 @@ Route::put('team/{member}', [TeamController::class, 'update'])->whereNumber('mem
 Route::put('team/{member}/password', [TeamController::class, 'password'])->whereNumber('member')->name('team.password');
 Route::post('team/{member}/disable', [TeamController::class, 'disable'])->whereNumber('member')->name('team.disable');
 Route::post('team/{member}/enable', [TeamController::class, 'enable'])->whereNumber('member')->name('team.enable');
+Route::delete('team/{member}/two-factor', [TeamController::class, 'resetTwoFactor'])->whereNumber('member')->name('team.two-factor.reset');
+// The owner's switch: staff must sign in with an authenticator app code
+Route::put('team/security', [TeamController::class, 'security'])->name('team.security');
 Route::delete('team/{member}', [TeamController::class, 'destroy'])->whereNumber('member')->name('team.destroy');
 
 Route::get('team/{member}', [TeamProductController::class, 'show'])->whereNumber('member')->name('team.products');
