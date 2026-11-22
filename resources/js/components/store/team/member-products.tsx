@@ -1,5 +1,5 @@
 import { Link, router } from '@inertiajs/react';
-import { ArrowLeft, BarChart3, CalendarRange, ChevronDown, ImageOff, Lock, Package, PackageCheck, PackagePlus, Plus, Search, ShoppingBag, Wallet, X } from 'lucide-react';
+import { ArrowLeft, BarChart3, CalendarRange, ChevronDown, ImageOff, Lock, Package, PackageCheck, PackagePlus, Plus, Search, ShieldCheck, ShoppingBag, Wallet, X } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Initials } from '@/components/admin/badges';
@@ -12,6 +12,7 @@ import { Pagination } from '@/components/mojo/pagination';
 import type { Paginated } from '@/components/mojo/pagination';
 import { SectionCard } from '@/components/mojo/section-card';
 import { Sparkline, StatCard } from '@/components/mojo/stat-card';
+import { MemberAccessDialog } from '@/components/store/team/member-dialogs';
 import { MonthlyMatrix, PeriodPicker } from '@/components/store/team/shared';
 import type { MemberFigures, MonthPoint, Period, Range } from '@/components/store/team/shared';
 import { Button } from '@/components/ui/button';
@@ -63,6 +64,8 @@ export type MemberProductsProps = {
     stats: MemberFigures | null;
     counts: { mine: number; free: number; categories: string[] };
     products: Paginated<ProductRow>;
+    /** The manager's view only: the member's dashboard pages, changed from here. */
+    pages?: { granted: string[]; groups: Record<string, string[]> };
 };
 
 const ALL = '__all__';
@@ -89,6 +92,8 @@ export function MemberProducts(props: MemberProductsProps) {
     const [open, setOpen] = useState<Set<number>>(new Set());
     const [busy, setBusy] = useState<Set<number>>(new Set());
     const [confirmRelease, setConfirmRelease] = useState(false);
+    const [accessOpen, setAccessOpen] = useState(false);
+    const pages = asOwner ? props.pages : undefined;
 
     const visit = (next: { tab?: Tab; search?: string; category?: string; months?: Range; month?: string | null; sort?: Sort }, only?: string[]) => {
         const query = {
@@ -178,14 +183,33 @@ export function MemberProducts(props: MemberProductsProps) {
                 }
                 actions={
                     asOwner ? (
-                        <PeriodPicker
-                            period={{ months: props.months, month: props.month }}
-                            available={props.availableMonths}
-                            onChange={(next: Period) => visit({ months: next.months, month: next.month }, ['stats', 'products'])}
-                        />
+                        <>
+                            <PeriodPicker
+                                period={{ months: props.months, month: props.month }}
+                                available={props.availableMonths}
+                                onChange={(next: Period) => visit({ months: next.months, month: next.month }, ['stats', 'products'])}
+                            />
+                            {pages && (
+                                <Button variant="outline" onClick={() => setAccessOpen(true)}>
+                                    <ShieldCheck className="size-4" />
+                                    {t.team.access.button}
+                                    <span className="num text-muted-foreground text-xs font-normal">
+                                        {number(pages.granted.length)}/{number(Object.values(pages.groups).flat().length)}
+                                    </span>
+                                </Button>
+                            )}
+                        </>
                     ) : undefined
                 }
             />
+            {pages && (
+                <MemberAccessDialog
+                    open={accessOpen}
+                    onOpenChange={setAccessOpen}
+                    member={{ id: member.id, name: member.name, permissions: pages.granted }}
+                    sections={pages.groups}
+                />
+            )}
 
             {stats && (
                 <Stagger className={cn('grid gap-4 sm:grid-cols-2', showRevenue ? 'xl:grid-cols-5' : 'xl:grid-cols-4')}>

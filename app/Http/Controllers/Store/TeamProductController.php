@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Store\Concerns\ShowsMemberProducts;
 use App\Services\Team\ProductAssignments;
 use App\Support\CurrentStore;
+use App\Support\StoreSections;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -26,7 +27,16 @@ class TeamProductController extends Controller
     {
         $store = $this->current->require();
 
-        return Inertia::render('store/team/show', $this->memberProductsProps($request, $store, TeamController::member($store, $member), asOwner: true));
+        $user = TeamController::member($store, $member);
+
+        return Inertia::render('store/team/show', [
+            ...$this->memberProductsProps($request, $store, $user, asOwner: true),
+            // The owner changes the member's pages from here too.
+            'pages' => [
+                'granted' => StoreSections::stored($user->pivot->permissions),
+                'groups' => StoreSections::GROUPS,
+            ],
+        ]);
     }
 
     public function assign(Request $request, int $member, ProductAssignments $assignments): RedirectResponse

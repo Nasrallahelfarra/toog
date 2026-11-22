@@ -191,7 +191,7 @@ class Store extends Model
     {
         return $this->members()->get()
             ->filter(fn (User $member) => $member->pivot->role !== self::ROLE_STAFF
-                || in_array($section, StoreSections::clean((array) json_decode((string) $member->pivot->permissions, true)), true))
+                || in_array($section, StoreSections::stored($member->pivot->permissions), true))
             ->values();
     }
 

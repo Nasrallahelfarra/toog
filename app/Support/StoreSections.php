@@ -107,6 +107,16 @@ class StoreSections
     }
 
     /**
+     * The pages a member holds, read from the store_user row.
+     *
+     * @return list<string>
+     */
+    public static function stored(mixed $permissions): array
+    {
+        return self::clean((array) json_decode((string) ($permissions ?? '[]'), true));
+    }
+
+    /**
      * Sections that open a route; OWNER_ONLY when the route is not mapped.
      *
      * @return list<string>

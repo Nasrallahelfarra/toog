@@ -120,11 +120,18 @@ export const team: typeof ar = {
         all: 'All pages',
         some: '{count} of {total} pages',
         none: 'Their products only',
+        button: 'Access',
+        change: 'Click to change their access',
+        title: 'Access for “{name}”',
+        description: 'Choose the dashboard pages they can open. It applies on their next click, even if they are signed in now.',
+        pending: 'Changes on save:',
+        save: 'Save access',
     },
 
     actions: {
         products: 'Products and sales',
-        edit: 'Edit details and access',
+        access: 'Change access',
+        edit: 'Edit name and email',
         password: 'Set a password',
         resetTwoFactor: 'Reset two-factor sign-in',
         disable: 'Disable account',
@@ -155,7 +162,8 @@ export const team: typeof ar = {
 
     form: {
         createTitle: 'Add a staff member',
-        editTitle: 'Details and access for “{name}”',
+        editTitle: 'Details for “{name}”',
+        editDescription: 'Their name and the email they sign in with. The pages they can open are changed under “Change access”.',
         password: 'Password',
         passwordHint: 'At least 8 characters; digits alone are fine. Give them the email and password to sign in.',
         pages: 'Allowed pages',

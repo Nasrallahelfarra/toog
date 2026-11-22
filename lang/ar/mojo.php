@@ -44,7 +44,8 @@ return [
     'designer_fabric_unknown' => 'هذا القماش لم يعد في قائمتك؛ اختر قماشًا آخر.',
     // Store team
     'member_created' => 'تمت إضافة الموظف إلى فريق المتجر.',
-    'permissions_saved' => 'تم تحديث بيانات الموظف وصلاحياته.',
+    'member_updated' => 'تم تحديث بيانات :name.',
+    'permissions_saved' => 'تم تحديث صلاحيات :name.',
     'member_removed' => 'تمت إزالة :name من الفريق.',
     'member_not_managed' => 'هذا الحساب مرتبط بأكثر من متجر؛ تعديله من إدارة المنصة.',
     'section_forbidden' => 'هذه الصفحة غير متاحة لحسابك.',

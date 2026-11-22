@@ -118,29 +118,55 @@ class TeamController extends Controller
         return back();
     }
 
+    /**
+     * The member's name and sign-in email. The pages they may open are
+     * changed on their own, in permissions().
+     */
     public function update(Request $request, int $member): RedirectResponse
     {
-        $store = $this->current->require();
-        $user = $this->member($store, $member);
+        $user = $this->managed($this->member($this->current->require(), $member));
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:190', Rule::unique(User::class)->ignore($user->id)],
-            ...$this->permissionRules(),
         ]);
 
-        $permissions = StoreSections::clean($data['permissions'] ?? []);
+        $user->update($data);
 
-        DB::transaction(function () use ($store, $user, $data, $permissions) {
-            if ($this->ownsAccount($user)) {
-                $user->update(['name' => $data['name'], 'email' => $data['email']]);
-            }
+        Activity::log('team.member_updated', $user, ['name' => $user->name]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('mojo.member_updated', ['name' => $user->name])]);
 
-            $store->members()->updateExistingPivot($user->id, ['permissions' => json_encode($permissions)]);
-        });
+        return back();
+    }
 
-        Activity::log('team.member_updated', $user, ['name' => $user->name, 'pages' => count($permissions)]);
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('mojo.permissions_saved')]);
+    /**
+     * Change the dashboard pages a member may open, for any member of the
+     * team at any time. Access is read on every request, so it applies on
+     * their next click even while they are signed in. The Zid connection
+     * and the team itself are never on the list (see StoreSections).
+     */
+    public function permissions(Request $request, int $member): RedirectResponse
+    {
+        $store = $this->current->require();
+        $user = $this->member($store, $member);
+
+        $data = $request->validate($this->permissionRules());
+
+        $before = StoreSections::stored($user->pivot->permissions);
+        $after = StoreSections::clean($data['permissions']);
+
+        if ($after !== $before) {
+            $store->members()->updateExistingPivot($user->id, ['permissions' => json_encode($after)]);
+
+            Activity::log('team.member_permissions_changed', $user, [
+                'name' => $user->name,
+                'pages' => count($after),
+                'added' => array_values(array_diff($after, $before)),
+                'removed' => array_values(array_diff($before, $after)),
+            ]);
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('mojo.permissions_saved', ['name' => $user->name])]);
 
         return back();
     }
