@@ -92,6 +92,7 @@ export const common: typeof ar = {
     previous: 'Previous',
     next: 'Next',
     page: 'Page',
+    pageOf: 'Page {page} of {last}',
     showing: 'Showing {from}–{to} of {total}',
     confirmTitle: 'Are you sure?',
     confirmDelete: 'This action cannot be undone.',

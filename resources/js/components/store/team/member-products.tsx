@@ -1,6 +1,24 @@
 import { Link, router } from '@inertiajs/react';
-import { ArrowLeft, BarChart3, CalendarRange, ChevronDown, ImageOff, Lock, Package, PackageCheck, PackagePlus, Plus, Search, ShieldCheck, ShoppingBag, Wallet, X } from 'lucide-react';
-import { Fragment, useEffect, useState } from 'react';
+import {
+    ArrowDownWideNarrow,
+    ArrowLeft,
+    BarChart3,
+    CalendarRange,
+    ChevronDown,
+    ImageOff,
+    Lock,
+    Package,
+    PackageCheck,
+    PackagePlus,
+    Plus,
+    Search,
+    ShieldCheck,
+    ShoppingBag,
+    Wallet,
+    X,
+} from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Initials } from '@/components/admin/badges';
 import { ConfirmModal } from '@/components/admin/store-actions';
@@ -79,7 +97,7 @@ const UNCATEGORIZED = '__none__';
  * taken and cannot be added; the manager alone can move it.
  */
 export function MemberProducts(props: MemberProductsProps) {
-    const { t, tr, number, money, percent, date } = useI18n();
+    const { t, tr, number, money, percent, date, relative } = useI18n();
     const p = t.team.products;
     const showRevenue = useRevenueVisible();
     const { can } = useStoreAccess();
@@ -93,7 +111,13 @@ export function MemberProducts(props: MemberProductsProps) {
     const [busy, setBusy] = useState<Set<number>>(new Set());
     const [confirmRelease, setConfirmRelease] = useState(false);
     const [accessOpen, setAccessOpen] = useState(false);
+    // On a phone the checkboxes stay out of the way until "Select" is tapped.
+    const [selecting, setSelecting] = useState(false);
+    const listRef = useRef<HTMLElement>(null);
     const pages = asOwner ? props.pages : undefined;
+    // The manager's view has more columns, so its table needs a wider screen.
+    const cardsOnly = asOwner ? 'lg:hidden' : 'md:hidden';
+    const tableOnly = asOwner ? 'hidden lg:block' : 'hidden md:block';
 
     const visit = (next: { tab?: Tab; search?: string; category?: string; months?: Range; month?: string | null; sort?: Sort }, only?: string[]) => {
         const query = {
@@ -115,12 +139,31 @@ export function MemberProducts(props: MemberProductsProps) {
         );
     };
 
+    // The search waits for typing to pause; it then reads the filters as
+    // they are at that moment, not as they were when typing began.
+    const visitRef = useRef(visit);
+    useEffect(() => {
+        visitRef.current = visit;
+    });
     useEffect(() => {
         if (search === (props.filters.search ?? '')) return;
-        const timer = window.setTimeout(() => visit({ search }, ['products']), 350);
+        const timer = window.setTimeout(() => visitRef.current({ search }, ['products']), 350);
         return () => window.clearTimeout(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [search]);
+
+    // A new page or tab starts with nothing selected, and a page picked
+    // from the pager at the bottom opens at the top of the list.
+    const shownPage = useRef(props.products.current_page);
+    useEffect(() => {
+        setSelected(new Set());
+        setSelecting(false);
+
+        if (shownPage.current === props.products.current_page) return;
+        shownPage.current = props.products.current_page;
+        const list = listRef.current;
+        if (list && list.getBoundingClientRect().top < 0) list.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }, [props.products.current_page, tab]);
 
     /** A product the viewer can act on in this tab. */
     const actionable = (product: ProductRow) => tab === 'mine' || asOwner || product.assignee === null;
@@ -137,16 +180,23 @@ export function MemberProducts(props: MemberProductsProps) {
         });
 
     const send = (method: 'post' | 'delete', ids: number[], done?: () => void) => {
-        setBusy(new Set(ids));
+        setBusy((current) => new Set([...current, ...ids]));
         const options = {
             preserveScroll: true,
             preserveState: true,
-            onSuccess: () => setSelected(new Set()),
+            // Several quick taps each go through instead of cancelling the
+            // one before; only the list and the tab counts reload.
+            async: true,
+            only: ['products', 'counts'],
+            onSuccess: () => {
+                setSelected(new Set());
+                setSelecting(false);
+            },
             // Someone else may have taken the product a moment ago; the
             // list reloads with the errors, so it shows who holds it now.
             onError: (errors: Record<string, string>) => toast.error(Object.values(errors)[0]),
             onFinish: () => {
-                setBusy(new Set());
+                setBusy((current) => new Set([...current].filter((id) => !ids.includes(id))));
                 done?.();
             },
         };
@@ -166,6 +216,79 @@ export function MemberProducts(props: MemberProductsProps) {
             return next;
         });
     const columns = 5 + (showRevenue ? 1 : 0) + 2;
+    // The product page is its sales: it opens for those who may see them.
+    const linked = asOwner || can('catalog', 'performance', 'stagnant');
+
+    /**
+     * Just arrived: launched in the last two weeks on offer, or taken in
+     * the last day among one's own.
+     */
+    const isNew = (product: ProductRow) => {
+        const since = tab === 'mine' ? product.assigned_at : product.launched_at;
+        const span = tab === 'mine' ? DAY : 14 * DAY;
+
+        return since !== null && Date.now() - new Date(since).getTime() < span;
+    };
+
+    /** When it was taken (own list) or launched (on offer); recent ones read "3 days ago". */
+    const rowDate = (product: ProductRow, labelled = true) => {
+        const at = tab === 'mine' ? product.assigned_at : product.launched_at;
+        if (!at) return '—';
+        const when = Date.now() - new Date(at).getTime() < 7 * DAY ? relative(at) : date(at);
+
+        return labelled ? tr(tab === 'mine' ? p.addedToMine : p.launchedOn, { date: when }) : when;
+    };
+
+    /** The one thing to do with a product here: add it, remove it, or see who has it. */
+    const action = (product: ProductRow, compact: boolean) => {
+        const taken = product.assignee !== null && product.assignee.id !== member.id;
+        const working = busy.has(product.id);
+
+        if (tab === 'mine') {
+            return compact ? (
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground hover:text-danger active:text-danger size-11"
+                    disabled={working}
+                    onClick={() => release([product.id])}
+                    aria-label={tr(p.removeOne, { name: product.name })}
+                >
+                    {working ? <Spinner /> : <X className="size-5" />}
+                </Button>
+            ) : (
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-danger h-8" disabled={working} onClick={() => release([product.id])}>
+                    {working ? <Spinner /> : <X className="size-4" />}
+                    {p.release}
+                </Button>
+            );
+        }
+
+        if (taken && !asOwner) {
+            return (
+                <span className="bg-muted text-muted-foreground inline-flex max-w-32 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs whitespace-nowrap">
+                    <Lock className="size-3 shrink-0" />
+                    <span className="truncate">{tr(p.heldBy, { name: product.assignee?.name ?? '' })}</span>
+                </span>
+            );
+        }
+
+        const label = taken ? tr(p.moveFrom, { name: product.assignee?.name ?? '' }) : asOwner ? p.assign : compact ? p.claimShort : p.claim;
+
+        return (
+            <Button
+                variant="ghost"
+                className={cn('bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary font-semibold', compact ? 'h-11 min-w-11 rounded-xl px-3.5' : 'h-8 px-3')}
+                size="sm"
+                disabled={working}
+                onClick={() => add([product.id])}
+                title={taken ? label : undefined}
+            >
+                {working ? <Spinner /> : <Plus className="size-4" />}
+                <span className={cn(compact && taken && 'max-w-20 truncate')}>{label}</span>
+            </Button>
+        );
+    };
 
     return (
         <PageBody>
@@ -273,9 +396,9 @@ export function MemberProducts(props: MemberProductsProps) {
                 </FadeIn>
             )}
 
-            <section className="space-y-4">
+            <section ref={listRef} className={cn('scroll-mt-20 space-y-3', picked.length > 0 && 'pb-24 md:pb-0')}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="bg-muted inline-flex w-fit flex-wrap rounded-xl p-1">
+                    <div className="bg-muted grid w-full grid-cols-2 rounded-xl p-1 sm:inline-flex sm:w-fit">
                         {(
                             [
                                 { key: 'mine', label: p.tabs.mine, count: props.counts.mine, icon: PackageCheck },
@@ -288,24 +411,35 @@ export function MemberProducts(props: MemberProductsProps) {
                                 onClick={() => segment.key !== tab && visit({ tab: segment.key }, ['products', 'counts'])}
                                 aria-pressed={tab === segment.key}
                                 className={cn(
-                                    'flex cursor-pointer items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                                    'flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors sm:h-auto sm:py-1.5',
                                     tab === segment.key ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
                                 )}
                             >
-                                <segment.icon className="size-4" />
-                                {segment.label}
+                                <segment.icon className="size-4 shrink-0" />
+                                <span className="truncate">{segment.label}</span>
                                 <span className="num bg-background/70 rounded-md px-1.5 text-xs">{number(segment.count)}</span>
                             </button>
                         ))}
                     </div>
-                    <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-                        <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+                    <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
+                        {/* The manager has two filters, so on a phone the search takes its own row. */}
+                        <div className={cn('relative min-w-0 flex-1 sm:w-64 sm:flex-none', asOwner && 'basis-full sm:basis-auto')}>
                             <Search className="text-muted-foreground pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2" />
-                            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={p.searchPlaceholder} className="ps-9" />
+                            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={p.searchPlaceholder} className="h-10 ps-9 pe-9 sm:h-9" />
+                            {search && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearch('')}
+                                    aria-label={t.common.clear}
+                                    className="text-muted-foreground hover:text-foreground absolute end-1 top-1/2 flex size-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md"
+                                >
+                                    <X className="size-4" />
+                                </button>
+                            )}
                         </div>
                         {props.counts.categories.length > 0 && (
                             <Select value={props.filters.category ?? ALL} onValueChange={(v) => visit({ category: v === ALL ? '' : v }, ['products'])}>
-                                <SelectTrigger className="w-44">
+                                <SelectTrigger className={cn('h-10 sm:h-9 sm:w-44 sm:max-w-none', asOwner ? 'flex-1' : 'w-auto max-w-[42%]')} aria-label={p.allCategories}>
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -321,7 +455,7 @@ export function MemberProducts(props: MemberProductsProps) {
                         )}
                         {asOwner && (
                             <Select value={props.sort} onValueChange={(v) => visit({ sort: v as Sort }, ['products'])}>
-                                <SelectTrigger className="w-40" aria-label={p.sortBy}>
+                                <SelectTrigger className="h-10 flex-1 sm:h-9 sm:w-40 sm:flex-none" aria-label={p.sortBy}>
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -333,7 +467,31 @@ export function MemberProducts(props: MemberProductsProps) {
                     </div>
                 </div>
 
-                {tab === 'add' && !asOwner && <p className="text-muted-foreground text-xs">{p.heldHint}</p>}
+                {tab === 'add' && !asOwner && props.filters.search && <p className="text-muted-foreground text-xs">{p.heldHint}</p>}
+
+                {rows.length > 0 && (
+                    <div className="text-muted-foreground flex min-h-8 items-center justify-between gap-2 text-xs">
+                        <span className="flex items-center gap-1.5">
+                            <ArrowDownWideNarrow className="size-3.5" />
+                            <span className="num">{tr(p.resultCount, { count: number(props.products.total) })}</span>
+                            <span aria-hidden>·</span>
+                            <span>{props.sort === 'units' ? p.bestFirst : p.newestFirst}</span>
+                        </span>
+                        {pickable.length > 0 && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className={cn('text-foreground h-8', cardsOnly)}
+                                onClick={() => {
+                                    setSelecting((on) => !on);
+                                    setSelected(new Set());
+                                }}
+                            >
+                                {selecting ? p.cancelSelect : p.select}
+                            </Button>
+                        )}
+                    </div>
+                )}
 
                 <div className="bg-card overflow-hidden rounded-2xl border border-border/70 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
                     {rows.length === 0 ? (
@@ -355,150 +513,187 @@ export function MemberProducts(props: MemberProductsProps) {
                             <EmptyState icon={PackageCheck} title={p.emptyAdd} description={p.emptyAddHint} />
                         )
                     ) : (
-                        <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="w-10">
-                                            <Checkbox
-                                                checked={allPicked ? true : pickable.some((product) => selected.has(product.id)) ? 'indeterminate' : false}
-                                                disabled={pickable.length === 0}
-                                                onCheckedChange={(value) => setSelected(value === true ? new Set(pickable.map((product) => product.id)) : new Set())}
-                                                aria-label={t.team.form.selectAll}
-                                            />
-                                        </TableHead>
-                                        <TableHead>{p.columns.product}</TableHead>
-                                        {asOwner ? (
-                                            <>
-                                                <TableHead>{p.columns.class}</TableHead>
-                                                <TableHead className="text-end">{p.columns.units}</TableHead>
-                                                <TableHead className="text-end">{p.columns.orders}</TableHead>
-                                                {showRevenue && <TableHead className="text-end">{p.columns.revenue}</TableHead>}
-                                                <TableHead>{p.columns.trend}</TableHead>
-                                            </>
-                                        ) : (
-                                            <TableHead>{tab === 'mine' ? p.columns.addedAt : p.columns.launchedAt}</TableHead>
-                                        )}
-                                        <TableHead className="w-44" />
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
+                        <>
+                            {/* Phone: one card per product, its action always in reach. */}
+                            <ul className={cn('divide-border/70 divide-y', cardsOnly)}>
+                                <AnimatePresence initial={false}>
                                     {rows.map((product) => {
                                         const taken = product.assignee !== null && product.assignee.id !== member.id;
-                                        const working = busy.has(product.id);
-                                        const expanded = open.has(product.id);
-                                        // The product page is its sales: it opens for those who may see them.
-                                        const linked = asOwner || can('catalog', 'performance', 'stagnant');
+                                        const muted = taken && !asOwner;
+                                        const canPick = selecting && actionable(product);
 
                                         return (
-                                            <Fragment key={product.id}>
-                                                <TableRow className={cn(taken && !asOwner && 'opacity-60', expanded && 'border-b-0')}>
-                                                    <TableCell>
-                                                        {actionable(product) && (
-                                                            <Checkbox checked={selected.has(product.id)} onCheckedChange={(value) => toggle(product.id, value === true)} aria-label={product.name} />
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex items-center gap-3">
-                                                            <Thumb src={product.image_url} alt={product.name} />
-                                                            <div className="min-w-0">
-                                                                {linked ? (
-                                                                    <Link href={`/store/products/${product.id}`} className="line-clamp-1 max-w-72 font-medium hover:underline" dir="auto">
-                                                                        {product.name}
-                                                                    </Link>
-                                                                ) : (
-                                                                    <span className="line-clamp-1 max-w-72 font-medium" dir="auto">
-                                                                        {product.name}
-                                                                    </span>
-                                                                )}
-                                                                <p className="text-muted-foreground flex flex-wrap gap-x-2 text-xs">
-                                                                    {product.sku && <span dir="ltr">{product.sku}</span>}
-                                                                    {product.category && <span>{product.category}</span>}
-                                                                    {product.price !== null && <span className="num">{money(product.price)}</span>}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                    </TableCell>
-                                                    {asOwner ? (
-                                                        <>
-                                                            <TableCell>
-                                                                <PerformanceBadge value={product.performance} />
-                                                            </TableCell>
-                                                            <TableCell className="num text-end font-semibold">{number(product.units)}</TableCell>
-                                                            <TableCell className="num text-end">{number(product.orders)}</TableCell>
-                                                            {showRevenue && <TableCell className="num text-end">{money(product.revenue)}</TableCell>}
-                                                            <TableCell>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => toggleOpen(product.id)}
-                                                                    aria-expanded={expanded}
-                                                                    aria-label={expanded ? p.hideMonths : p.showMonths}
-                                                                    title={expanded ? p.hideMonths : p.showMonths}
-                                                                    className="hover:bg-muted flex cursor-pointer items-center gap-1.5 rounded-lg px-1.5 py-1"
-                                                                >
-                                                                    <Sparkline data={(product.history ?? []).map((point) => point.units)} width={84} height={26} />
-                                                                    <ChevronDown className={cn('text-muted-foreground size-4 transition-transform', expanded && 'rotate-180')} />
-                                                                </button>
-                                                            </TableCell>
-                                                        </>
-                                                    ) : (
-                                                        <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
-                                                            {date(tab === 'mine' ? product.assigned_at : product.launched_at)}
-                                                        </TableCell>
+                                            <motion.li
+                                                key={product.id}
+                                                layout="position"
+                                                exit={{ opacity: 0, height: 0 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <div
+                                                    className={cn('flex items-center gap-3 p-3', canPick && 'cursor-pointer', canPick && selected.has(product.id) && 'bg-primary/5')}
+                                                    onClick={canPick ? () => toggle(product.id, !selected.has(product.id)) : undefined}
+                                                >
+                                                    {canPick && (
+                                                        <Checkbox
+                                                            className="size-5 rounded-full"
+                                                            checked={selected.has(product.id)}
+                                                            onClick={(event) => event.stopPropagation()}
+                                                            onCheckedChange={(value) => toggle(product.id, value === true)}
+                                                            aria-label={product.name}
+                                                        />
                                                     )}
-                                                    <TableCell className="text-end">
-                                                        {tab === 'mine' ? (
-                                                            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-danger h-8" disabled={working} onClick={() => release([product.id])}>
-                                                                {working ? <Spinner /> : <X className="size-4" />}
-                                                                {p.release}
-                                                            </Button>
-                                                        ) : taken && !asOwner ? (
-                                                            <span className="bg-muted text-muted-foreground inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs whitespace-nowrap">
-                                                                <Lock className="size-3" />
-                                                                {tr(p.heldBy, { name: product.assignee?.name ?? '' })}
-                                                            </span>
-                                                        ) : (
-                                                            <Button variant="outline" size="sm" className="h-8" disabled={working} onClick={() => add([product.id])}>
-                                                                {working ? <Spinner /> : <Plus className="size-4" />}
-                                                                {taken ? tr(p.moveFrom, { name: product.assignee?.name ?? '' }) : asOwner ? p.assign : p.claim}
-                                                            </Button>
+                                                    <Thumb src={product.image_url} alt={product.name} className={cn('size-14 rounded-xl', muted && 'opacity-60')} />
+                                                    <div className={cn('min-w-0 flex-1 space-y-0.5', muted && 'opacity-60')}>
+                                                        <div className="flex items-start gap-1.5">
+                                                            <ProductName product={product} linked={linked && !selecting} className="line-clamp-2 text-sm leading-snug" />
+                                                            {isNew(product) && <NewBadge />}
+                                                        </div>
+                                                        <ProductMeta product={product} />
+                                                        <p className="text-muted-foreground text-xs">{rowDate(product)}</p>
+                                                        {asOwner && (
+                                                            <div className="flex items-center gap-2 pt-1 text-xs">
+                                                                <PerformanceBadge value={product.performance} />
+                                                                <span className="num font-semibold">{tr(p.unitsCell, { units: number(product.units) })}</span>
+                                                            </div>
                                                         )}
-                                                    </TableCell>
-                                                </TableRow>
-                                                {expanded && (
-                                                    <TableRow className="hover:bg-transparent">
-                                                        <TableCell colSpan={columns} className="bg-muted/30 pt-0 pb-4">
-                                                            <MonthCells history={product.history ?? []} />
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )}
-                                            </Fragment>
+                                                    </div>
+                                                    {!selecting && <div className="shrink-0">{action(product, true)}</div>}
+                                                </div>
+                                            </motion.li>
                                         );
                                     })}
-                                </TableBody>
-                            </Table>
-                        </div>
+                                </AnimatePresence>
+                            </ul>
+
+                            {/* Wider screens: the table. */}
+                            <div className={cn('overflow-x-auto', tableOnly)}>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-10">
+                                                <Checkbox
+                                                    checked={allPicked ? true : pickable.some((product) => selected.has(product.id)) ? 'indeterminate' : false}
+                                                    disabled={pickable.length === 0}
+                                                    onCheckedChange={(value) => setSelected(value === true ? new Set(pickable.map((product) => product.id)) : new Set())}
+                                                    aria-label={t.team.form.selectAll}
+                                                />
+                                            </TableHead>
+                                            <TableHead>{p.columns.product}</TableHead>
+                                            {asOwner ? (
+                                                <>
+                                                    <TableHead>{p.columns.class}</TableHead>
+                                                    <TableHead className="text-end">{p.columns.units}</TableHead>
+                                                    <TableHead className="text-end">{p.columns.orders}</TableHead>
+                                                    {showRevenue && <TableHead className="text-end">{p.columns.revenue}</TableHead>}
+                                                    <TableHead>{p.columns.trend}</TableHead>
+                                                </>
+                                            ) : (
+                                                <TableHead className="w-44">
+                                                    <span className="inline-flex items-center gap-1">
+                                                        {tab === 'mine' ? p.columns.addedAt : p.columns.launchedAt}
+                                                        <ArrowDownWideNarrow className="size-3.5" aria-label={p.newestFirst} />
+                                                    </span>
+                                                </TableHead>
+                                            )}
+                                            <TableHead className="w-44" />
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {rows.map((product) => {
+                                            const taken = product.assignee !== null && product.assignee.id !== member.id;
+                                            const expanded = open.has(product.id);
+
+                                            return (
+                                                <Fragment key={product.id}>
+                                                    <TableRow className={cn(taken && !asOwner && 'opacity-60', expanded && 'border-b-0')}>
+                                                        <TableCell>
+                                                            {actionable(product) && (
+                                                                <Checkbox checked={selected.has(product.id)} onCheckedChange={(value) => toggle(product.id, value === true)} aria-label={product.name} />
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="flex items-center gap-3">
+                                                                <Thumb src={product.image_url} alt={product.name} />
+                                                                <div className="min-w-0">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <ProductName product={product} linked={linked} className="line-clamp-1 max-w-72" />
+                                                                        {isNew(product) && <NewBadge />}
+                                                                    </div>
+                                                                    <ProductMeta product={product} />
+                                                                </div>
+                                                            </div>
+                                                        </TableCell>
+                                                        {asOwner ? (
+                                                            <>
+                                                                <TableCell>
+                                                                    <PerformanceBadge value={product.performance} />
+                                                                </TableCell>
+                                                                <TableCell className="num text-end font-semibold">{number(product.units)}</TableCell>
+                                                                <TableCell className="num text-end">{number(product.orders)}</TableCell>
+                                                                {showRevenue && <TableCell className="num text-end">{money(product.revenue)}</TableCell>}
+                                                                <TableCell>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => toggleOpen(product.id)}
+                                                                        aria-expanded={expanded}
+                                                                        aria-label={expanded ? p.hideMonths : p.showMonths}
+                                                                        title={expanded ? p.hideMonths : p.showMonths}
+                                                                        className="hover:bg-muted flex cursor-pointer items-center gap-1.5 rounded-lg px-1.5 py-1"
+                                                                    >
+                                                                        <Sparkline data={(product.history ?? []).map((point) => point.units)} width={84} height={26} />
+                                                                        <ChevronDown className={cn('text-muted-foreground size-4 transition-transform', expanded && 'rotate-180')} />
+                                                                    </button>
+                                                                </TableCell>
+                                                            </>
+                                                        ) : (
+                                                            <TableCell className="text-muted-foreground text-sm whitespace-nowrap">{rowDate(product, false)}</TableCell>
+                                                        )}
+                                                        <TableCell className="text-end">{action(product, false)}</TableCell>
+                                                    </TableRow>
+                                                    {expanded && (
+                                                        <TableRow className="hover:bg-transparent">
+                                                            <TableCell colSpan={columns} className="bg-muted/30 pt-0 pb-4">
+                                                                <MonthCells history={product.history ?? []} />
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )}
+                                                </Fragment>
+                                            );
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </>
                     )}
                 </div>
 
-                <Pagination meta={props.products} />
+                <Pagination meta={props.products} only={['products']} />
             </section>
 
             {picked.length > 0 && (
-                <div className="sticky bottom-4 z-20 mx-auto flex w-fit max-w-full flex-wrap items-center gap-2 rounded-2xl border bg-card px-3 py-2 shadow-lg">
-                    <span className="num px-1 text-sm font-medium">{tr(p.selected, { count: number(picked.length) })}</span>
+                <div className="bg-card fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-30 flex items-center gap-2 rounded-2xl border p-2 shadow-lg md:sticky md:inset-x-auto md:bottom-4 md:mx-auto md:w-fit md:max-w-full md:flex-wrap md:px-3">
+                    <span className="num hidden px-1 text-sm font-medium md:inline">{tr(p.selected, { count: number(picked.length) })}</span>
                     {tab === 'mine' ? (
-                        <Button variant="destructive" size="sm" onClick={() => setConfirmRelease(true)}>
+                        <Button variant="destructive" className="h-11 flex-1 md:h-8 md:flex-none" size="sm" onClick={() => setConfirmRelease(true)}>
                             <X className="size-4" />
                             {tr(p.releaseSelected, { count: number(picked.length) })}
                         </Button>
                     ) : (
-                        <Button size="sm" disabled={busy.size > 0} onClick={() => add(picked)}>
+                        <Button className="h-11 flex-1 md:h-8 md:flex-none" size="sm" disabled={busy.size > 0} onClick={() => add(picked)}>
                             {busy.size > 0 ? <Spinner /> : <Plus className="size-4" />}
                             {tr(asOwner ? p.assignSelected : p.claimSelected, { count: number(picked.length) })}
                         </Button>
                     )}
-                    <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+                    <Button
+                        variant="ghost"
+                        className="h-11 md:h-8"
+                        size="sm"
+                        onClick={() => {
+                            setSelected(new Set());
+                            setSelecting(false);
+                        }}
+                    >
                         {p.clearSelection}
                     </Button>
                 </div>
@@ -520,6 +715,38 @@ export function MemberProducts(props: MemberProductsProps) {
             />
         </PageBody>
     );
+}
+
+const DAY = 86_400_000;
+
+function ProductName({ product, linked, className }: { product: ProductRow; linked: boolean; className?: string }) {
+    return linked ? (
+        <Link href={`/store/products/${product.id}`} className={cn('min-w-0 font-medium hover:underline', className)} dir="auto">
+            {product.name}
+        </Link>
+    ) : (
+        <span className={cn('min-w-0 font-medium', className)} dir="auto">
+            {product.name}
+        </span>
+    );
+}
+
+function ProductMeta({ product }: { product: ProductRow }) {
+    const { money } = useI18n();
+
+    return (
+        <p className="text-muted-foreground flex flex-wrap gap-x-2 text-xs">
+            {product.sku && <span dir="ltr">{product.sku}</span>}
+            {product.category && <span>{product.category}</span>}
+            {product.price !== null && <span className="num">{money(product.price)}</span>}
+        </p>
+    );
+}
+
+function NewBadge() {
+    const { t } = useI18n();
+
+    return <span className="bg-success-soft text-success mt-0.5 shrink-0 rounded-full px-1.5 py-px text-[10px] leading-4 font-semibold">{t.team.products.newBadge}</span>;
 }
 
 /** A product's sales, one cell per month. */
@@ -545,13 +772,13 @@ function MonthCells({ history }: { history: MonthPoint[] }) {
     );
 }
 
-function Thumb({ src, alt }: { src: string | null; alt: string }) {
+function Thumb({ src, alt, className }: { src: string | null; alt: string; className?: string }) {
     const [broken, setBroken] = useState(false);
 
     return src && !broken ? (
-        <img src={src} alt={alt} loading="lazy" onError={() => setBroken(true)} className="bg-muted size-11 shrink-0 rounded-lg object-cover" />
+        <img src={src} alt={alt} loading="lazy" onError={() => setBroken(true)} className={cn('bg-muted size-11 shrink-0 rounded-lg object-cover', className)} />
     ) : (
-        <span className="bg-muted text-muted-foreground/60 flex size-11 shrink-0 items-center justify-center rounded-lg">
+        <span className={cn('bg-muted text-muted-foreground/60 flex size-11 shrink-0 items-center justify-center rounded-lg', className)}>
             <ImageOff className="size-4" />
         </span>
     );
