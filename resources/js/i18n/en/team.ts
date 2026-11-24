@@ -103,6 +103,7 @@ export const team: typeof ar = {
         top: 'Top seller',
         winners: '{count} winners',
         stagnant: '{count} stagnant',
+        sortBy: 'Sort by',
         attribution:
             'All of a product’s sales count for whoever holds it now, including what sold before they added it. Moving a product to another member moves its sales too.',
         ordersNote: 'An order with several products counts once per product, so orders here can add up to more than the store’s orders.',

@@ -42,6 +42,7 @@ import { TeamSecurityCard, TwoFactorMark } from '@/components/store/team/team-se
 import type { BoardMetric } from '@/components/store/team/team-report';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -67,6 +68,14 @@ type Props = {
 };
 
 type SortKey = 'units' | 'products' | 'avg_per_product' | 'avg_per_month' | 'orders' | 'revenue';
+const sortLabels = {
+    units: 'units',
+    products: 'products',
+    avg_per_product: 'avgPerProduct',
+    avg_per_month: 'avgPerMonth',
+    orders: 'orders',
+    revenue: 'revenue',
+} as const satisfies Record<SortKey, string>;
 type MemberAction = 'access' | 'edit' | 'password' | 'twoFactor' | 'disable' | 'enable' | 'remove';
 type DialogState = { kind: 'create' } | { kind: MemberAction; member: TeamMember } | null;
 
@@ -154,6 +163,15 @@ export default function Team({ months, month, availableMonths, sections, require
         },
     ];
 
+    // The phone's sort menu offers what the table's headings do.
+    const sortKeys: SortKey[] = ['units', 'products', 'avg_per_product', 'avg_per_month', 'orders', ...(showRevenue ? (['revenue'] as const) : [])];
+    // A card picks the member and brings their profile into view above.
+    const focusMember = (id: number) => {
+        setPicked(id);
+        const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        window.requestAnimationFrame(() => document.getElementById('member-focus')?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' }));
+    };
+
     const header = (key: SortKey, label: string) => (
         <TableHead className="text-end">
             <button
@@ -202,7 +220,7 @@ export default function Team({ months, month, availableMonths, sections, require
                 </SectionCard>
             ) : (
                 <>
-                    <Stagger className={cn('grid gap-4 sm:grid-cols-2', showRevenue ? 'xl:grid-cols-5' : 'xl:grid-cols-4')}>
+                    <Stagger className={cn('grid grid-cols-2 gap-3 sm:gap-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2', showRevenue ? 'xl:grid-cols-5' : 'xl:grid-cols-4')}>
                         <StaggerItem>
                             <StatCard
                                 label={m.kpi.members}
@@ -321,7 +339,7 @@ export default function Team({ months, month, availableMonths, sections, require
                             />
                         </FadeIn>
                         {focused && (
-                            <FadeIn delay={0.1} className="xl:col-span-3">
+                            <FadeIn delay={0.1} id="member-focus" className="scroll-mt-20 xl:col-span-3">
                                 <MemberFocus
                                     member={focused}
                                     members={report.members}
@@ -346,7 +364,117 @@ export default function Team({ months, month, availableMonths, sections, require
 
                     <FadeIn delay={0.05}>
                         <SectionCard title={m.compare.title} description={m.compare.hint} icon={Table2} flush bodyClassName="pb-1">
-                            <div className="overflow-x-auto">
+                            {/* Phone and tablet: one card per member, in the table's order. */}
+                            <div className="lg:hidden">
+                                <div className="flex items-center justify-between gap-3 border-y px-4 py-2.5">
+                                    <span className="text-muted-foreground text-xs">{m.compare.sortBy}</span>
+                                    <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
+                                        <SelectTrigger className="h-10 w-auto min-w-40" aria-label={m.compare.sortBy}>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent align="end">
+                                            {sortKeys.map((key) => (
+                                                <SelectItem key={key} value={key}>
+                                                    {m.compare[sortLabels[key]]}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <ul className="divide-border/70 divide-y">
+                                    {members.map((member, index) => (
+                                        <li
+                                            key={member.id}
+                                            onClick={() => focusMember(member.id)}
+                                            className={cn(
+                                                'cursor-pointer space-y-3 p-4 transition-colors',
+                                                member.id === focusId && 'bg-primary/5',
+                                                member.status === 'disabled' && 'opacity-70',
+                                            )}
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <span className="flex h-9 w-7 shrink-0 items-center justify-center">
+                                                    {member.id === leader ? (
+                                                        <span
+                                                            className="bg-gold-soft text-gold-foreground dark:text-gold inline-flex size-7 items-center justify-center rounded-full"
+                                                            title={m.compare.top}
+                                                        >
+                                                            <Trophy className="size-3.5" />
+                                                        </span>
+                                                    ) : (
+                                                        <span className="num text-muted-foreground text-sm">{index + 1}</span>
+                                                    )}
+                                                </span>
+                                                <Initials name={member.name} />
+                                                <div className="min-w-0 flex-1" onClick={(event) => event.stopPropagation()}>
+                                                    <Link href={`/store/team/${member.id}`} prefetch className="flex min-h-6 items-center gap-2 font-medium">
+                                                        <span className="truncate" dir="auto">
+                                                            {member.name}
+                                                        </span>
+                                                        <TwoFactorMark on={member.two_factor} onLabel={m.security.on} offLabel={m.security.off} />
+                                                        {member.status === 'disabled' && <UserStatusBadge status={member.status} />}
+                                                    </Link>
+                                                    <AccessChip granted={member.permissions} total={totalPages} onClick={() => setDialog({ kind: 'access', member })} />
+                                                </div>
+                                                <div className="-me-2 -mt-1 shrink-0" onClick={(event) => event.stopPropagation()}>
+                                                    <MemberMenu member={member} onPick={(kind) => setDialog({ kind, member })} className="size-11" />
+                                                </div>
+                                            </div>
+                                            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                                <CardFigure label={m.compare.units} value={number(member.units)} strong />
+                                                <CardFigure label={m.compare.products} value={number(member.products)} hint={tr(m.compare.selling, { count: number(member.selling) })} />
+                                                <CardFigure label={m.compare.avgPerMonth} value={number(member.avg_per_month, 1)} />
+                                                <CardFigure label={m.compare.orders} value={number(member.orders)} />
+                                                {showRevenue && <CardFigure label={m.compare.revenue} value={money(member.revenue)} />}
+                                            </dl>
+                                            <div>
+                                                <span className="text-muted-foreground mb-1 block text-xs">{m.compare.share}</span>
+                                                <Meter value={member.share} tone={member.id === leader ? 'gold' : 'navy'} height={6} />
+                                                <span className="text-muted-foreground mt-1 flex flex-wrap gap-x-2 text-xs">
+                                                    <span className="num">{percent(member.share, 1)}</span>
+                                                    {member.winners > 0 && <span className="text-success">{tr(m.compare.winners, { count: number(member.winners) })}</span>}
+                                                    {member.stagnant > 0 && <span className="text-danger">{tr(m.compare.stagnant, { count: number(member.stagnant) })}</span>}
+                                                </span>
+                                            </div>
+                                            <p className="flex min-w-0 items-baseline gap-1.5 text-xs">
+                                                <span className="text-muted-foreground shrink-0">{m.compare.best}:</span>
+                                                {member.best ? (
+                                                    <>
+                                                        <span className="truncate text-sm" dir="auto">
+                                                            {member.best.name}
+                                                        </span>
+                                                        <span className="num text-muted-foreground shrink-0">{tr(m.compare.bestUnits, { units: number(member.best.units) })}</span>
+                                                    </>
+                                                ) : (
+                                                    <span className="text-muted-foreground">{m.compare.noBest}</span>
+                                                )}
+                                            </p>
+                                        </li>
+                                    ))}
+                                    <li className="bg-muted/30 text-muted-foreground space-y-3 p-4">
+                                        <span className="flex items-center gap-3 text-sm font-medium">
+                                            <span className="bg-muted flex size-9 items-center justify-center rounded-xl">
+                                                <Package className="size-4" />
+                                            </span>
+                                            {m.compare.unassignedRow}
+                                        </span>
+                                        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                            <CardFigure label={m.compare.units} value={number(report.unassigned.units)} />
+                                            <CardFigure label={m.compare.products} value={number(report.unassigned.products)} />
+                                            <CardFigure label={m.compare.avgPerMonth} value={number(report.unassigned.avg_per_month, 1)} />
+                                            <CardFigure label={m.compare.orders} value={number(report.unassigned.orders)} />
+                                            {showRevenue && <CardFigure label={m.compare.revenue} value={money(report.unassigned.revenue)} />}
+                                        </dl>
+                                        <div>
+                                            <Meter value={report.unassigned.share} tone="neutral" height={6} />
+                                            <span className="num mt-1 block text-xs">{percent(report.unassigned.share, 1)}</span>
+                                        </div>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            {/* Wider screens: the full table. */}
+                            <div className="hidden overflow-x-auto lg:block">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
@@ -578,7 +706,7 @@ function AccessChip({ granted, total, onClick }: { granted: string[]; total: num
                 <button
                     type="button"
                     onClick={onClick}
-                    className="group/access text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus-visible:ring-ring mt-1 inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors outline-none focus-visible:ring-2"
+                    className="group/access text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus-visible:ring-ring mt-1 inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors outline-none focus-visible:ring-2 pointer-coarse:min-h-9 pointer-coarse:px-3"
                 >
                     <ShieldCheck className="size-3" />
                     <span className="num">{label}</span>
@@ -593,14 +721,14 @@ function AccessChip({ granted, total, onClick }: { granted: string[]; total: num
     );
 }
 
-function MemberMenu({ member, onPick }: { member: TeamMember; onPick: (kind: MemberAction) => void }) {
+function MemberMenu({ member, onPick, className }: { member: TeamMember; onPick: (kind: MemberAction) => void; className?: string }) {
     const { t } = useI18n();
     const a = t.team.actions;
 
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-8" aria-label={t.common.actions}>
+                <Button variant="ghost" size="icon" className={cn('size-8', className)} aria-label={t.common.actions}>
                     <MoreHorizontal className="size-4" />
                 </Button>
             </DropdownMenuTrigger>
@@ -647,5 +775,17 @@ function MemberMenu({ member, onPick }: { member: TeamMember; onPick: (kind: Mem
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
+    );
+}
+
+/** One figure on a member's phone card: its name above, the number below. */
+function CardFigure({ label, value, hint, strong }: { label: string; value: string; hint?: string; strong?: boolean }) {
+    return (
+        <div className="min-w-0">
+            <dt className="text-muted-foreground truncate text-xs">{label}</dt>
+            <dd className={cn('num', strong ? 'text-base font-semibold' : 'font-medium')}>{value}</dd>
+            {/* On its own line: beside a number it reads as one longer number. */}
+            {hint && <dd className="text-muted-foreground text-xs">{hint}</dd>}
+        </div>
     );
 }

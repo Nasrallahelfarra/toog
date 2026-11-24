@@ -28,7 +28,8 @@ export function SettingsShell({ children, actions }: { children: ReactNode; acti
         <PageBody>
             <PageHeader title={s.title} description={s.description} icon={Settings} actions={actions} />
 
-            <nav className="bg-muted/60 flex w-full gap-1 overflow-x-auto rounded-xl p-1 sm:w-fit">
+            {/* A 2×2 grid on a phone, so no tab hides off the edge. */}
+            <nav className={cn('bg-muted/60 grid w-full gap-1 rounded-xl p-1 sm:flex sm:w-fit', tabs.length > 2 ? 'grid-cols-2' : 'grid-cols-1')}>
                 {tabs.map((tab) => {
                     const path = url.split('?')[0];
                     const active = path === tab.href || path.startsWith(`${tab.href}/`);
@@ -40,7 +41,7 @@ export function SettingsShell({ children, actions }: { children: ReactNode; acti
                             prefetch
                             preserveScroll
                             className={cn(
-                                'relative flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors',
+                                'relative flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors sm:min-h-0 sm:justify-start',
                                 active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
                             )}
                         >

@@ -14,6 +14,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useI18n } from '@/hooks/use-i18n';
+import { cn } from '@/lib/utils';
+
+// The first column stays put while the rest scrolls sideways; its opaque
+// background matches the row's header, hover and selected tints.
+const stickyHead = 'sticky start-0 z-10 bg-[color:color-mix(in_oklab,var(--muted)_40%,var(--card))]';
+const stickyCell =
+    'sticky start-0 z-10 bg-card [tr:hover>&]:bg-[color:color-mix(in_oklab,var(--muted)_40%,var(--card))] [tr[data-state=selected]>&]:bg-muted';
 
 type Props = {
     logs: Paginated<ActivityRow>;
@@ -85,7 +92,7 @@ export default function AdminActivity({ logs, filters: initial, stores, users, a
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>{a.time}</TableHead>
+                                <TableHead className={stickyHead}>{a.time}</TableHead>
                                 <TableHead>{a.actor}</TableHead>
                                 <TableHead>{a.action}</TableHead>
                                 <TableHead>{a.store}</TableHead>
@@ -95,7 +102,7 @@ export default function AdminActivity({ logs, filters: initial, stores, users, a
                         <TableBody>
                             {logs.data.map((log) => (
                                 <TableRow key={log.id}>
-                                    <TableCell className="text-xs">
+                                    <TableCell className={cn('text-xs', stickyCell)}>
                                         <span className="block font-medium">{relative(log.created_at)}</span>
                                         <span className="text-muted-foreground">{dateTime(log.created_at)}</span>
                                     </TableCell>

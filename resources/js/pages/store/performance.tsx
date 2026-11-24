@@ -93,7 +93,8 @@ type Props = {
         unclassified: number;
         total: number;
         needs_reclassification: boolean;
-        weights: Record<string, number>;
+        /** Null for revenue while the admin keeps it hidden: the server blanks every revenue key. */
+        weights: Record<string, number | null>;
         thresholds: { winner: number; stagnant: number };
     };
     trend: { period: string; revenue: number; units: number; orders: number; returns: number }[];
@@ -243,6 +244,7 @@ function ClassificationSection({ summary, signals }: { summary: Props['summary']
     const showRevenue = useRevenueVisible();
     const p = t.performance;
     const total = Math.max(1, summary.total - summary.unclassified);
+    const criteria = Object.entries(summary.weights).filter((entry): entry is [string, number] => entry[1] !== null && (showRevenue || entry[0] !== 'revenue'));
     const [signal, setSignal] = useState<SignalKey | null>(null);
 
     const open = (key: SignalKey) => {
@@ -260,8 +262,8 @@ function ClassificationSection({ summary, signals }: { summary: Props['summary']
                 stats={signal ? signals?.[signal] : undefined}
                 onClose={() => setSignal(null)}
             />
-            <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 lg:col-span-3">
-                {summary.needs_reclassification && <p className="rounded-xl bg-warning/10 p-4 text-sm leading-7 sm:col-span-2 xl:col-span-4">{t.stagnant.refreshNeeded}</p>}
+            <Stagger className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4 lg:col-span-3">
+                {summary.needs_reclassification && <p className="col-span-2 rounded-xl bg-warning/10 p-4 text-sm leading-7 xl:col-span-4">{t.stagnant.refreshNeeded}</p>}
                 {(['winner', 'average', 'at_risk', 'stagnant'] as ClassKey[]).map((key) => {
                     const meta = classMeta[key];
                     const cls = summary.classes[key];
@@ -295,12 +297,12 @@ function ClassificationSection({ summary, signals }: { summary: Props['summary']
                 <SectionCard title={p.criteriaTitle} icon={Info} className="h-full">
                     <p className="text-muted-foreground mb-3 text-xs leading-relaxed">{p.criteriaHint}</p>
                     <div className="-mx-2 space-y-0.5">
-                        {Object.entries(summary.weights).map(([key, weight], i) => (
+                        {/* Revenue's weight is blanked with the rest of revenue when it is hidden, so that row goes too. */}
+                        {criteria.map(([key, weight], i) => (
                             <button
                                 key={key}
                                 type="button"
                                 onClick={() => open(key as SignalKey)}
-                                disabled={!showRevenue && key === 'revenue'}
                                 aria-haspopup="dialog"
                                 className="group disabled:pointer-events-none hover:bg-muted/60 focus-visible:ring-ring block w-full rounded-lg px-2 py-1.5 text-start transition-colors focus-visible:ring-2 focus-visible:outline-none"
                             >
@@ -360,7 +362,7 @@ function RevenueTrend({ trend }: { trend: Props['trend'] }) {
             }
             className="h-full"
         >
-            <div className="h-72" dir="ltr">
+            <div className="h-56 sm:h-72" dir="ltr">
                 <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={data} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
                         <defs>
@@ -453,7 +455,7 @@ function UnitsTrend({ trend }: { trend: Props['trend'] }) {
                     </div>
                 ))}
             </div>
-            <div className="h-64" dir="ltr" role="img" aria-label={tr(p.unitsChartLabel, { total: number(totalUnits) })}>
+            <div className="h-56 sm:h-64" dir="ltr" role="img" aria-label={tr(p.unitsChartLabel, { total: number(totalUnits) })}>
                 <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={data} margin={{ top: 18, right: 4, left: 4, bottom: 0 }}>
                         <CartesianGrid {...axes.grid} />
@@ -542,14 +544,14 @@ function CategoryBreakdown({ categories }: { categories: Props['categories'] }) 
                                 return <div key={k} className={cn('h-full transition-all duration-700', tone)} style={{ width: `${width}%` }} />;
                             })}
                         </div>
-                        <div className="text-muted-foreground flex flex-wrap gap-3 text-[11px]">
+                        <div className="text-muted-foreground -ms-1 flex flex-wrap items-center gap-x-1 text-[11px]">
                             {CLASS_LINKS.map(({ key, count, tone }) => {
                                 const n = c[count];
                                 const text = `${t.common.performanceClass[key]} ${number(n)}`;
                                 // No products, or no category to filter by (neither page can): plain text.
                                 const category = c.category;
-                                if (!n || !category) return <span key={key} className={cn(tone, !n && 'opacity-60')}>{text}</span>;
-                                const className = cn(tone, 'cursor-pointer rounded underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none');
+                                if (!n || !category) return <span key={key} className={cn(tone, 'px-1', !n && 'opacity-60')}>{text}</span>;
+                                const className = cn(tone, 'inline-flex min-h-8 cursor-pointer items-center rounded px-1 underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none');
                                 const title = tr(p.categoryClassLink, { class: t.common.performanceClass[key], category });
 
                                 // Stagnant and at-risk products open their recovery page; the rest filter the table below.
@@ -585,7 +587,7 @@ function SuccessProfile({ profile }: { profile: Props['profile'] }) {
             <Tabs defaultValue="colors">
                 <TabsList className="h-auto w-full flex-wrap justify-start">
                     {groups.map((g) => (
-                        <TabsTrigger key={g} value={g} className="flex-none">
+                        <TabsTrigger key={g} value={g} className="flex-none py-1.5">
                             {p.groups[g]}
                         </TabsTrigger>
                     ))}
@@ -834,6 +836,66 @@ function ProductsSection({ products, filters, categoryNames }: Pick<Props, 'prod
             {products.data.length === 0 ? (
                 <EmptyState icon={PackageSearch} title={t.common.noResults} className="py-10" />
             ) : (
+                <>
+                {/* Phone: one card per product; a tap opens the same drawer as a table row. */}
+                <ul className="divide-border/70 divide-y border-t md:hidden">
+                    {products.data.map((product) => {
+                        const quiet = product.no_sales_days ?? 0;
+
+                        return (
+                            <li key={product.id}>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelected(product)}
+                                    aria-haspopup="dialog"
+                                    className="hover:bg-muted/40 active:bg-muted/60 focus-visible:ring-ring flex w-full cursor-pointer items-start gap-3 px-4 py-3 text-start transition-colors focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
+                                >
+                                    <ProductThumb product={product} className="size-14 rounded-xl" />
+                                    <span className="min-w-0 flex-1 space-y-1.5">
+                                        <span className="line-clamp-2 text-sm leading-snug font-medium" dir="auto">
+                                            {product.name}
+                                        </span>
+                                        <span className="flex items-center gap-2">
+                                            <PerformanceBadge value={product.performance} />
+                                            <span className="text-muted-foreground truncate text-xs">{product.category ?? p.uncategorized}</span>
+                                        </span>
+                                        <span className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                                            <span>
+                                                {p.columns.units} <span className="num text-foreground font-semibold">{number(product.units_sold)}</span>
+                                            </span>
+                                            {showRevenue && (
+                                                <span>
+                                                    {p.columns.revenue} <span className="num text-foreground font-semibold">{money(product.revenue)}</span>
+                                                </span>
+                                            )}
+                                            {product.no_sales_days !== null && (
+                                                <span>
+                                                    {product.no_sales_days === 0 ? (
+                                                        p.columns.quietNone
+                                                    ) : (
+                                                        <>
+                                                            {p.columns.quiet}{' '}
+                                                            <span className={cn('num font-semibold', quiet >= 90 ? 'text-danger' : quiet >= 60 ? 'text-warning' : 'text-foreground')}>
+                                                                {tr(p.days, { n: number(product.no_sales_days) })}
+                                                            </span>
+                                                        </>
+                                                    )}
+                                                </span>
+                                            )}
+                                            {product.return_rate >= 15 && (
+                                                <span className="text-danger">
+                                                    {p.columns.returnRate} <span className="num font-semibold">{percent(product.return_rate, 1)}</span>
+                                                </span>
+                                            )}
+                                        </span>
+                                    </span>
+                                    <ChevronRight className="text-muted-foreground/60 mt-1 size-4 shrink-0 rtl:rotate-180" />
+                                </button>
+                            </li>
+                        );
+                    })}
+                </ul>
+                <div className="hidden md:block">
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -881,6 +943,8 @@ function ProductsSection({ products, filters, categoryNames }: Pick<Props, 'prod
                         ))}
                     </TableBody>
                 </Table>
+                </div>
+                </>
             )}
 
             <Pagination meta={products} className="border-t px-5 py-3" />
@@ -890,17 +954,17 @@ function ProductsSection({ products, filters, categoryNames }: Pick<Props, 'prod
     );
 }
 
-function ProductThumb({ product }: { product: Product }) {
+function ProductThumb({ product, className }: { product: Product; className?: string }) {
     const { hex } = useVocabulary();
     const colors = product.features.colors ?? [];
 
     if (product.image_url) {
-        return <img src={product.image_url} alt="" className="size-10 shrink-0 rounded-lg object-cover ring-1 ring-black/5" loading="lazy" />;
+        return <img src={product.image_url} alt="" className={cn('size-10 shrink-0 rounded-lg object-cover ring-1 ring-black/5', className)} loading="lazy" />;
     }
 
     return (
         <div
-            className="size-10 shrink-0 rounded-lg ring-1 ring-black/5"
+            className={cn('size-10 shrink-0 rounded-lg ring-1 ring-black/5', className)}
             style={{
                 background: colors.length
                     ? `linear-gradient(135deg, ${hex(colors[0])} 0%, ${hex(colors[1] ?? colors[0])} 100%)`

@@ -58,6 +58,12 @@ export const stagnant: typeof ar = {
         completed: 'Recommendation ready',
         failed: 'Recommendation failed',
     },
+    recoveryAction: {
+        none: 'Get advice',
+        pending: 'Preparing',
+        completed: 'Read advice',
+        failed: 'Try again',
+    },
     sending: 'Sending your request',
     sendingHint: 'Checking the request status before starting the review.',
     checkStatus: 'Check request status',

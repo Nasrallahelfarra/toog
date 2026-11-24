@@ -75,7 +75,7 @@ export function TeamLeaderboard({
                         aria-selected={metric === key}
                         onClick={() => onMetric(key)}
                         className={cn(
-                            'focus-visible:ring-ring cursor-pointer rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none',
+                            'focus-visible:ring-ring pointer-coarse:min-h-9 cursor-pointer rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none',
                             metric === key ? 'border-primary bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground border-border',
                         )}
                     >

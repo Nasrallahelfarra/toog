@@ -30,10 +30,12 @@ type Row = {
 const blank = (): Row => ({ name: '', category: '', price: '', material: null, colors: [], pattern: null, style: null, season: null, image: null });
 
 export default function BatchCreate({ categories }: { categories: string[] }) {
-    const { t } = useI18n();
+    const { t, tr } = useI18n();
     const { vocabulary } = useVocabulary();
     const b = t.evaluation.batch;
     const f = t.evaluation.form;
+    const fields = t.evaluation.mods.fields;
+    const removeRow = (i: number) => form.setData('rows', form.data.rows.filter((_, j) => j !== i));
     const [csv, setCsv] = useState('');
     const [showCsv, setShowCsv] = useState(false);
 
@@ -94,7 +96,8 @@ export default function BatchCreate({ categories }: { categories: string[] }) {
                 }
             />
 
-            <form onSubmit={submit} className="space-y-6">
+            {/* Phones: bottom padding so the fixed action bar never covers the last product. */}
+            <form onSubmit={submit} className="space-y-6 pb-24 md:pb-0">
                 <SectionCard>
                     <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
                         <div className="grid gap-2">
@@ -150,10 +153,25 @@ export default function BatchCreate({ categories }: { categories: string[] }) {
                                 exit={{ opacity: 0, scale: 0.97 }}
                                 className="bg-card grid gap-4 rounded-2xl border border-border/70 p-4 md:grid-cols-[96px_1fr]"
                             >
+                                {/* Phone: a numbered header with delete in reach at the inline end. */}
+                                <div className="-mt-1 -mb-2 flex items-center justify-between gap-2 sm:hidden">
+                                    <h3 className="text-sm font-semibold">{tr(b.rowN, { n: i + 1 })}</h3>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="-me-2 size-11"
+                                        disabled={form.data.rows.length <= 1}
+                                        onClick={() => removeRow(i)}
+                                        aria-label={b.removeRow}
+                                    >
+                                        <Trash2 className="text-danger size-4" />
+                                    </Button>
+                                </div>
                                 <ImageDrop compact file={row.image} onChange={(image) => update(i, { image })} className="w-24" />
                                 <div className="space-y-3">
-                                    <div className="grid gap-3 sm:grid-cols-[2fr_1fr_1fr_auto]">
-                                        <div className="grid gap-1">
+                                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-[2fr_1fr_1fr_auto]">
+                                        <div className="col-span-2 grid gap-1 sm:col-span-1">
                                             <Input value={row.name} onChange={(e) => update(i, { name: e.target.value })} placeholder={f.name} className="h-9" />
                                             <InputError message={errors[`rows.${i}.name`]} />
                                         </div>
@@ -163,18 +181,37 @@ export default function BatchCreate({ categories }: { categories: string[] }) {
                                             type="button"
                                             variant="ghost"
                                             size="icon"
+                                            className="hidden sm:inline-flex"
                                             disabled={form.data.rows.length <= 1}
-                                            onClick={() => form.setData('rows', form.data.rows.filter((_, j) => j !== i))}
+                                            onClick={() => removeRow(i)}
                                             aria-label={b.removeRow}
                                         >
                                             <Trash2 className="text-danger size-4" />
                                         </Button>
                                     </div>
-                                    <div className="grid gap-2 sm:grid-cols-4">
-                                        <AttributeSelect group="materials" value={row.material} onChange={(material) => update(i, { material })} className="h-9" />
-                                        <AttributeSelect group="patterns" value={row.pattern} onChange={(pattern) => update(i, { pattern })} className="h-9" />
-                                        <AttributeSelect group="styles" value={row.style} onChange={(style) => update(i, { style })} className="h-9" />
-                                        <AttributeSelect group="seasons" value={row.season} onChange={(season) => update(i, { season })} className="h-9" />
+                                    {/* Labels show on phones only; on wider screens they stay for screen readers. */}
+                                    <div className="grid grid-cols-2 gap-x-2 gap-y-3 sm:grid-cols-4 sm:gap-2">
+                                        {(
+                                            [
+                                                ['materials', 'material', fields.material],
+                                                ['patterns', 'pattern', fields.pattern],
+                                                ['styles', 'style', fields.style],
+                                                ['seasons', 'season', fields.season],
+                                            ] as const
+                                        ).map(([group, key, label]) => (
+                                            <div key={group} className="grid min-w-0 gap-1">
+                                                <Label htmlFor={`row-${i}-${key}`} className="text-muted-foreground text-xs sm:sr-only">
+                                                    {label}
+                                                </Label>
+                                                <AttributeSelect
+                                                    id={`row-${i}-${key}`}
+                                                    group={group}
+                                                    value={row[key]}
+                                                    onChange={(value) => update(i, { [key]: value })}
+                                                    className="h-10 sm:h-9"
+                                                />
+                                            </div>
+                                        ))}
                                     </div>
                                     <ColorPicker size="sm" value={row.colors} onChange={(colors) => update(i, { colors })} />
                                 </div>
@@ -184,12 +221,13 @@ export default function BatchCreate({ categories }: { categories: string[] }) {
                     <InputError message={form.errors.rows} />
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <Button type="button" variant="outline" onClick={() => form.setData('rows', [...form.data.rows, blank()])} disabled={form.data.rows.length >= 30}>
+                {/* Phones: a floating bar keeps add and submit in thumb reach; inline from md up. */}
+                <div className="bg-card fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-30 flex items-center gap-2 rounded-2xl border p-2 shadow-lg md:static md:flex-wrap md:justify-between md:gap-3 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none">
+                    <Button type="button" variant="outline" className="h-11 flex-1 md:h-9 md:flex-none" onClick={() => form.setData('rows', [...form.data.rows, blank()])} disabled={form.data.rows.length >= 30}>
                         <Plus className="size-4" />
                         {b.addRow}
                     </Button>
-                    <Button type="submit" size="lg" className="h-11 min-w-48" disabled={form.processing}>
+                    <Button type="submit" size="lg" className="h-11 flex-1 md:min-w-48 md:flex-none" disabled={form.processing}>
                         {form.processing ? <Spinner /> : <Sparkles className="size-4" />}
                         {b.submit}
                     </Button>

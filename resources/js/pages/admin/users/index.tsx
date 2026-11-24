@@ -30,6 +30,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useI18n } from '@/hooks/use-i18n';
 import { cn } from '@/lib/utils';
 
+// The first column stays put while the rest scrolls sideways; its opaque
+// background matches the row's header, hover and selected tints.
+const stickyHead = 'sticky start-0 z-10 bg-[color:color-mix(in_oklab,var(--muted)_40%,var(--card))]';
+const stickyCell =
+    'sticky start-0 z-10 bg-card [tr:hover>&]:bg-[color:color-mix(in_oklab,var(--muted)_40%,var(--card))] [tr[data-state=selected]>&]:bg-muted';
+
 type Props = {
     users: Paginated<AdminUserRow>;
     filters: { search?: string; role?: string; status?: string };
@@ -125,7 +131,7 @@ export default function AdminUsers({ users, filters: initial, counts, stores, me
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>{u.user}</TableHead>
+                                <TableHead className={stickyHead}>{u.user}</TableHead>
                                 <TableHead>{u.role}</TableHead>
                                 <TableHead>{u.stores}</TableHead>
                                 <TableHead>{u.status}</TableHead>
@@ -136,16 +142,16 @@ export default function AdminUsers({ users, filters: initial, counts, stores, me
                         <TableBody>
                             {users.data.map((user) => (
                                 <TableRow key={user.id} className={cn(user.status === 'disabled' && 'opacity-75')}>
-                                    <TableCell>
+                                    <TableCell className={stickyCell}>
                                         <div className="flex items-center gap-3">
                                             <Initials name={user.name} />
                                             <div className="min-w-0">
                                                 <p className="flex items-center gap-2 font-medium">
-                                                    <span className="max-w-52 truncate">{user.name}</span>
+                                                    <span className="max-w-32 truncate sm:max-w-52">{user.name}</span>
                                                     <TwoFactorMark on={Boolean(user.two_factor)} onLabel={u.twoFactorOn} offLabel={t.team.security.off} />
                                                     {user.id === me && <span className="bg-primary/10 text-primary rounded-md px-1.5 text-[11px]">{u.you}</span>}
                                                 </p>
-                                                <p className="text-muted-foreground max-w-60 truncate text-xs" dir="ltr">
+                                                <p className="text-muted-foreground max-w-40 truncate text-xs sm:max-w-60" dir="ltr">
                                                     {user.email}
                                                 </p>
                                             </div>

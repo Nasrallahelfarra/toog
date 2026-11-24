@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { Eye, LogIn, MoreHorizontal, PauseCircle, PlayCircle, Plus, Search, Store, Trash2 } from 'lucide-react';
+import { ChevronRight, Eye, LogIn, MoreHorizontal, PauseCircle, PlayCircle, Plus, Search, Store, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { ConnectionBadge, Initials, StoreStatusBadge } from '@/components/admin/badges';
 import { FilterSelect } from '@/components/admin/filter-select';
@@ -96,83 +96,113 @@ export default function AdminStores({ stores, filters: initial, counts }: Props)
                 {stores.data.length === 0 ? (
                     <EmptyState icon={Store} title={s.empty} description={s.emptyHint} />
                 ) : (
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>{s.store}</TableHead>
-                                <TableHead>{s.owner}</TableHead>
-                                <TableHead>{s.status}</TableHead>
-                                <TableHead>{s.connection}</TableHead>
-                                <TableHead className="text-center">{s.products}</TableHead>
-                                <TableHead className="text-center">{s.evaluations}</TableHead>
-                                <TableHead className="min-w-44">{s.aiSpend}</TableHead>
-                                <TableHead>{s.lastSync}</TableHead>
-                                <TableHead className="w-12" />
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
+                    <>
+                        {/* Phones: one tappable row per store that opens its page. */}
+                        <ul className="divide-border/70 divide-y md:hidden">
                             {stores.data.map((store) => (
-                                <TableRow key={store.id}>
-                                    <TableCell>
-                                        <Link href={`/admin/stores/${store.id}`} className="group flex items-center gap-3">
-                                            <Initials name={store.name} />
-                                            <span className="min-w-0">
-                                                <span className="block max-w-56 truncate font-medium group-hover:underline">{store.name}</span>
-                                                <span className="text-muted-foreground block max-w-56 truncate text-xs" dir="ltr">
-                                                    {store.domain ?? t.admin.platforms[store.platform as keyof typeof t.admin.platforms] ?? store.platform}
-                                                </span>
+                                <li key={store.id}>
+                                    <Link
+                                        href={`/admin/stores/${store.id}`}
+                                        className="hover:bg-muted/40 active:bg-muted/60 flex min-h-16 items-center gap-3 px-4 py-3 transition-colors"
+                                    >
+                                        <Initials name={store.name} />
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block truncate font-medium">{store.name}</span>
+                                            <span
+                                                className={cn(
+                                                    'text-muted-foreground block truncate text-xs',
+                                                    store.owner?.status === 'disabled' && 'line-through',
+                                                )}
+                                            >
+                                                {store.owner ? store.owner.name : s.noOwner}
                                             </span>
-                                        </Link>
-                                    </TableCell>
-                                    <TableCell>
-                                        {store.owner ? (
-                                            <span className="block">
-                                                <span className={cn('block text-sm', store.owner.status === 'disabled' && 'text-muted-foreground line-through')}>
-                                                    {store.owner.name}
-                                                </span>
-                                                <span className="text-muted-foreground block text-xs" dir="ltr">
-                                                    {store.owner.email}
-                                                </span>
-                                            </span>
-                                        ) : (
-                                            <span className="text-muted-foreground text-xs">{s.noOwner}</span>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
+                                        </span>
                                         <StoreStatusBadge status={store.status} />
-                                    </TableCell>
-                                    <TableCell>
-                                        <ConnectionBadge status={store.connection_status} />
-                                    </TableCell>
-                                    <TableCell className="num text-center">{number(store.products_count)}</TableCell>
-                                    <TableCell className="num text-center">{number(store.evaluations_count)}</TableCell>
-                                    <TableCell>
-                                        <div className="space-y-1">
-                                            <div className="flex items-baseline justify-between gap-2 text-xs">
-                                                <span className="num font-semibold">{usd(store.month_cost)}</span>
-                                                <span className="text-muted-foreground">
-                                                    {store.ai_monthly_budget ? `/ ${usd(store.ai_monthly_budget, 0)}` : t.admin.overview.noBudget}
-                                                </span>
-                                            </div>
-                                            {store.budget_usage !== null && (
-                                                <Meter
-                                                    value={store.budget_usage}
-                                                    height={5}
-                                                    tone={store.budget_usage >= 100 ? 'danger' : store.budget_usage >= 80 ? 'warning' : 'navy'}
-                                                />
-                                            )}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground text-xs" title={date(store.last_synced_at)}>
-                                        {store.last_synced_at ? relative(store.last_synced_at) : t.common.never}
-                                    </TableCell>
-                                    <TableCell>
-                                        <RowActions store={store} />
-                                    </TableCell>
-                                </TableRow>
+                                        <ChevronRight className="text-muted-foreground size-4 shrink-0 rtl:rotate-180" />
+                                    </Link>
+                                </li>
                             ))}
-                        </TableBody>
-                    </Table>
+                        </ul>
+                        <div className="hidden md:block">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>{s.store}</TableHead>
+                                        <TableHead>{s.owner}</TableHead>
+                                        <TableHead>{s.status}</TableHead>
+                                        <TableHead>{s.connection}</TableHead>
+                                        <TableHead className="text-center">{s.products}</TableHead>
+                                        <TableHead className="text-center">{s.evaluations}</TableHead>
+                                        <TableHead className="min-w-44">{s.aiSpend}</TableHead>
+                                        <TableHead>{s.lastSync}</TableHead>
+                                        <TableHead className="w-12" />
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {stores.data.map((store) => (
+                                        <TableRow key={store.id}>
+                                            <TableCell>
+                                                <Link href={`/admin/stores/${store.id}`} className="group flex items-center gap-3">
+                                                    <Initials name={store.name} />
+                                                    <span className="min-w-0">
+                                                        <span className="block max-w-56 truncate font-medium group-hover:underline">{store.name}</span>
+                                                        <span className="text-muted-foreground block max-w-56 truncate text-xs" dir="ltr">
+                                                            {store.domain ?? t.admin.platforms[store.platform as keyof typeof t.admin.platforms] ?? store.platform}
+                                                        </span>
+                                                    </span>
+                                                </Link>
+                                            </TableCell>
+                                            <TableCell>
+                                                {store.owner ? (
+                                                    <span className="block">
+                                                        <span className={cn('block text-sm', store.owner.status === 'disabled' && 'text-muted-foreground line-through')}>
+                                                            {store.owner.name}
+                                                        </span>
+                                                        <span className="text-muted-foreground block text-xs" dir="ltr">
+                                                            {store.owner.email}
+                                                        </span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-muted-foreground text-xs">{s.noOwner}</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                <StoreStatusBadge status={store.status} />
+                                            </TableCell>
+                                            <TableCell>
+                                                <ConnectionBadge status={store.connection_status} />
+                                            </TableCell>
+                                            <TableCell className="num text-center">{number(store.products_count)}</TableCell>
+                                            <TableCell className="num text-center">{number(store.evaluations_count)}</TableCell>
+                                            <TableCell>
+                                                <div className="space-y-1">
+                                                    <div className="flex items-baseline justify-between gap-2 text-xs">
+                                                        <span className="num font-semibold">{usd(store.month_cost)}</span>
+                                                        <span className="text-muted-foreground">
+                                                            {store.ai_monthly_budget ? `/ ${usd(store.ai_monthly_budget, 0)}` : t.admin.overview.noBudget}
+                                                        </span>
+                                                    </div>
+                                                    {store.budget_usage !== null && (
+                                                        <Meter
+                                                            value={store.budget_usage}
+                                                            height={5}
+                                                            tone={store.budget_usage >= 100 ? 'danger' : store.budget_usage >= 80 ? 'warning' : 'navy'}
+                                                        />
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-muted-foreground text-xs" title={date(store.last_synced_at)}>
+                                                {store.last_synced_at ? relative(store.last_synced_at) : t.common.never}
+                                            </TableCell>
+                                            <TableCell>
+                                                <RowActions store={store} />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </>
                 )}
             </FadeIn>
 

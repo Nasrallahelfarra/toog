@@ -321,11 +321,11 @@ function EventCard({
                         {event.ends_on !== event.starts_on && ` – ${date(event.ends_on, { day: 'numeric', month: 'short' })}`}
                     </p>
                 </div>
-                <div className="flex shrink-0 gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
-                    <Button variant="ghost" size="icon" className="size-7" onClick={onEdit} aria-label={s.editEvent}>
+                <div className="flex shrink-0 gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100 pointer-coarse:opacity-100">
+                    <Button variant="ghost" size="icon" className="size-7 pointer-coarse:size-9" onClick={onEdit} aria-label={s.editEvent}>
                         <Pencil className="size-3.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="text-danger hover:text-danger size-7" onClick={onDelete} aria-label={s.deleteEvent}>
+                    <Button variant="ghost" size="icon" className="text-danger hover:text-danger size-7 pointer-coarse:size-9" onClick={onDelete} aria-label={s.deleteEvent}>
                         <Trash2 className="size-3.5" />
                     </Button>
                 </div>
