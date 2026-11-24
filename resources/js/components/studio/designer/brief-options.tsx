@@ -164,7 +164,7 @@ function RemoveButton({
             aria-label={label}
             title={label}
             onClick={onClick}
-            className="absolute -end-1.5 -top-1.5 z-10 flex size-[18px] cursor-pointer items-center justify-center rounded-full border bg-card text-muted-foreground opacity-0 shadow-sm transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:text-foreground pointer-coarse:opacity-100"
+            className="absolute -end-1.5 -top-1.5 z-10 flex size-[18px] cursor-pointer items-center justify-center rounded-full border bg-card text-muted-foreground opacity-0 shadow-sm transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:text-foreground pointer-coarse:-end-2.5 pointer-coarse:-top-2.5 pointer-coarse:size-7 pointer-coarse:opacity-100"
         >
             <X className="size-2.5" />
         </button>

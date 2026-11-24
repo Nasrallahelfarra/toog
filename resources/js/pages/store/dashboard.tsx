@@ -185,7 +185,7 @@ export default function StoreDashboard(props: Props) {
                 <>
                     {props.connection && <ConnectionStrip connection={props.connection} />}
 
-                    <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <Stagger className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2">
                         {can('evaluations') && (
                         <StaggerItem>
                             <StatCard

@@ -171,7 +171,7 @@ export default function Catalog(props: Props) {
                 </SectionCard>
             ) : (
                 <>
-                    <Stagger className={cn('grid gap-4 sm:grid-cols-2', showRevenue ? 'xl:grid-cols-4' : 'xl:grid-cols-3')}>
+                    <Stagger className={cn('grid grid-cols-2 gap-3 sm:gap-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2', showRevenue ? 'xl:grid-cols-4' : 'xl:grid-cols-3')}>
                         {showRevenue && (
                             <StaggerItem>
                                 <StatCard
@@ -411,7 +411,7 @@ function CategoryGrid({ categories, onOpen }: { categories: Category[]; onOpen: 
                     <p className="text-muted-foreground text-sm">{c.categoriesHint}</p>
                 </div>
             </div>
-            <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <Stagger className="grid gap-2.5 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
                 {categories.map((cat) => (
                     <StaggerItem key={cat.key}>
                         <HoverLift className="h-full">
@@ -420,17 +420,22 @@ function CategoryGrid({ categories, onOpen }: { categories: Category[]; onOpen: 
                                 onClick={() => onOpen(cat.key)}
                                 className="bg-card focus-visible:ring-ring group flex h-full w-full flex-col overflow-hidden rounded-2xl border border-border/70 text-start shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:outline-none"
                             >
-                                <ImageStrip images={cat.images} />
-                                <div className="flex flex-1 flex-col gap-3 p-4">
+                                {/* Phones: a plain row, no image banner. */}
+                                <div className="max-sm:hidden">
+                                    <ImageStrip images={cat.images} />
+                                </div>
+                                <div className="flex flex-1 flex-col gap-3 p-4 max-sm:gap-2 max-sm:p-3.5">
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
                                             <h3 className="truncate font-semibold">{cat.name ?? c.uncategorized}</h3>
                                             <p className="text-muted-foreground text-xs">{tr(c.productsCount, { count: number(cat.products) })}</p>
                                         </div>
-                                        <Sparkline data={cat.spark} width={88} height={32} />
+                                        <span className="flex max-sm:hidden">
+                                            <Sparkline data={cat.spark} width={88} height={32} />
+                                        </span>
                                     </div>
                                     <div className="flex items-baseline justify-between gap-2">
-                                        <span className="num text-xl font-semibold">{showRevenue ? money(cat.revenue) : tr(c.unitsSold, { n: number(cat.units) })}</span>
+                                        <span className="num text-xl font-semibold max-sm:text-base">{showRevenue ? money(cat.revenue) : tr(c.unitsSold, { n: number(cat.units) })}</span>
                                         <span className="text-muted-foreground text-xs">{tr(showRevenue ? c.share : c.shareUnits, { share: number(cat.share, 1) })}</span>
                                     </div>
                                     <Meter value={cat.share} tone="navy" height={5} />
@@ -565,7 +570,7 @@ function ProductsSection({
                     <EmptyState icon={Package} title={c.noProducts} />
                 </SectionCard>
             ) : (
-                <Stagger key={`${products.current_page}-${params.sort}-${params.class}-${params.search}-${params.member}`} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                <Stagger key={`${products.current_page}-${params.sort}-${params.class}-${params.search}-${params.member}`} className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
                     {products.data.map((product) => (
                         <StaggerItem key={product.id}>
                             <ProductCard product={product} />
@@ -590,7 +595,7 @@ function ProductCard({ product }: { product: Product }) {
                 href={`/store/products/${product.id}`}
                 className="bg-card focus-visible:ring-ring group flex h-full w-full flex-col overflow-hidden rounded-2xl border border-border/70 text-start shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:outline-none"
             >
-                <div className="bg-muted/50 relative aspect-[4/3] overflow-hidden">
+                <div className="bg-muted/50 relative aspect-[4/3] overflow-hidden max-sm:aspect-[4/5]">
                     {product.image_url && !broken ? (
                         <img
                             src={product.image_url}
@@ -612,17 +617,19 @@ function ProductCard({ product }: { product: Product }) {
                         </span>
                     )}
                 </div>
-                <div className="flex flex-1 flex-col gap-2 p-4">
-                    <h3 className="line-clamp-2 text-sm leading-6 font-medium">{product.name}</h3>
-                    <div className="flex items-baseline justify-between gap-2">
-                        <span className="num font-semibold">{product.price !== null ? money(product.price) : '—'}</span>
-                        <span className="text-muted-foreground text-xs">{tr(c.unitsSold, { n: number(product.month_units ?? product.units_sold) })}</span>
+                <div className="flex flex-1 flex-col gap-2 p-4 max-sm:gap-1.5 max-sm:p-3">
+                    <h3 className="line-clamp-2 text-sm leading-6 font-medium max-sm:text-[13px] max-sm:leading-5">{product.name}</h3>
+                    <div className="flex items-baseline justify-between gap-2 max-sm:gap-1.5">
+                        <span className="num font-semibold max-sm:text-sm max-sm:whitespace-nowrap">{product.price !== null ? money(product.price) : '—'}</span>
+                        <span className="text-muted-foreground text-xs max-sm:text-[11px] max-sm:whitespace-nowrap">{tr(c.unitsSold, { n: number(product.month_units ?? product.units_sold) })}</span>
                     </div>
-                    <div className="mt-auto flex items-end justify-between gap-2 pt-1">
-                        <span className="num text-muted-foreground text-xs">
+                    <div className="mt-auto flex items-end justify-between gap-2 pt-1 max-sm:pt-0">
+                        <span className="num text-muted-foreground text-xs max-sm:text-[11px]">
                             {showRevenue ? money(product.month_revenue ?? product.revenue) : tr(c.lastMonthUnits, { n: number(product.history.at(-1)?.units ?? 0) })}
                         </span>
-                        <Sparkline data={product.history.map((h) => h.units)} width={84} height={28} />
+                        <span className="flex max-sm:hidden">
+                            <Sparkline data={product.history.map((h) => h.units)} width={84} height={28} />
+                        </span>
                     </div>
                 </div>
             </Link>

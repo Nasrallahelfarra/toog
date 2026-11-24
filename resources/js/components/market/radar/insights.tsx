@@ -2,6 +2,7 @@ import { Link, router } from '@inertiajs/react';
 import {
     AlertTriangle,
     CheckCircle2,
+    ChevronLeft,
     Flame,
     Info,
     Lightbulb,
@@ -220,7 +221,7 @@ export function DriverBars({
                                     type="button"
                                     onClick={() => setDim(k)}
                                     className={cn(
-                                        'cursor-pointer rounded-md px-2.5 py-1 text-[11px] font-medium',
+                                        'cursor-pointer rounded-md px-2.5 py-1 text-[11px] font-medium pointer-coarse:py-1.5',
                                         dim === k
                                             ? 'bg-card shadow-sm'
                                             : 'text-muted-foreground',
@@ -646,6 +647,9 @@ export function RadarAlerts({
         info: 'bg-info-soft text-info',
     } as const;
     const list = limit ? alerts.slice(0, limit) : alerts;
+    // Phones: the whole row opens the alert, not an 11px word.
+    const stretched =
+        'max-sm:after:absolute max-sm:after:inset-0 max-sm:after:rounded-xl';
 
     return (
         <section className="space-y-3">
@@ -657,7 +661,7 @@ export function RadarAlerts({
                     {list.map((x, i) => (
                         <li
                             key={i}
-                            className="flex gap-2.5 rounded-xl border bg-card p-2.5"
+                            className="relative flex gap-2.5 rounded-xl border bg-card p-2.5 max-sm:min-h-11 max-sm:items-center"
                         >
                             <span
                                 className={cn(
@@ -686,7 +690,7 @@ export function RadarAlerts({
                                     {x.prefill && x.focus && (
                                         <Link
                                             href={designHref(x.focus)}
-                                            className="font-medium text-primary hover:underline"
+                                            className="relative z-10 font-medium text-primary hover:underline max-sm:py-1"
                                         >
                                             {t.radar.designLike}
                                         </Link>
@@ -695,21 +699,37 @@ export function RadarAlerts({
                                         <button
                                             type="button"
                                             onClick={() => focusItem(x.focus)}
-                                            className="cursor-pointer text-muted-foreground hover:underline"
+                                            className={cn(
+                                                'cursor-pointer text-muted-foreground hover:underline',
+                                                stretched,
+                                            )}
                                         >
-                                            {a.open}
+                                            <span className="max-sm:sr-only">
+                                                {a.open}
+                                            </span>
                                         </button>
                                     )}
                                     {!x.focus && x.href && (
                                         <Link
                                             href={x.href}
-                                            className="text-muted-foreground hover:underline"
+                                            className={cn(
+                                                'text-muted-foreground hover:underline',
+                                                stretched,
+                                            )}
                                         >
-                                            {a.open}
+                                            <span className="max-sm:sr-only">
+                                                {a.open}
+                                            </span>
                                         </Link>
                                     )}
                                 </div>
                             </div>
+                            {(x.focus || x.href) && (
+                                <ChevronLeft
+                                    className="size-4 shrink-0 self-center text-muted-foreground sm:hidden ltr:rotate-180"
+                                    aria-hidden
+                                />
+                            )}
                         </li>
                     ))}
                 </ul>

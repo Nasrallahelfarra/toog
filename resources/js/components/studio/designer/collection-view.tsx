@@ -608,7 +608,7 @@ function ConceptCard({
                                 { preserveScroll: true },
                             )
                         }
-                        className="absolute start-2.5 bottom-2.5 flex size-8 cursor-pointer items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                        className="absolute start-2.5 bottom-2.5 flex size-8 cursor-pointer items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:size-10 pointer-coarse:opacity-100"
                         title={c.redrawTitle}
                         aria-label={c.redrawTitle}
                     >

@@ -56,6 +56,13 @@ export const stagnant = {
         completed: 'التوصية جاهزة',
         failed: 'تعذّرت التوصية',
     },
+    /** The short action at the end of a product row on phones. */
+    recoveryAction: {
+        none: 'اطلب توصية',
+        pending: 'قيد الإعداد',
+        completed: 'اقرأ التوصية',
+        failed: 'أعد الطلب',
+    },
     sending: 'جارٍ إرسال طلبك',
     sendingHint: 'نتحقق من حالة الطلب قبل بدء المراجعة.',
     checkStatus: 'تحقق من حالة الطلب',

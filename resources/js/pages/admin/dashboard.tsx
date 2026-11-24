@@ -80,7 +80,7 @@ export default function AdminDashboard({ kpis, dailyCost, topStores, attention, 
                 }
             />
 
-            <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <Stagger className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2">
                 <StaggerItem>
                     <StatCard
                         label={a.stores}
@@ -191,11 +191,13 @@ export default function AdminDashboard({ kpis, dailyCost, topStores, attention, 
                                     const usage = s.budget ? (s.cost / s.budget) * 100 : null;
 
                                     return (
-                                        <div key={s.id} className="space-y-1.5">
+                                        <Link
+                                            key={s.id}
+                                            href={`/admin/stores/${s.id}`}
+                                            className="group block min-h-11 space-y-1.5 rounded-lg active:bg-muted/40"
+                                        >
                                             <div className="flex items-baseline justify-between gap-2 text-sm">
-                                                <Link href={`/admin/stores/${s.id}`} className="truncate font-medium hover:underline">
-                                                    {s.name}
-                                                </Link>
+                                                <span className="truncate font-medium group-hover:underline">{s.name}</span>
                                                 <span className="num shrink-0 font-semibold">{usd(s.cost)}</span>
                                             </div>
                                             <Meter
@@ -207,7 +209,7 @@ export default function AdminDashboard({ kpis, dailyCost, topStores, attention, 
                                             <p className="text-muted-foreground text-[11px]">
                                                 {s.budget ? `${number(usage, 0)}% · ${t.admin.detail.budget} ${usd(s.budget, 0)}` : a.noBudget}
                                             </p>
-                                        </div>
+                                        </Link>
                                     );
                                 })}
                             </div>
@@ -242,7 +244,7 @@ export default function AdminDashboard({ kpis, dailyCost, topStores, attention, 
                                                         {item.detail ? ` — ${item.detail}` : ''}
                                                     </span>
                                                 </span>
-                                                <ArrowUpRight className="text-muted-foreground size-4 opacity-0 transition-opacity group-hover:opacity-100 rtl:-scale-x-100" />
+                                                <ArrowUpRight className="text-muted-foreground size-4 opacity-0 transition-opacity group-hover:opacity-100 pointer-coarse:opacity-100 rtl:-scale-x-100" />
                                             </Link>
                                         </li>
                                     );

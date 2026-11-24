@@ -181,7 +181,7 @@ export default function AdminStoreShow({ store, overview, ai, members, activity,
 
             <RevenueVisibility store={store} />
 
-            <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Stagger className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2">
                 <StaggerItem>
                     <StatCard label={t.admin.stores.products} value={store.products_count} icon={Store} />
                 </StaggerItem>

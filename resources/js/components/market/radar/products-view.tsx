@@ -79,7 +79,7 @@ export function ProductsView({ radar }: { radar: RadarData }) {
                         {r.recs.empty}
                     </p>
                 ) : (
-                    <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                    <Stagger className="grid gap-4 max-sm:gap-2.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                         {list.map((rec, i) => (
                             <StaggerItem key={`${rec.kind}-${rec.id}`}>
                                 <RecommendCard rec={rec} rank={i + 1} />

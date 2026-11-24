@@ -73,7 +73,7 @@ export function ColorPicker({
     };
 
     return (
-        <div className={cn('flex flex-wrap', size === 'md' ? 'gap-2' : 'gap-1.5')}>
+        <div className={cn('flex flex-wrap', size === 'md' ? 'gap-2' : 'gap-1.5 pointer-coarse:gap-2')}>
             {options('colors').map((o) => {
                 const selected = value.includes(o.value);
                 const disabled = !selected && value.length >= max;
@@ -93,7 +93,7 @@ export function ColorPicker({
                         )}
                     >
                         <span
-                            className={cn('relative flex items-center justify-center rounded-full ring-1 ring-black/10 ring-inset', size === 'md' ? 'size-6' : 'size-5')}
+                            className={cn('relative flex items-center justify-center rounded-full ring-1 ring-black/10 ring-inset', size === 'md' ? 'size-6' : 'size-5 pointer-coarse:size-8')}
                             style={{ backgroundColor: o.hex }}
                         >
                             {selected && (

@@ -180,7 +180,8 @@ export default function Studio(props: Props) {
                 }
             />
 
-            <nav className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" aria-label={s.title}>
+            {/* Three modes share the width on a phone; their hints show from sm up. */}
+            <nav className="grid grid-cols-3 gap-1.5 sm:-mx-1 sm:flex sm:overflow-x-auto sm:px-1 sm:pb-1" aria-label={s.title}>
                 {MODES.map((key) => {
                     const Icon = modeIcons[key];
                     const activeMode = mode === key;
@@ -192,14 +193,14 @@ export default function Studio(props: Props) {
                             onClick={() => changeMode(key)}
                             aria-current={activeMode ? 'page' : undefined}
                             className={cn(
-                                'flex shrink-0 cursor-pointer items-center gap-2.5 rounded-xl border px-3.5 py-2 text-start transition-all',
+                                'flex min-h-11 min-w-0 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-center transition-all sm:flex-row sm:gap-2.5 sm:px-3.5 sm:text-start',
                                 activeMode ? 'border-gold bg-gold-soft/60 ring-gold/20 shadow-sm ring-2' : 'bg-card text-muted-foreground hover:text-foreground hover:border-foreground/20',
                             )}
                         >
                             {key === 'designer' ? <GarmentIcon garment="abaya" className={cn('h-6 w-5', activeMode && 'text-gold-foreground dark:text-gold')} /> : <Icon className="size-4" />}
-                            <span>
-                                <span className={cn('block text-sm leading-tight', activeMode ? 'text-foreground font-semibold' : 'font-medium')}>{t.designer.modes[key]}</span>
-                                <span className="text-muted-foreground block text-[11px] leading-tight">{t.designer.modeHints[key]}</span>
+                            <span className="min-w-0">
+                                <span className={cn('block text-xs leading-tight sm:text-sm', activeMode ? 'text-foreground font-semibold' : 'font-medium')}>{t.designer.modes[key]}</span>
+                                <span className="text-muted-foreground hidden text-[11px] leading-tight sm:block">{t.designer.modeHints[key]}</span>
                             </span>
                         </button>
                     );

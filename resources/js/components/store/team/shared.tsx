@@ -1,5 +1,6 @@
 import { CalendarDays } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { ScrollX } from '@/components/mojo/scroll-x';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useI18n } from '@/hooks/use-i18n';
@@ -99,7 +100,8 @@ export function MonthlyMatrix({ rows, metric = 'units', firstColumn, selected }:
 
     return (
         <div className="space-y-2">
-            <div className="overflow-x-auto rounded-xl border">
+            {/* On a phone it opens on the latest months and the total; earlier months are a swipe away. */}
+            <ScrollX fade="end" startAtEnd className="rounded-xl border">
                 <table className="w-full min-w-max border-collapse text-sm">
                     <thead>
                         <tr className="bg-muted/50 text-muted-foreground text-xs">
@@ -129,7 +131,7 @@ export function MonthlyMatrix({ rows, metric = 'units', firstColumn, selected }:
                                 <tr key={row.key} className={cn('border-t', row.tone === 'total' && 'bg-muted/40 font-semibold', row.tone === 'muted' && 'text-muted-foreground')}>
                                     <th
                                         scope="row"
-                                        className={cn('bg-card sticky start-0 z-10 max-w-52 truncate px-3 py-2 text-start font-medium', row.tone === 'total' && 'bg-muted font-semibold')}
+                                        className={cn('bg-card sticky start-0 z-10 max-w-28 truncate px-3 py-2 text-start font-medium sm:max-w-52', row.tone === 'total' && 'bg-muted font-semibold')}
                                     >
                                         {row.label}
                                     </th>
@@ -153,7 +155,7 @@ export function MonthlyMatrix({ rows, metric = 'units', firstColumn, selected }:
                         })}
                     </tbody>
                 </table>
-            </div>
+            </ScrollX>
             {partial && <p className="text-muted-foreground text-xs">* {t.team.monthly.partial}</p>}
         </div>
     );

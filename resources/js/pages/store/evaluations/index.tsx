@@ -1,5 +1,5 @@
-import { Link, router } from '@inertiajs/react';
-import { CheckCircle2, ChevronDown, FileSpreadsheet, FileText, Gauge, Layers, PenLine, Plus, ScanSearch, Search, X, XCircle } from 'lucide-react';
+import { Link, router, useForm, usePage } from '@inertiajs/react';
+import { CheckCircle2, ChevronDown, FileSpreadsheet, FileText, Gauge, Layers, Loader2, MoreHorizontal, PenLine, Plus, ScanSearch, Search, Trash2, X, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { DeleteEvaluationButton } from '@/components/evaluation/delete-evaluation-button';
 import type { EvaluationSummary, Thresholds } from '@/components/evaluation/types';
@@ -14,6 +14,7 @@ import { ScoreRing } from '@/components/mojo/score-ring';
 import { StatCard } from '@/components/mojo/stat-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -107,7 +108,7 @@ export default function EvaluationsIndex({ evaluations, filters, stats, categori
                 }
             />
 
-            <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <Stagger className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2">
                 <StaggerItem>
                     <StatCard label={e.stats.total} value={stats.total} icon={ScanSearch} hint={stats.pending ? `${stats.pending} ${e.stats.pending}` : undefined} />
                 </StaggerItem>
@@ -143,7 +144,7 @@ export default function EvaluationsIndex({ evaluations, filters, stats, categori
             )}
 
             {/* Filters */}
-            <div className="bg-card flex flex-col gap-3 rounded-2xl border border-border/70 p-3 lg:flex-row lg:items-center">
+            <div className="bg-card flex flex-col gap-2 rounded-2xl border border-border/70 p-3 sm:gap-3 lg:flex-row lg:items-center">
                 <div className="relative flex-1">
                     <Search className="text-muted-foreground pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2" />
                     <Input value={search} onChange={(ev) => setSearch(ev.target.value)} placeholder={e.filters.search} className="h-10 ps-9" />
@@ -180,11 +181,11 @@ export default function EvaluationsIndex({ evaluations, filters, stats, categori
                         ]}
                     />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 lg:flex">
                     <Input type="date" value={filters.from ?? ''} onChange={(ev) => apply({ from: ev.target.value })} className="h-10 w-full lg:w-36" aria-label={e.filters.from} />
                     <Input type="date" value={filters.to ?? ''} onChange={(ev) => apply({ to: ev.target.value })} className="h-10 w-full lg:w-36" aria-label={e.filters.to} />
                     {hasFilters && (
-                        <Button variant="ghost" size="icon" onClick={() => router.get('/store/evaluations')} aria-label={e.filters.reset}>
+                        <Button variant="ghost" size="icon" className="max-lg:size-10" onClick={() => router.get('/store/evaluations')} aria-label={e.filters.reset}>
                             <X className="size-4" />
                         </Button>
                     )}
@@ -247,14 +248,22 @@ export default function EvaluationsIndex({ evaluations, filters, stats, categori
                                             {ev.source === 'design' && <Badge variant="gold">{e.list.designSource}</Badge>}
                                             {ev.override && <Badge variant="warning">{e.show.overrideBadge}</Badge>}
                                         </div>
-                                        <p className="text-muted-foreground text-[11px]" suppressHydrationWarning>
+                                        <p className="text-muted-foreground hidden text-[11px] sm:block" suppressHydrationWarning>
                                             {relative(ev.created_at)}
                                             {ev.user ? ` · ${tr(e.list.by, { name: ev.user })}` : ''}
                                         </p>
                                     </div>
                                 </Link>
-                                <div className="flex justify-end border-t border-border/50 px-3 py-1.5">
+                                <div className="hidden justify-end border-t border-border/50 px-3 py-1.5 sm:flex">
                                     <DeleteEvaluationButton evaluation={ev} />
+                                </div>
+                                {/* Phone: the date moves down here and delete waits behind a menu. */}
+                                <div className="flex items-center gap-2 border-t border-border/50 ps-4 pe-0.5 sm:hidden">
+                                    <p className="text-muted-foreground min-w-0 flex-1 truncate text-[11px]" suppressHydrationWarning>
+                                        {relative(ev.created_at)}
+                                        {ev.user ? ` · ${tr(e.list.by, { name: ev.user })}` : ''}
+                                    </p>
+                                    <CardMenu evaluation={ev} />
                                 </div>
                             </HoverLift>
                         </StaggerItem>
@@ -292,5 +301,76 @@ function FilterSelect({
                 ))}
             </SelectContent>
         </Select>
+    );
+}
+
+/**
+ * The phone card's "⋯" menu: delete sits here instead of a red button on every card,
+ * with the same confirm step as the desktop button.
+ */
+function CardMenu({ evaluation }: { evaluation: { id: number; name: string } }) {
+    const { t, tr, isRtl } = useI18n();
+    const { url } = usePage();
+    const [open, setOpen] = useState(false);
+    const [failed, setFailed] = useState(false);
+    const form = useForm({ return_to: url });
+    const c = t.evaluation.deletion;
+
+    const remove = () => {
+        setFailed(false);
+        form.transform(() => ({ return_to: url }));
+        form.delete(`/store/evaluations/${evaluation.id}`, {
+            preserveScroll: true,
+            onSuccess: () => setOpen(false),
+            onError: () => setFailed(true),
+        });
+    };
+
+    return (
+        <>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="ghost" size="icon" className="text-muted-foreground size-11 shrink-0" aria-label={t.common.more}>
+                        <MoreHorizontal className="size-5" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                        className="text-danger focus:bg-danger/10 focus:text-danger min-h-11 [&_svg]:!text-danger"
+                        onSelect={() => setOpen(true)}
+                    >
+                        <Trash2 className="size-4" />
+                        {c.button}
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+            <Dialog
+                open={open}
+                onOpenChange={(value) => {
+                    if (!form.processing) setOpen(value);
+                }}
+            >
+                <DialogContent dir={isRtl ? 'rtl' : 'ltr'} className="sm:max-w-md">
+                    <DialogHeader className="text-start sm:text-start">
+                        <DialogTitle>{c.button}</DialogTitle>
+                        <DialogDescription className="leading-7 break-words">{tr(c.confirm, { name: evaluation.name })}</DialogDescription>
+                    </DialogHeader>
+                    {failed && (
+                        <p role="alert" className="text-danger text-sm">
+                            {c.failed}
+                        </p>
+                    )}
+                    <DialogFooter className="gap-2">
+                        <Button type="button" variant="outline" disabled={form.processing} onClick={() => setOpen(false)}>
+                            {t.common.cancel}
+                        </Button>
+                        <Button type="button" variant="destructive" disabled={form.processing} onClick={remove}>
+                            {form.processing ? <Loader2 className="size-4 motion-safe:animate-spin" /> : <Trash2 className="size-4" />}
+                            {form.processing ? c.deleting : c.button}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }

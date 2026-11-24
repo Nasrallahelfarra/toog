@@ -82,7 +82,7 @@ export default function BrandSettings({ guide, store }: Props) {
                                             <button
                                                 type="button"
                                                 onClick={() => form.setData('colors', form.data.colors.filter((c) => c !== color))}
-                                                className="bg-card absolute -end-1.5 -top-1.5 flex size-5 cursor-pointer items-center justify-center rounded-full opacity-0 shadow ring-1 ring-border transition-opacity group-hover:opacity-100"
+                                                className="bg-card absolute -end-1.5 -top-1.5 flex size-5 cursor-pointer items-center justify-center rounded-full opacity-0 shadow ring-1 ring-border transition-opacity group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:-end-2 pointer-coarse:-top-2 pointer-coarse:size-8 pointer-coarse:opacity-100"
                                                 aria-label={t.common.delete}
                                             >
                                                 <X className="size-3" />

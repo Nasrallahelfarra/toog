@@ -50,6 +50,12 @@ type Props = {
 
 const opColors = [...chartColors, 'var(--info)'];
 
+// The first column stays put while the rest scrolls sideways; its opaque
+// background matches the row's header, hover and selected tints.
+const stickyHead = 'sticky start-0 z-10 bg-[color:color-mix(in_oklab,var(--muted)_40%,var(--card))]';
+const stickyCell =
+    'sticky start-0 z-10 bg-card [tr:hover>&]:bg-[color:color-mix(in_oklab,var(--muted)_40%,var(--card))] [tr[data-state=selected]>&]:bg-muted';
+
 export default function AiCosts({ period, totals, daily, operations, byStore, byModel, byOperation, failures }: Props) {
     const { t, usd, number, compact, percent, date, dateTime, tr } = useI18n();
     const c = t.admin.costs;
@@ -93,7 +99,7 @@ export default function AiCosts({ period, totals, daily, operations, byStore, by
                 }
             />
 
-            <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Stagger className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2">
                 <StaggerItem>
                     <StatCard label={c.totalCost} value={totals.cost} format={(n) => usd(n)} icon={BadgeDollarSign} tone="success" spark={daily.map((d) => d.cost)} />
                 </StaggerItem>
@@ -130,8 +136,16 @@ export default function AiCosts({ period, totals, daily, operations, byStore, by
             <FadeIn delay={0.1}>
                 <SectionCard
                     title={c.dailyByOperation}
-                    action={<ChartLegend items={operations.map((op, i) => ({ label: opLabel(op), color: opColors[i % opColors.length] }))} />}
+                    action={
+                        <div className="hidden sm:contents">
+                            <ChartLegend items={operations.map((op, i) => ({ label: opLabel(op), color: opColors[i % opColors.length] }))} />
+                        </div>
+                    }
                 >
+                    {/* Phones: the legend drops under the title instead of squeezing beside it. */}
+                    <div className="mb-3 sm:hidden">
+                        <ChartLegend items={operations.map((op, i) => ({ label: opLabel(op), color: opColors[i % opColors.length] }))} />
+                    </div>
                     <div className="h-[280px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={daily} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
@@ -167,7 +181,7 @@ export default function AiCosts({ period, totals, daily, operations, byStore, by
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>{t.admin.stores.store}</TableHead>
+                                    <TableHead className={stickyHead}>{t.admin.stores.store}</TableHead>
                                     <TableHead className="text-end">{c.periodCost}</TableHead>
                                     <TableHead className="text-end">{c.calls}</TableHead>
                                     <TableHead className="text-end">{c.images}</TableHead>
@@ -178,7 +192,7 @@ export default function AiCosts({ period, totals, daily, operations, byStore, by
                             <TableBody>
                                 {byStore.map((row, i) => (
                                     <TableRow key={row.store?.id ?? `none-${i}`}>
-                                        <TableCell>
+                                        <TableCell className={stickyCell}>
                                             {row.store ? (
                                                 <Link href={`/admin/stores/${row.store.id}?tab=ai`} className="font-medium hover:underline">
                                                     {row.store.name}
@@ -252,7 +266,7 @@ export default function AiCosts({ period, totals, daily, operations, byStore, by
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>{c.model}</TableHead>
+                                        <TableHead className={stickyHead}>{c.model}</TableHead>
                                         <TableHead className="text-end">{c.calls}</TableHead>
                                         <TableHead className="text-end">{c.tokensIn}</TableHead>
                                         <TableHead className="text-end">{c.tokensOut}</TableHead>
@@ -262,7 +276,7 @@ export default function AiCosts({ period, totals, daily, operations, byStore, by
                                 <TableBody>
                                     {byModel.map((m) => (
                                         <TableRow key={`${m.provider}-${m.model}`}>
-                                            <TableCell>
+                                            <TableCell className={stickyCell}>
                                                 <span dir="ltr" className="font-mono text-xs">
                                                     {m.model}
                                                 </span>

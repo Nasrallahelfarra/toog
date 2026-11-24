@@ -863,14 +863,14 @@ function ColorPicker({
                             key={key}
                             type="button"
                             onClick={() => toggle(key)}
-                            className="group flex cursor-pointer items-center gap-1.5 rounded-full border py-0.5 ps-0.5 pe-2 text-[11px] hover:bg-muted"
+                            className="group flex cursor-pointer items-center gap-1.5 rounded-full border py-0.5 ps-0.5 pe-2 text-[11px] hover:bg-muted pointer-coarse:min-h-8 pointer-coarse:pe-2.5"
                         >
                             <span
                                 className="size-5 rounded-full ring-1 ring-black/10"
                                 style={{ backgroundColor: option?.hex }}
                             />
                             {option?.label ?? key}
-                            <X className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 pointer-coarse:opacity-100" />
+                            <X className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 pointer-coarse:size-3.5 pointer-coarse:opacity-100" />
                         </button>
                     );
                 })}

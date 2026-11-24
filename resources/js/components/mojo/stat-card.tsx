@@ -40,22 +40,23 @@ export function StatCard({
 }) {
     const good = delta !== null && delta !== undefined && (invertDelta ? delta < 0 : delta > 0);
     const body = (
-        <div className="bg-card group relative h-full overflow-hidden rounded-2xl border border-border/70 p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-shadow hover:shadow-md">
-            <div className="flex items-start justify-between gap-3">
-                <span className="text-muted-foreground text-sm">{label}</span>
+        <div className="bg-card group relative h-full overflow-hidden rounded-2xl border border-border/70 p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-shadow hover:shadow-md sm:p-5">
+            {/* Two to a row on a phone: smaller padding, icon and figure there. */}
+            <div className="flex items-start justify-between gap-2 sm:gap-3">
+                <span className="text-muted-foreground min-w-0 text-xs leading-snug sm:text-sm">{label}</span>
                 {Icon && (
-                    <span className={cn('flex size-9 items-center justify-center rounded-xl', toneClasses[tone].soft, toneClasses[tone].text)}>
-                        <Icon className="size-[18px]" />
+                    <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-xl sm:size-9', toneClasses[tone].soft, toneClasses[tone].text)}>
+                        <Icon className="size-4 sm:size-[18px]" />
                     </span>
                 )}
             </div>
             <div className="mt-3 flex items-end justify-between gap-3">
-                <div className="space-y-1">
-                    <div className="text-[1.7rem] leading-none font-semibold tracking-tight">
+                <div className="min-w-0 space-y-1">
+                    <div className="text-2xl leading-none font-semibold tracking-tight sm:text-[1.7rem]">
                         {value === null ? '—' : <AnimatedNumber value={value} format={format} />}
                     </div>
                     {(delta !== null && delta !== undefined) || hint ? (
-                        <div className="flex items-center gap-1.5 text-xs">
+                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs">
                             {delta !== null && delta !== undefined && (
                                 <span className={cn('inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-medium', good ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger')}>
                                     {delta >= 0 ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
@@ -66,7 +67,11 @@ export function StatCard({
                         </div>
                     ) : null}
                 </div>
-                {spark && spark.length > 1 && <Sparkline data={spark} tone={tone} />}
+                {spark && spark.length > 1 && (
+                    <span className="hidden sm:block">
+                        <Sparkline data={spark} tone={tone} />
+                    </span>
+                )}
             </div>
             {children}
         </div>

@@ -233,6 +233,16 @@
 }
 
 @layer components {
+    /*
+     * A grid without a column count gets one column the width of the screen,
+     * not the width of its widest child. Without this, a grid that only sets
+     * lg:grid-cols-* stretches past a phone screen when a card inside holds
+     * a no-wrap tab bar or legend. Any grid-cols-* utility still wins.
+     */
+    .grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
     /* Subtle Najdi / Sadu-inspired lattice for hero and brand surfaces. */
     .bg-sadu {
         background-image:

@@ -64,7 +64,7 @@ export default function Stagnant({
                     {s.refreshNeeded}
                 </p>
             )}
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2">
                 <StatCard
                     label={s.total}
                     value={summary.stagnant}
@@ -140,13 +140,13 @@ export default function Stagnant({
                 ))}
             </nav>
             {summary.unclassified > 0 && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/40 p-4 text-sm leading-7">
+                <div className="flex flex-col gap-3 rounded-xl border bg-muted/40 p-4 text-sm leading-7 sm:flex-row sm:items-center sm:justify-between">
                     <p className="flex-1 text-muted-foreground">
                         {tr(s.unclassified, {
                             count: number(summary.unclassified),
                         })}
                     </p>
-                    <Button asChild variant="outline" size="sm">
+                    <Button asChild variant="outline" size="sm" className="h-10 sm:h-8">
                         <Link href="/store/settings/integration">
                             {s.importSales}
                         </Link>

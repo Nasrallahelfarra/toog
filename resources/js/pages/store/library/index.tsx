@@ -244,9 +244,9 @@ export default function Library({ view, designs, collections, collection, filter
                     />
                 </div>
             ) : (
-                <Stagger key={designs.current_page + JSON.stringify(filters)} className="columns-1 gap-4 sm:columns-2 lg:columns-3 2xl:columns-4">
+                <Stagger key={designs.current_page + JSON.stringify(filters)} className="columns-2 gap-3 sm:gap-4 lg:columns-3 2xl:columns-4">
                     {designs.data.map((design) => (
-                        <StaggerItem key={design.id} className="mb-4 break-inside-avoid">
+                        <StaggerItem key={design.id} className="mb-3 break-inside-avoid sm:mb-4">
                             <DesignCard design={design} />
                         </StaggerItem>
                     ))}

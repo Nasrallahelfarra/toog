@@ -173,6 +173,12 @@ export function StagnantProductGrid({
     const { t, tr, number, money } = useI18n();
     const s = t.stagnant;
     const reduced = useReducedMotion();
+    const quiet = (days: number | null) =>
+        days === null
+            ? '—'
+            : days === 0
+              ? t.performance.columns.quietNone
+              : tr(t.performance.days, { n: number(days) });
     const active = products.some(
         (p) =>
             p.recovery?.status === 'pending' ||
@@ -185,7 +191,7 @@ export function StagnantProductGrid({
             {products.length ? (
                 <div
                     className={cn(
-                        'grid gap-4 sm:grid-cols-2',
+                        'grid gap-2.5 sm:grid-cols-2 sm:gap-4',
                         dashboard ? '2xl:grid-cols-4' : 'xl:grid-cols-3',
                     )}
                 >
@@ -200,86 +206,150 @@ export function StagnantProductGrid({
                                     ? 0
                                     : Math.min(index * 0.04, 0.3),
                             }}
-                            className="group relative flex min-w-0 flex-col rounded-2xl border bg-card p-4 transition-[box-shadow,border-color] focus-within:ring-2 focus-within:ring-ring/60 hover:border-primary/40 hover:shadow-md"
+                            className="group relative flex min-w-0 flex-col rounded-2xl border bg-card p-4 transition-[box-shadow,border-color] focus-within:ring-2 focus-within:ring-ring/60 hover:border-primary/40 hover:shadow-md max-sm:p-3"
                         >
-                            <div className="relative mb-4">
-                                <ProductImage
-                                    key={product.image_url}
-                                    product={product}
-                                    className={
-                                        dashboard
-                                            ? 'h-36 w-full'
-                                            : 'h-48 w-full'
-                                    }
-                                />
-                                <span className="absolute start-2 top-2 rounded-full bg-background/95">
-                                    <PerformanceBadge
-                                        value={product.performance}
+                            {/* Phones: one compact row; the whole card still opens the product. */}
+                            <div className="flex items-center gap-3 sm:hidden">
+                                <div className="relative shrink-0">
+                                    <ProductImage
+                                        key={product.image_url}
+                                        product={product}
+                                        className="size-20"
                                     />
-                                </span>
-                            </div>
-                            <div className="mb-3 flex-1 space-y-1">
-                                <h3 className="line-clamp-2 leading-6 font-semibold">
-                                    {/* Stretched link: the whole card opens the product. */}
-                                    <Link
-                                        href={`/store/products/${product.id}?from=stagnant`}
-                                        className="outline-none group-hover:text-primary after:absolute after:inset-0 after:rounded-2xl"
-                                    >
-                                        {product.name}
-                                    </Link>
-                                </h3>
-                                <p className="text-xs text-muted-foreground">
-                                    {product.category ?? '—'}
-                                    {product.sku && (
-                                        <span className="ms-2" dir="ltr">
-                                            {product.sku}
+                                    <span className="absolute -start-1 -top-1 rounded-full bg-background/95">
+                                        <PerformanceBadge
+                                            value={product.performance}
+                                            className="gap-1 px-1.5 py-0 text-[10px]"
+                                        />
+                                    </span>
+                                </div>
+                                <div className="min-w-0 flex-1 space-y-1">
+                                    <h3 className="line-clamp-2 text-sm leading-snug font-semibold">
+                                        <Link
+                                            href={`/store/products/${product.id}?from=stagnant`}
+                                            className="outline-none after:absolute after:inset-0 after:rounded-2xl"
+                                        >
+                                            {product.name}
+                                        </Link>
+                                    </h3>
+                                    <p className="flex min-w-0 items-center gap-2 text-xs">
+                                        <span className="shrink-0 font-medium">
+                                            {money(product.price)}
                                         </span>
-                                    )}
-                                </p>
-                                <p className="pt-1 text-sm font-medium">
-                                    {money(product.price)}
-                                </p>
+                                        {product.sku && (
+                                            <span
+                                                className="truncate text-muted-foreground"
+                                                dir="ltr"
+                                            >
+                                                {product.sku}
+                                            </span>
+                                        )}
+                                    </p>
+                                    <div className="flex items-end justify-between gap-2">
+                                        <dl className="min-w-0 space-y-0.5 text-[11px]">
+                                            <div className="flex gap-1">
+                                                <dt className="text-muted-foreground">
+                                                    {s.noSalesDays}:
+                                                </dt>
+                                                <dd className="font-semibold">
+                                                    {quiet(product.no_sales_days)}
+                                                </dd>
+                                            </div>
+                                            <div className="flex gap-1">
+                                                <dt className="text-muted-foreground">
+                                                    {s.units}:
+                                                </dt>
+                                                <dd className="num font-semibold">
+                                                    {number(product.units_sold)}
+                                                </dd>
+                                            </div>
+                                        </dl>
+                                        <RecoveryAction
+                                            recovery={product.recovery}
+                                        />
+                                    </div>
+                                </div>
                             </div>
-                            <dl className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-muted/50 p-3 text-xs">
-                                <div>
-                                    <dt className="text-muted-foreground">
-                                        {s.noSalesDays}
-                                    </dt>
-                                    <dd className="mt-1 text-base font-semibold">
-                                        {product.no_sales_days === null
-                                            ? '—'
-                                            : product.no_sales_days === 0
-                                              ? t.performance.columns.quietNone
-                                              : tr(t.performance.days, {
-                                                    n: number(
-                                                        product.no_sales_days,
-                                                    ),
-                                                })}
-                                    </dd>
+                            <div className="hidden flex-1 flex-col sm:flex">
+                                <div className="relative mb-4">
+                                    <ProductImage
+                                        key={product.image_url}
+                                        product={product}
+                                        className={
+                                            dashboard
+                                                ? 'h-36 w-full'
+                                                : 'h-48 w-full'
+                                        }
+                                    />
+                                    <span className="absolute start-2 top-2 rounded-full bg-background/95">
+                                        <PerformanceBadge
+                                            value={product.performance}
+                                        />
+                                    </span>
                                 </div>
-                                <div>
-                                    <dt className="text-muted-foreground">
-                                        {s.units}
-                                    </dt>
-                                    <dd className="mt-1 text-base font-semibold">
-                                        {number(product.units_sold)}
-                                    </dd>
+                                <div className="mb-3 flex-1 space-y-1">
+                                    <h3 className="line-clamp-2 leading-6 font-semibold">
+                                        {/* Stretched link: the whole card opens the product. */}
+                                        <Link
+                                            href={`/store/products/${product.id}?from=stagnant`}
+                                            className="outline-none group-hover:text-primary after:absolute after:inset-0 after:rounded-2xl"
+                                        >
+                                            {product.name}
+                                        </Link>
+                                    </h3>
+                                    <p className="text-xs text-muted-foreground">
+                                        {product.category ?? '—'}
+                                        {product.sku && (
+                                            <span className="ms-2" dir="ltr">
+                                                {product.sku}
+                                            </span>
+                                        )}
+                                    </p>
+                                    <p className="pt-1 text-sm font-medium">
+                                        {money(product.price)}
+                                    </p>
                                 </div>
-                            </dl>
-                            {!stale && (
-                                <p className="mb-4 text-xs leading-6 text-muted-foreground">
-                                    {s.reasons[product.classification_reason]}
-                                </p>
-                            )}
-                            <div className="mt-auto flex items-center justify-between gap-2 border-t pt-3 text-xs">
-                                <RecoveryStatus recovery={product.recovery} />
-                                <span
-                                    aria-hidden
-                                    className="inline-flex shrink-0 items-center gap-1 font-medium text-primary"
-                                >
-                                    {s.openProduct}
-                                    <ArrowUpRight className="size-3.5 rtl:-scale-x-100" />
-                                </span>
+                                <dl className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-muted/50 p-3 text-xs">
+                                    <div>
+                                        <dt className="text-muted-foreground">
+                                            {s.noSalesDays}
+                                        </dt>
+                                        <dd className="mt-1 text-base font-semibold">
+                                            {product.no_sales_days === null
+                                                ? '—'
+                                                : product.no_sales_days === 0
+                                                  ? t.performance.columns.quietNone
+                                                  : tr(t.performance.days, {
+                                                        n: number(
+                                                            product.no_sales_days,
+                                                        ),
+                                                    })}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-muted-foreground">
+                                            {s.units}
+                                        </dt>
+                                        <dd className="mt-1 text-base font-semibold">
+                                            {number(product.units_sold)}
+                                        </dd>
+                                    </div>
+                                </dl>
+                                {!stale && (
+                                    <p className="mb-4 text-xs leading-6 text-muted-foreground">
+                                        {s.reasons[product.classification_reason]}
+                                    </p>
+                                )}
+                                <div className="mt-auto flex items-center justify-between gap-2 border-t pt-3 text-xs">
+                                    <RecoveryStatus recovery={product.recovery} />
+                                    <span
+                                        aria-hidden
+                                        className="inline-flex shrink-0 items-center gap-1 font-medium text-primary"
+                                    >
+                                        {s.openProduct}
+                                        <ArrowUpRight className="size-3.5 rtl:-scale-x-100" />
+                                    </span>
+                                </div>
                             </div>
                         </motion.article>
                     ))}
@@ -305,6 +375,53 @@ export function StagnantProductGrid({
                 />
             )}
         </>
+    );
+}
+
+/**
+ * Phones: the recommendation as a soft action pinned at the row's end. The
+ * card itself is the link (the product page is where it is requested), so
+ * it is plain text, not a second control.
+ */
+function RecoveryAction({ recovery }: { recovery: Recovery | null }) {
+    const { t } = useI18n();
+    const s = t.stagnant.recoveryAction;
+    const status = recovery?.status;
+    const working = status === 'pending' || status === 'processing';
+    const view: { icon: LucideIcon; label: string; tone: string } = working
+        ? { icon: Loader2, label: s.pending, tone: 'bg-primary/10 text-primary' }
+        : status === 'completed'
+          ? {
+                icon: CheckCircle2,
+                label: s.completed,
+                tone: 'bg-success/10 text-success',
+            }
+          : status === 'failed'
+            ? {
+                  icon: AlertCircle,
+                  label: s.failed,
+                  tone: 'bg-danger/10 text-danger',
+              }
+            : {
+                  icon: Sparkles,
+                  label: s.none,
+                  tone: 'bg-primary/10 text-primary',
+              };
+    return (
+        <span
+            className={cn(
+                'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold',
+                view.tone,
+            )}
+        >
+            <view.icon
+                className={cn(
+                    'size-4 shrink-0',
+                    working && 'motion-safe:animate-spin',
+                )}
+            />
+            {view.label}
+        </span>
     );
 }
 

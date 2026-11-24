@@ -475,7 +475,7 @@ function RadarSkeleton() {
                 {[0, 1, 2, 3].map((i) => (
                     <div
                         key={i}
-                        className="shimmer aspect-[4/6] rounded-2xl bg-muted/60"
+                        className="shimmer aspect-[4/6] rounded-2xl bg-muted/60 max-sm:aspect-auto max-sm:h-28"
                     />
                 ))}
             </div>

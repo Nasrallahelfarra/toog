@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
 import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, CheckCircle2, Layers, Scale, SlidersHorizontal } from 'lucide-react';
 import { motion } from 'motion/react';
+import type { ReactNode } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartLegend, ChartTooltip, useChartAxes } from '@/components/mojo/chart';
 import { ColorChips } from '@/components/mojo/color-chips';
@@ -249,6 +250,88 @@ function CategoriesTable({ categories, repetitiveBelow }: { categories: Category
 
     return (
         <SectionCard title={t.balance.categories} description={t.balance.categoriesHint} icon={BarChart3} flush>
+            {/* Phone: one card per category, the table's columns as labelled rows. */}
+            <ul className="divide-border/70 divide-y border-t md:hidden">
+                {categories.map((c, i) => {
+                    const tone = c.diversity >= 65 ? 'success' : c.diversity >= repetitiveBelow ? 'warning' : 'danger';
+                    const novelGap = c.novel_ratio === null ? null : c.novel_ratio - c.target_novel;
+                    const look = c.top_signature
+                        ? [label('patterns', c.top_signature.pattern), label('styles', c.top_signature.style)].filter((x) => x !== '—').join(' · ')
+                        : null;
+
+                    return (
+                        <li key={c.category} className="space-y-3 px-4 py-4">
+                            <div className="flex items-start gap-3">
+                                <div className="min-w-0 flex-1">
+                                    <div className="truncate font-medium" dir="auto">
+                                        {c.category}
+                                    </div>
+                                    <div className="text-muted-foreground text-xs">
+                                        {number(c.products)} {t.balance.products}
+                                    </div>
+                                </div>
+                                <span
+                                    className={cn(
+                                        'inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium',
+                                        toneClasses[statusTone[c.status]].soft,
+                                        toneClasses[statusTone[c.status]].text,
+                                    )}
+                                >
+                                    {t.balance.status[c.status]}
+                                </span>
+                            </div>
+                            <Meter
+                                label={<span className="text-muted-foreground text-xs">{t.balance.diversity}</span>}
+                                value={c.diversity}
+                                tone={tone}
+                                valueLabel={c.diversity}
+                                height={6}
+                                delay={i * 0.05}
+                            />
+                            <dl className="space-y-1.5 text-sm">
+                                <CardRow label={t.balance.novelRatio}>
+                                    {c.novel_ratio === null ? (
+                                        <span className="text-muted-foreground">—</span>
+                                    ) : (
+                                        <span className={cn('num font-medium', novelGap !== null && Math.abs(novelGap) > 8 ? 'text-warning' : 'text-foreground')}>
+                                            {c.novel_ratio}%<span className="text-muted-foreground font-normal"> / {c.target_novel}%</span>
+                                        </span>
+                                    )}
+                                </CardRow>
+                                <CardRow label={`${t.balance.winners} / ${t.balance.stagnant}`}>
+                                    <span className="num">
+                                        <span className="text-success font-medium">{c.winners}</span>
+                                        <span className="text-muted-foreground"> / </span>
+                                        <span className="text-danger font-medium">{c.stagnant}</span>
+                                    </span>
+                                </CardRow>
+                                <CardRow label={t.balance.launches}>
+                                    <span className="num">{c.recent_launches}</span>
+                                </CardRow>
+                                <CardRow label={t.balance.recommended}>
+                                    <span className="bg-primary/8 text-primary dark:bg-primary/15 num rounded-full px-2.5 py-0.5 text-xs font-semibold">
+                                        {tr(t.balance.perMonth, { count: c.recommended_per_month })}
+                                    </span>
+                                </CardRow>
+                                <CardRow label={t.balance.topLook}>
+                                    {c.top_signature ? (
+                                        <span className="flex min-w-0 items-center justify-end gap-1.5">
+                                            <ColorChips colors={c.top_signature.colors} showLabels={false} />
+                                            {look && <span className="truncate text-xs">{look}</span>}
+                                            <span className="text-muted-foreground num shrink-0 text-xs">({c.top_signature.share}%)</span>
+                                        </span>
+                                    ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                    )}
+                                </CardRow>
+                            </dl>
+                        </li>
+                    );
+                })}
+            </ul>
+
+            {/* Wider screens: the table. */}
+            <div className="hidden md:block">
             <Table>
                 <TableHeader>
                     <TableRow>
@@ -330,7 +413,18 @@ function CategoriesTable({ categories, repetitiveBelow }: { categories: Category
                     })}
                 </TableBody>
             </Table>
+            </div>
         </SectionCard>
+    );
+}
+
+/** One labelled figure on a category's phone card: the name at the start, the value at the end. */
+function CardRow({ label, children }: { label: string; children: ReactNode }) {
+    return (
+        <div className="flex items-center justify-between gap-3">
+            <dt className="text-muted-foreground shrink-0 text-xs">{label}</dt>
+            <dd className="min-w-0 text-end">{children}</dd>
+        </div>
     );
 }
 

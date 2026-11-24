@@ -204,6 +204,7 @@ export const evaluation: typeof ar = {
         rows: 'Products',
         addRow: 'Add product',
         removeRow: 'Remove',
+        rowN: 'Product {n}',
         pasteCsv: 'Paste from a sheet',
         pasteHint: 'One product per line: name, category, price, material, colours (separated by ;), pattern, style, season — use the English attribute keys.',
         parse: 'Add lines',

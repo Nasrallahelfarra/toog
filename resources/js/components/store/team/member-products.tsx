@@ -335,7 +335,7 @@ export function MemberProducts(props: MemberProductsProps) {
             )}
 
             {stats && (
-                <Stagger className={cn('grid gap-4 sm:grid-cols-2', showRevenue ? 'xl:grid-cols-5' : 'xl:grid-cols-4')}>
+                <Stagger className={cn('grid grid-cols-2 gap-3 sm:gap-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2', showRevenue ? 'xl:grid-cols-5' : 'xl:grid-cols-4')}>
                     <StaggerItem>
                         <StatCard
                             label={p.stats.products}

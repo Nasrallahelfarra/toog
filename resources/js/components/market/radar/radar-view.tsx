@@ -153,7 +153,7 @@ export function RadarView({
                         )}
                     </div>
                 ) : (
-                    <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                    <Stagger className="grid gap-4 max-sm:gap-2.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                         {radar.posts.map((post, i) => (
                             <StaggerItem key={post.id}>
                                 <TrendingPostCard
@@ -191,7 +191,7 @@ export function RadarView({
                         {r.recs.empty}
                     </p>
                 ) : (
-                    <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                    <Stagger className="grid gap-4 max-sm:gap-2.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                         {radar.recommendations.slice(0, 4).map((rec, i) => (
                             <StaggerItem key={`${rec.kind}-${rec.id}`}>
                                 <RecommendCard rec={rec} rank={i + 1} />

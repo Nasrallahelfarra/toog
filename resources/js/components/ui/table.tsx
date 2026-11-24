@@ -1,12 +1,15 @@
 import * as React from "react"
 
+import { ScrollX } from "@/components/mojo/scroll-x"
 import { cn } from "@/lib/utils"
 
+// A table wider than the screen scrolls sideways inside its box, with the
+// far edge faded while there is more to see.
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto">
+    <ScrollX data-slot="table-container" fade="end">
       <table data-slot="table" className={cn("w-full caption-bottom text-sm", className)} {...props} />
-    </div>
+    </ScrollX>
   )
 }
 

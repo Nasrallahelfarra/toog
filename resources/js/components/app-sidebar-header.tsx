@@ -24,7 +24,7 @@ export function AppSidebarHeader({ breadcrumbs = [] }: { breadcrumbs?: Breadcrum
     return (
         <header className="bg-background/80 sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-border/60 px-4 backdrop-blur-md transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-14 md:rounded-t-xl md:px-6">
             <div className="flex min-w-0 items-center gap-2">
-                <SidebarTrigger className="-ms-1 rtl:rotate-180" />
+                <SidebarTrigger className="-ms-1 size-10 md:size-7 rtl:rotate-180" />
                 {breadcrumbs.length > 0 && <Breadcrumbs breadcrumbs={breadcrumbs} />}
                 {!inAdmin && <StoreSwitcher />}
             </div>

@@ -1,11 +1,12 @@
 import { Link, router } from '@inertiajs/react';
-import { Check, Columns2, Download, Expand, Heart, Send, WandSparkles, X } from 'lucide-react';
+import { Check, Columns2, Download, Expand, ExternalLink, Heart, MoreHorizontal, Send, WandSparkles, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import type { DesignItem } from '@/components/evaluation/types';
 import { scoreTone, toneClasses } from '@/components/mojo/tone';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/hooks/use-i18n';
 import { cn } from '@/lib/utils';
@@ -109,28 +110,96 @@ export function DesignCard({
                     onClick={() => setOpen(true)}
                 />
                 {design.score !== null && (
-                    <span dir="ltr" className={cn('absolute top-2 start-2 flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold shadow-sm backdrop-blur', tone.soft, tone.text)}>
-                        <span className="num">{design.score}</span>
-                        <span className="opacity-70">/100</span>
+                    // The score reads left to right ("82/100"), but the badge stays in the
+                    // page's start corner, away from the heart in the end corner.
+                    <span className={cn('absolute top-2 start-2 rounded-full px-2 py-0.5 text-xs font-semibold shadow-sm backdrop-blur', tone.soft, tone.text)}>
+                        <span dir="ltr" className="flex items-center gap-0.5">
+                            <span className="num">{design.score}</span>
+                            <span className="opacity-70">/100</span>
+                        </span>
                     </span>
                 )}
                 <button
                     type="button"
                     onClick={() => updateDesign(design.id, { is_favorite: !design.is_favorite })}
                     aria-label={design.is_favorite ? d.unfavorite : d.favorite}
-                    className="absolute top-2 end-2 flex size-8 cursor-pointer items-center justify-center rounded-full bg-black/35 text-white backdrop-blur transition-transform hover:scale-110"
+                    className="absolute top-2 end-2 flex size-8 cursor-pointer items-center justify-center rounded-full bg-black/35 text-white backdrop-blur transition-transform hover:scale-110 pointer-coarse:size-10"
                 >
                     <Heart className={cn('size-4', design.is_favorite && 'fill-rose-400 text-rose-400')} />
                 </button>
                 <button
                     type="button"
                     onClick={() => setOpen(true)}
-                    className="absolute end-2 bottom-2 flex size-8 cursor-pointer items-center justify-center rounded-full bg-black/35 text-white opacity-0 backdrop-blur transition-opacity group-hover:opacity-100"
+                    aria-label={design.title}
+                    className="absolute end-2 bottom-2 flex size-8 cursor-pointer items-center justify-center rounded-full bg-black/35 text-white opacity-0 backdrop-blur transition-opacity group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:size-10 pointer-coarse:opacity-100"
                 >
                     <Expand className="size-4" />
                 </button>
             </div>
-            <div className="space-y-2 p-3">
+            {/* Phones: name and status, with every action behind one 44px menu. */}
+            <div className="flex items-center gap-1 p-2 ps-2.5 sm:hidden">
+                <div className="min-w-0 flex-1 space-y-1">
+                    <p className="truncate text-xs font-medium">{variant ?? design.title}</p>
+                    <Badge variant={statusVariant[design.status]} className="max-w-full truncate px-1.5 text-[10px]">
+                        {d.status[design.status]}
+                    </Badge>
+                </div>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <button
+                            type="button"
+                            aria-label={t.common.more}
+                            className="text-muted-foreground hover:bg-muted hover:text-foreground data-[state=open]:bg-muted flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl transition-colors"
+                        >
+                            <MoreHorizontal className="size-5" />
+                        </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-52">
+                        {(
+                            [
+                                ['approved', d.approve, Check],
+                                ['rejected', d.reject, X],
+                                ['in_review', d.sendReview, Send],
+                            ] as const
+                        ).map(([status, label, Icon]) => (
+                            <DropdownMenuItem
+                                key={status}
+                                className={cn('min-h-11', design.status === status && 'text-primary font-medium')}
+                                onSelect={() => updateDesign(design.id, { status })}
+                            >
+                                <Icon className={cn('size-4', status === 'in_review' && 'rtl:-scale-x-100', design.status === status && 'text-primary')} />
+                                {label}
+                            </DropdownMenuItem>
+                        ))}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="min-h-11" onSelect={() => setEditing(true)}>
+                            <WandSparkles className="size-4" />
+                            {d.edit}
+                        </DropdownMenuItem>
+                        {before && (
+                            <DropdownMenuItem className="min-h-11" onSelect={() => setComparing(true)}>
+                                <Columns2 className="size-4" />
+                                {d.compare}
+                            </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem className="min-h-11" asChild>
+                            <a href={`/store/designs/${design.id}/download`}>
+                                <Download className="size-4" />
+                                {d.download}
+                            </a>
+                        </DropdownMenuItem>
+                        {design.evaluation_id && (
+                            <DropdownMenuItem className="min-h-11" asChild>
+                                <Link href={`/store/evaluations/${design.evaluation_id}`}>
+                                    <ExternalLink className="size-4 rtl:-scale-x-100" />
+                                    {d.viewEvaluation}
+                                </Link>
+                            </DropdownMenuItem>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+            <div className="hidden space-y-2 p-3 sm:block">
                 <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm font-medium">{variant ?? design.title}</span>
                     <Badge variant={statusVariant[design.status]}>{d.status[design.status]}</Badge>
