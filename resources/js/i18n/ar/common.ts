@@ -90,6 +90,7 @@ export const common = {
     previous: 'السابق',
     next: 'التالي',
     page: 'صفحة',
+    pageOf: 'صفحة {page} من {last}',
     showing: 'عرض {from}–{to} من {total}',
     confirmTitle: 'هل أنت متأكد؟',
     confirmDelete: 'لا يمكن التراجع عن هذا الإجراء.',

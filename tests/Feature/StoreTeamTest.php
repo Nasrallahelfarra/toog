@@ -521,6 +521,42 @@ class StoreTeamTest extends TestCase
                 ->has('products.data.0.history', 12));
     }
 
+    public function test_a_product_without_a_launch_date_goes_after_the_dated_ones(): void
+    {
+        $sara = $this->staff([], name: 'Sara');
+        $undated = $this->product('Undated');
+        $old = $this->product('Old dress', ['launched_at' => now()->subYear()]);
+        $new = $this->product('New arrival', ['launched_at' => now()->subWeek()]);
+
+        $this->actingAs($sara)->get('/store/my-products?tab=add')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('products.data.0.id', $new->id)
+                ->where('products.data.1.id', $old->id)
+                ->where('products.data.2.id', $undated->id));
+    }
+
+    public function test_the_list_pages_by_twenty_and_an_emptied_last_page_shows_the_page_before(): void
+    {
+        $sara = $this->staff([], name: 'Sara');
+        foreach (range(1, TeamReport::PER_PAGE + 2) as $i) {
+            $this->product("Dress {$i}", ['launched_at' => now()->subDays($i)]);
+        }
+
+        $this->actingAs($sara)->get('/store/my-products?tab=add&page=2')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('products.current_page', 2)
+                ->where('products.last_page', 2)
+                ->has('products.data', 2));
+
+        // She adds the two products on page 2; page 2 no longer exists.
+        $this->claim($sara, Product::query()->orderBy('launched_at')->limit(2)->pluck('id')->all());
+
+        $this->actingAs($sara)->get('/store/my-products?tab=add&page=2')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('products.current_page', 1)
+                ->has('products.data', TeamReport::PER_PAGE));
+    }
+
     public function test_a_newly_added_product_comes_first(): void
     {
         $sara = $this->staff([], name: 'Sara');

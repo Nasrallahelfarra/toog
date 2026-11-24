@@ -27,6 +27,9 @@ use Illuminate\Support\Facades\DB;
  */
 class TeamReport
 {
+    /** Products per page in a member's list, on the phone and the desktop alike. */
+    public const PER_PAGE = 20;
+
     public function __construct(private readonly CatalogBrowser $catalog) {}
 
     /**
@@ -180,7 +183,7 @@ class TeamReport
         $period = $withSales ? $this->catalog->period($store, $months, $month) : null;
         $bySales = $withSales && $sort === 'units';
 
-        $page = Product::query()
+        $query = Product::query()
             ->where('products.store_id', $store->id)
             ->select('products.*')
             ->with('assignee:id,name')
@@ -209,13 +212,22 @@ class TeamReport
                 fn (Builder $q) => $q->orderByRaw('COALESCE(period_sales.period_units, 0) DESC')->orderBy('products.name'),
                 // Newest first, so a product just added leads its list: the
                 // one taken last among the member's own, the one launched
-                // last among those on offer.
+                // last among those on offer. A product with no launch date
+                // goes after the dated ones rather than ahead of them.
                 fn (Builder $q) => $tab === 'mine'
                     ? $q->orderByDesc('products.assigned_at')
-                    : $q->orderByRaw('COALESCE(products.launched_at, products.created_at) DESC'))
-            ->orderByDesc('products.id')
-            ->paginate(20)
-            ->withQueryString();
+                    : $q->orderByRaw('CASE WHEN products.launched_at IS NULL THEN 1 ELSE 0 END')
+                        ->orderByDesc('products.launched_at')
+                        ->orderByDesc('products.created_at'))
+            ->orderByDesc('products.id');
+
+        $page = (clone $query)->paginate(self::PER_PAGE)->withQueryString();
+
+        // Adding or removing the last products of the last page would leave
+        // an empty page: show the page that is now last instead.
+        if ($page->isEmpty() && $page->currentPage() > 1 && $page->total() > 0) {
+            $page = $query->paginate(self::PER_PAGE, ['*'], 'page', $page->lastPage())->withQueryString();
+        }
 
         $history = $period ? ProductSale::query()
             ->whereIn('product_id', $page->getCollection()->modelKeys())
