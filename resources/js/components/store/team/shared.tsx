@@ -20,7 +20,7 @@ export type SuccessRate = { judged: number; hit: number; rate: number | null };
 
 export type RatingPartKey = 'sales' | 'success' | 'uploads' | 'status';
 export type RatingGrade = 'excellent' | 'very_good' | 'average' | 'watch';
-export type RatingReason = 'few_products' | 'new_member' | 'disabled' | 'small_team';
+export type RatingReason = 'few_products' | 'disabled' | 'small_team';
 
 /**
  * A member's rating out of 100 against the team's typical member (50).

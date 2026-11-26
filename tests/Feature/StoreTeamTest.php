@@ -740,9 +740,9 @@ class StoreTeamTest extends TestCase
         $cheap = $this->staff([], name: 'Cheap');
         $dear = $this->staff([], name: 'Dear');
         $newcomer = $this->staff([], name: 'Newcomer');
-        // Both rated members joined long ago; the newcomer holds too few products.
-        $this->store->members()->updateExistingPivot($cheap->id, ['created_at' => now()->subYear()]);
-        $this->store->members()->updateExistingPivot($dear->id, ['created_at' => now()->subYear()]);
+        // Their accounts are brand new, as when a store first adds its staff,
+        // but their products have months of sales: they are rated on those.
+        // Only holding too few products leaves someone "being rated".
 
         foreach ([[$cheap, 10], [$dear, 900]] as [$member, $price]) {
             $ids = [];

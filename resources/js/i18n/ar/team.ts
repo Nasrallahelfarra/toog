@@ -35,7 +35,6 @@ export const team = {
         pending: 'قيد التقييم',
         reasons: {
             few_products: 'يحتاج 5 منتجات على الأقل ({count} الآن)',
-            new_member: 'انضم منذ أقل من 30 يومًا',
             disabled: 'الحساب معطّل',
             small_team: 'يحتاج موظفَين على الأقل للمقارنة',
         },

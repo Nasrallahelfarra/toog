@@ -270,8 +270,12 @@ class TeamReport
     }
 
     /**
-     * What the rating needs from one member's row: per month on the team
-     * within the window, so someone who joined midway is not behind.
+     * What the rating needs from one member's row, per month of the window.
+     *
+     * Not per month since their account was made: accounts came long after
+     * the work (the team feature arrived with staff who had been adding
+     * products for months), and a product's whole history counts for whoever
+     * holds it. A newcomer is caught by the products rule instead.
      *
      * @param  array<string, mixed>  $row
      * @param  list<string>  $window  months as Y-m
@@ -279,8 +283,7 @@ class TeamReport
      */
     private function ratingInputs(array $row, array $window): array
     {
-        $joined = $row['joined_at'] ? Carbon::parse($row['joined_at']) : null;
-        $onTeam = max(1, count(array_filter($window, fn (string $key) => ! $joined || $key >= $joined->format('Y-m'))));
+        $months = max(1, count($window));
         $inWindow = array_filter($row['monthly'], fn (array $point) => in_array(substr($point['period'], 0, 7), $window, true));
         $status = $row['mix'];
         $classified = $status['moving'] + $status['slowing'] + $status['stagnant'];
@@ -289,11 +292,10 @@ class TeamReport
             'reason' => match (true) {
                 $row['status'] === 'disabled' => 'disabled',
                 $row['products'] < TeamRating::MIN_PRODUCTS => 'few_products',
-                $joined !== null && $joined->gt(now()->subDays(TeamRating::MIN_DAYS)) => 'new_member',
                 default => null,
             },
-            'sales' => array_sum(array_column($inWindow, 'units')) / $onTeam,
-            'uploads' => array_sum(array_column($inWindow, 'uploads')) / $onTeam,
+            'sales' => array_sum(array_column($inWindow, 'units')) / $months,
+            'uploads' => array_sum(array_column($inWindow, 'uploads')) / $months,
             'success' => $row['success']['judged'] >= TeamRating::MIN_JUDGED ? $row['success']['hit'] / $row['success']['judged'] : null,
             'status' => $classified > 0 ? ($status['moving'] + 0.5 * $status['slowing']) / $classified : null,
         ];
