@@ -98,7 +98,7 @@ class TeamController extends Controller
             'report' => RevenueVisibility::apply($store, $data),
             'teamSize' => $total,
             'month' => $month,
-            'sort' => in_array($request->query('sort'), ['units', 'products', 'avg_per_product', 'avg_per_month', 'orders', 'revenue'], true) ? $request->query('sort') : 'units',
+            'sort' => in_array($request->query('sort'), ['rating', 'units', 'uploads', 'products', 'avg_per_product', 'avg_per_month', 'orders', 'revenue'], true) ? $request->query('sort') : 'rating',
             'store' => ['name' => $store->name, 'domain' => $store->domain],
             'generatedAt' => now()->toIso8601String(),
             'generatedBy' => $request->user()->name,

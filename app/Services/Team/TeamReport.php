@@ -80,8 +80,10 @@ class TeamReport
             ->groupBy('assigned_user_id')
             ->selectRaw('assigned_user_id AS user_id, COUNT(*) AS products,
                 SUM(CASE WHEN performance = ? THEN 1 ELSE 0 END) AS winners,
+                SUM(CASE WHEN performance = ? THEN 1 ELSE 0 END) AS average,
                 SUM(CASE WHEN performance = ? THEN 1 ELSE 0 END) AS at_risk,
-                SUM(CASE WHEN performance = ? THEN 1 ELSE 0 END) AS stagnant', [Product::WINNER, Product::AT_RISK, Product::STAGNANT])
+                SUM(CASE WHEN performance = ? THEN 1 ELSE 0 END) AS stagnant,
+                SUM(CASE WHEN performance IS NULL THEN 1 ELSE 0 END) AS unrated', [Product::WINNER, Product::AVERAGE, Product::AT_RISK, Product::STAGNANT])
             ->get()
             ->groupBy($holder);
 
@@ -110,19 +112,41 @@ class TeamReport
             ->unique('user_id')
             ->keyBy(fn (object $row) => (int) $row->user_id);
 
-        $figures = function (int $id) use ($products, $sales, $selling, $period, $length): array {
+        [$uploads, $success] = $this->uploads($store, $period, $holder);
+
+        $figures = function (int $id) use ($products, $sales, $selling, $uploads, $success, $period, $length): array {
             $rows = $sales->get($id, collect());
             $byMonth = $rows->groupBy(fn (object $row) => substr((string) $row->period, 0, 7));
             $current = $rows->filter(fn (object $row) => substr((string) $row->period, 0, 10) >= $period['from']);
-            $count = (int) $products->get($id, collect())->sum('products');
+            $held = $products->get($id, collect());
+            $count = (int) $held->sum('products');
             $units = (int) $current->sum('units');
+            $made = $uploads->get($id, collect());
+            $tried = $success[$id] ?? ['judged' => 0, 'hit' => 0];
 
             return [
                 'products' => $count,
                 'selling' => (int) $selling->get($id, collect())->sum('selling'),
-                'winners' => (int) $products->get($id, collect())->sum('winners'),
-                'at_risk' => (int) $products->get($id, collect())->sum('at_risk'),
-                'stagnant' => (int) $products->get($id, collect())->sum('stagnant'),
+                'winners' => (int) $held->sum('winners'),
+                'at_risk' => (int) $held->sum('at_risk'),
+                'stagnant' => (int) $held->sum('stagnant'),
+                // How the products held stand today: moving (winning or
+                // average), slowing, stagnant, or not classified yet.
+                'mix' => [
+                    'moving' => (int) $held->sum('winners') + (int) $held->sum('average'),
+                    'slowing' => (int) $held->sum('at_risk'),
+                    'stagnant' => (int) $held->sum('stagnant'),
+                    'unrated' => (int) $held->sum('unrated'),
+                ],
+                // Products created in Zid in the period, by whoever holds them now.
+                'uploads' => $made->filter(fn (string $created) => $created >= $period['from'] && $created < $period['to'])->count(),
+                // Of the new products of the last 12 months old enough to
+                // judge, how many sold in their first two months.
+                'success' => [
+                    'judged' => $tried['judged'],
+                    'hit' => $tried['hit'],
+                    'rate' => $tried['judged'] > 0 ? round($tried['hit'] / $tried['judged'] * 100, 1) : null,
+                ],
                 'units' => $units,
                 'orders' => (int) $current->sum('orders'),
                 'revenue' => round((float) $current->sum('revenue'), 2),
@@ -132,6 +156,7 @@ class TeamReport
                     'period' => $key.'-01',
                     'units' => (int) $byMonth->get($key, collect())->sum('units'),
                     'revenue' => round((float) $byMonth->get($key, collect())->sum('revenue'), 2),
+                    'uploads' => $made->filter(fn (string $created) => str_starts_with($created, $key))->count(),
                 ], $period['months']),
             ];
         };
@@ -154,6 +179,12 @@ class TeamReport
             ] : null,
         ]);
 
+        // The rating looks at the chosen months, or at the three months up
+        // to a single chosen month: one month alone says too little.
+        $window = array_slice($period['months'], -($month ? 3 : $length));
+        $ratings = TeamRating::rate($members->mapWithKeys(fn (array $row) => [$row['id'] => $this->ratingInputs($row, $window)])->all());
+        $members = $members->map(fn (array $row) => [...$row, 'rating' => $ratings[$row['id']]]);
+
         $unassigned = $figures(0);
         $units = (int) $members->sum('units') + $unassigned['units'];
         $revenue = (float) $members->sum('revenue') + $unassigned['revenue'];
@@ -162,9 +193,14 @@ class TeamReport
         return [
             'months' => $period['months'],
             'length' => $length,
+            'rating' => ['months' => count($window), 'until' => end($window).'-01', 'weights' => TeamRating::WEIGHTS],
+            // Best rated first; those still being rated after, by units sold.
             'members' => array_values($members
                 ->map(fn (array $row) => [...$row, 'share' => $share($row['units'], $units), 'revenue_share' => $share($row['revenue'], $revenue)])
-                ->sortBy([['units', 'desc'], ['products', 'desc'], ['name', 'asc']])
+                ->sortBy([
+                    fn (array $a, array $b) => ($b['rating']['score'] ?? -1) <=> ($a['rating']['score'] ?? -1),
+                    ['units', 'desc'], ['products', 'desc'], ['name', 'asc'],
+                ])
                 ->all()),
             'unassigned' => [...$unassigned, 'share' => $share($unassigned['units'], $units), 'revenue_share' => $share($unassigned['revenue'], $revenue)],
             'totals' => [
@@ -173,7 +209,93 @@ class TeamReport
                 'units' => $units,
                 'orders' => (int) $members->sum('orders') + $unassigned['orders'],
                 'revenue' => round($revenue, 2),
+                'uploads' => (int) $members->sum('uploads') + $unassigned['uploads'],
             ],
+        ];
+    }
+
+    /**
+     * Products by the moment they were created in Zid, per holder: the
+     * creation moments from the start of the history (for the monthly
+     * uploads) and, for the success rate, how many of the last year's new
+     * products old enough to judge (60 days) sold in their first two months.
+     *
+     * @param  array{from: string, to: string, months: list<string>}  $period
+     * @return array{0: \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, string>>, 1: array<int, array{judged: int, hit: int}>}
+     */
+    private function uploads(Store $store, array $period, \Closure $holder): array
+    {
+        $to = $period['to'];
+        $yearAgo = Carbon::parse($to)->subMonths(12)->toDateString();
+        $from = min($period['months'][0].'-01', $yearAgo);
+        $judgeBefore = Carbon::parse($to)->subDays(60)->toDateString();
+
+        // listed_at has the time; products synced before it existed have the day only.
+        $rows = DB::table('products')
+            ->where('store_id', $store->id)
+            ->where('excluded', false)
+            ->where(fn ($w) => $w
+                ->where(fn ($q) => $q->where('listed_at', '>=', $from)->where('listed_at', '<', $to))
+                ->orWhere(fn ($q) => $q->whereNull('listed_at')->where('launched_at', '>=', $from)->where('launched_at', '<', $to)))
+            ->selectRaw('id, assigned_user_id AS user_id, COALESCE(listed_at, launched_at) AS created')
+            ->get()
+            ->map(fn (object $row) => (object) ['id' => (int) $row->id, 'user_id' => $row->user_id, 'created' => substr((string) $row->created, 0, 10)]);
+
+        $judged = $rows->filter(fn (object $row) => $row->created >= $yearAgo && $row->created < $judgeBefore);
+        $soldMonths = collect();
+        foreach ($judged->pluck('id')->chunk(500) as $ids) {
+            $soldMonths = $soldMonths->merge(DB::table('product_sales')
+                ->where('store_id', $store->id)
+                ->whereIn('product_id', $ids->all())
+                ->where('units', '>', 0)
+                ->get(['product_id', 'period'])
+                ->map(fn (object $row) => [(int) $row->product_id, substr((string) $row->period, 0, 7)]));
+        }
+        $sold = $soldMonths->groupBy(0)->map(fn ($rows) => $rows->pluck(1)->all());
+
+        $success = [];
+        foreach ($judged as $row) {
+            $first = substr($row->created, 0, 7);
+            $second = Carbon::parse($row->created)->startOfMonth()->addMonth()->format('Y-m');
+            $key = $holder($row);
+            $success[$key] ??= ['judged' => 0, 'hit' => 0];
+            $success[$key]['judged']++;
+            $months = $sold->get($row->id, []);
+            if (in_array($first, $months, true) || in_array($second, $months, true)) {
+                $success[$key]['hit']++;
+            }
+        }
+
+        return [$rows->groupBy($holder)->map(fn ($set) => $set->pluck('created')->values()), $success];
+    }
+
+    /**
+     * What the rating needs from one member's row: per month on the team
+     * within the window, so someone who joined midway is not behind.
+     *
+     * @param  array<string, mixed>  $row
+     * @param  list<string>  $window  months as Y-m
+     * @return array{reason: ?string, sales: float, success: ?float, uploads: float, status: ?float}
+     */
+    private function ratingInputs(array $row, array $window): array
+    {
+        $joined = $row['joined_at'] ? Carbon::parse($row['joined_at']) : null;
+        $onTeam = max(1, count(array_filter($window, fn (string $key) => ! $joined || $key >= $joined->format('Y-m'))));
+        $inWindow = array_filter($row['monthly'], fn (array $point) => in_array(substr($point['period'], 0, 7), $window, true));
+        $status = $row['mix'];
+        $classified = $status['moving'] + $status['slowing'] + $status['stagnant'];
+
+        return [
+            'reason' => match (true) {
+                $row['status'] === 'disabled' => 'disabled',
+                $row['products'] < TeamRating::MIN_PRODUCTS => 'few_products',
+                $joined !== null && $joined->gt(now()->subDays(TeamRating::MIN_DAYS)) => 'new_member',
+                default => null,
+            },
+            'sales' => array_sum(array_column($inWindow, 'units')) / $onTeam,
+            'uploads' => array_sum(array_column($inWindow, 'uploads')) / $onTeam,
+            'success' => $row['success']['judged'] >= TeamRating::MIN_JUDGED ? $row['success']['hit'] / $row['success']['judged'] : null,
+            'status' => $classified > 0 ? ($status['moving'] + 0.5 * $status['slowing']) / $classified : null,
         ];
     }
 
@@ -233,6 +355,15 @@ class TeamReport
             ->when($filters['category'] ?? null, fn (Builder $q, string $category) => $category === CatalogBrowser::UNCATEGORIZED
                 ? $q->whereNull('products.category')
                 : $q->where('products.category', $category))
+            // The products created in Zid in one month ("what did they bring in October").
+            ->when($filters['uploaded'] ?? null, fn (Builder $q, string $month) => self::createdIn($q, $month))
+            // Every unit each product has sold, whatever the period: how it did since it went up.
+            ->when($withSales, fn (Builder $q) => $q
+                ->leftJoinSub(ProductSale::query()
+                    ->selectRaw('product_id, SUM(units) AS total_units')
+                    ->where('store_id', $store->id)
+                    ->groupBy('product_id'), 'all_sales', 'all_sales.product_id', '=', 'products.id')
+                ->addSelect('all_sales.total_units'))
             // Products another member holds go last.
             ->orderByRaw('CASE WHEN products.assigned_user_id IS NOT NULL AND products.assigned_user_id != ? THEN 1 ELSE 0 END', [$member->id])
             ->when($bySales,
@@ -284,6 +415,7 @@ class TeamReport
                 ...$row,
                 'performance' => $p->performance,
                 'units' => (int) $p->getAttribute('period_units'),
+                'units_total' => (int) $p->getAttribute('total_units'),
                 'orders' => (int) $p->getAttribute('period_orders'),
                 'revenue' => round((float) $p->getAttribute('period_revenue'), 2),
                 'history' => array_map(fn (string $m) => [
@@ -293,6 +425,58 @@ class TeamReport
                 ], $period['months']),
             ];
         })->toArray();
+    }
+
+    /**
+     * What came of the products a member brought in one month: how many,
+     * how many have sold since and how many units, and how they stand today.
+     *
+     * @return array{month: string, products: int, sold: int, unsold: int, units: int, moving: int, slowing: int, stagnant: int, unrated: int}
+     */
+    public function uploadSummary(Store $store, User $member, string $month): array
+    {
+        $rows = self::createdIn(DB::table('products')
+            ->where('products.store_id', $store->id)
+            ->where('products.excluded', false)
+            ->where('products.assigned_user_id', $member->id), $month)
+            ->leftJoinSub(DB::table('product_sales')
+                ->selectRaw('product_id, SUM(units) AS units')
+                ->where('store_id', $store->id)
+                ->groupBy('product_id'), 'sold', 'sold.product_id', '=', 'products.id')
+            ->get(['products.performance', DB::raw('COALESCE(sold.units, 0) AS units')]);
+
+        $sold = $rows->filter(fn (object $row) => (int) $row->units > 0)->count();
+
+        return [
+            'month' => $month,
+            'products' => $rows->count(),
+            'sold' => $sold,
+            'unsold' => $rows->count() - $sold,
+            'units' => (int) $rows->sum('units'),
+            'moving' => $rows->whereIn('performance', [Product::WINNER, Product::AVERAGE])->count(),
+            'slowing' => $rows->where('performance', Product::AT_RISK)->count(),
+            'stagnant' => $rows->where('performance', Product::STAGNANT)->count(),
+            'unrated' => $rows->whereNull('performance')->count(),
+        ];
+    }
+
+    /**
+     * Products created in Zid within a month (Y-m): by the moment when it is
+     * known, by the day for products synced before the time was kept.
+     *
+     * @template TQuery of Builder|QueryBuilder
+     *
+     * @param  TQuery  $query
+     * @return TQuery
+     */
+    public static function createdIn(Builder|QueryBuilder $query, string $month): Builder|QueryBuilder
+    {
+        $from = $month.'-01';
+        $to = Carbon::parse($from)->addMonth()->toDateString();
+
+        return $query->where(fn ($w) => $w
+            ->where(fn ($q) => $q->where('products.listed_at', '>=', $from)->where('products.listed_at', '<', $to))
+            ->orWhere(fn ($q) => $q->whereNull('products.listed_at')->where('products.launched_at', '>=', $from)->where('products.launched_at', '<', $to)));
     }
 
     /**
