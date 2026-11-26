@@ -67,7 +67,7 @@ export default function ReportPrint({ report, store, period, generatedAt, genera
                     </div>
                     <div className="flex items-center gap-2">
                         <span className="flex size-11 items-center justify-center rounded-xl bg-[#14213A]">
-                            <AppLogoIcon className="size-7 text-[#EADBB4]" />
+                            <AppLogoIcon className="size-10 text-[#EADBB4]" />
                         </span>
                         <span className="text-lg font-semibold text-[#1B3A5C]">طوق</span>
                     </div>

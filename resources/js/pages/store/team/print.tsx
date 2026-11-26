@@ -103,7 +103,7 @@ export default function TeamPrint({ report, teamSize, month, sort, store, genera
                     </div>
                     <div className="flex items-center gap-2">
                         <span className="flex size-11 items-center justify-center rounded-xl bg-[#14213A]">
-                            <AppLogoIcon className="size-7 text-[#EADBB4]" />
+                            <AppLogoIcon className="size-10 text-[#EADBB4]" />
                         </span>
                         <span className="text-lg font-semibold" style={{ color: NAVY }}>
                             طوق
