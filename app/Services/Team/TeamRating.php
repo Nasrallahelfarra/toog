@@ -8,16 +8,17 @@ namespace App\Services\Team;
  * Four parts, each scored against the team's typical member (the median):
  * equal to the median is 50, twice it or more is 100, nothing is 0.
  *
- * - sales (40): units sold per month on the team;
+ * - sales (40): units sold per month;
  * - success (25): share of their new products that sold in their first
  *   two months, out of those old enough to judge;
- * - uploads (20): products uploaded per month on the team;
+ * - uploads (20): products uploaded per month;
  * - status (15): share of their products moving today (slowing counts half).
  *
  * Money never counts: stores that hide revenue rate the same way. A part a
  * member has no data for (no product old enough, none classified yet) is
  * left out and the others share its weight. A member with too little to go
- * on is "being rated" rather than given a low score.
+ * on (fewer than five products, or a disabled account) is "being rated"
+ * rather than given a low score.
  */
 final class TeamRating
 {
@@ -25,8 +26,6 @@ final class TeamRating
     public const WEIGHTS = ['sales' => 40, 'success' => 25, 'uploads' => 20, 'status' => 15];
 
     public const MIN_PRODUCTS = 5;
-
-    public const MIN_DAYS = 30;
 
     /** New products old enough to judge before the success part counts. */
     public const MIN_JUDGED = 3;

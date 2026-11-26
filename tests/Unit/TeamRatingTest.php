@@ -47,12 +47,12 @@ class TeamRatingTest extends TestCase
     {
         $rated = TeamRating::rate([
             1 => $this->member(10, 0.5, 4, 0.6),
-            2 => $this->member(0, null, 0, null, 'new_member'),
+            2 => $this->member(0, null, 0, null, 'disabled'),
         ]);
 
         $this->assertNull($rated[1]['score']);
         $this->assertSame('small_team', $rated[1]['reason']);
-        $this->assertSame('new_member', $rated[2]['reason']);
+        $this->assertSame('disabled', $rated[2]['reason']);
     }
 
     public function test_a_part_without_data_is_left_out_and_the_others_share_its_weight(): void

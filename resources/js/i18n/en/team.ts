@@ -35,7 +35,6 @@ export const team: typeof ar = {
         pending: 'Being rated',
         reasons: {
             few_products: 'Needs at least 5 products ({count} now)',
-            new_member: 'Joined less than 30 days ago',
             disabled: 'The account is disabled',
             small_team: 'Needs at least two staff to compare',
         },

@@ -183,7 +183,7 @@ export default function TeamPrint({ report, teamSize, month, sort, store, genera
                                         <span className="font-semibold">{member.name}</span>
                                     </Cell>
                                     <Cell num>
-                                        <RatingCell rating={member.rating} />
+                                        <RatingCell rating={member.rating} products={member.products} />
                                     </Cell>
                                     <Cell num>
                                         {number(member.products)}
@@ -292,12 +292,18 @@ function Cell({ children, num = false }: { children?: React.ReactNode; num?: boo
 }
 
 /** The score and its grade in the grade's ink; "being rated" in grey. */
-function RatingCell({ rating }: { rating: MemberRating }) {
-    const { t, number } = useI18n();
+function RatingCell({ rating, products }: { rating: MemberRating; products: number }) {
+    const { t, tr, number } = useI18n();
     const r = t.team.rating;
 
     if (rating.score === null || rating.grade === null) {
-        return <span style={{ color: MUTED }}>{r.pending}</span>;
+        // On paper there is no tooltip: the reason goes under it.
+        return (
+            <span style={{ color: MUTED }}>
+                {r.pending}
+                {rating.reason && <span className="block text-[9px]">{tr(r.reasons[rating.reason], { count: number(products) })}</span>}
+            </span>
+        );
     }
 
     return (
