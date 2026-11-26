@@ -90,6 +90,7 @@ class CatalogImporter
                     'price' => ($row['price'] ?? '') !== '' ? (float) $row['price'] : null,
                     'image_url' => ($row['image_url'] ?? '') ?: null,
                     'launched_at' => $launched,
+                    'listed_at' => $launched,
                 ], fn ($v) => $v !== null));
 
                 if ($features) {

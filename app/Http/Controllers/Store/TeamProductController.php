@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Store\Concerns\ShowsMemberProducts;
 use App\Services\Team\ProductAssignments;
 use App\Support\CurrentStore;
+use App\Support\StoreAccess;
 use App\Support\StoreSections;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,13 +30,19 @@ class TeamProductController extends Controller
 
         $user = TeamController::member($store, $member);
 
+        $access = app(StoreAccess::class);
+        $manage = $access->can('team') && $user->id !== $request->user()->id;
+        $mine = $access->sections();
+
         return Inertia::render('store/team/show', [
             ...$this->memberProductsProps($request, $store, $user, asOwner: true),
-            // The owner changes the member's pages from here too.
-            'pages' => [
-                'granted' => StoreSections::stored($user->pivot->permissions),
-                'groups' => StoreSections::GROUPS,
-            ],
+            // Whoever manages the team assigns products and changes the
+            // member's pages from here too; the report alone only reads.
+            'canManage' => $manage,
+            'pages' => $manage ? [
+                'granted' => array_values(array_intersect(StoreSections::stored($user->pivot->permissions), $mine)),
+                'groups' => array_filter(array_map(fn (array $keys) => array_values(array_intersect($keys, $mine)), StoreSections::enabledGroups())),
+            ] : null,
         ]);
     }
 

@@ -28,7 +28,8 @@ export const nav = {
     notifications: 'التنبيهات',
     activity: 'سجل النشاط',
     storeSettings: 'إعدادات المتجر',
-    team: 'فريق المتجر',
+    team: 'الموظفين',
+    teamReport: 'تقرير الموظفين',
     myProducts: 'منتجاتي',
 
     adminMode: 'وضع المدير',

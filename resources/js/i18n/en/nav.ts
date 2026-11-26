@@ -30,7 +30,8 @@ export const nav: typeof ar = {
     notifications: 'Notifications',
     activity: 'Activity log',
     storeSettings: 'Store settings',
-    team: 'Store team',
+    team: 'Staff',
+    teamReport: 'Staff report',
     myProducts: 'My products',
 
     adminMode: 'Admin mode',

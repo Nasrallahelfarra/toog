@@ -46,6 +46,7 @@ return [
     'member_created' => 'تمت إضافة الموظف إلى فريق المتجر.',
     'member_updated' => 'تم تحديث بيانات :name.',
     'permissions_saved' => 'تم تحديث صلاحيات :name.',
+    'team_not_self' => 'لا يمكنك تعديل حسابك أو صلاحياتك من صفحة الموظفين.',
     'member_removed' => 'تمت إزالة :name من الفريق.',
     'member_not_managed' => 'هذا الحساب مرتبط بأكثر من متجر؛ تعديله من إدارة المنصة.',
     'section_forbidden' => 'هذه الصفحة غير متاحة لحسابك.',

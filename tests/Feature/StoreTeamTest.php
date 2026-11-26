@@ -93,8 +93,8 @@ class StoreTeamTest extends TestCase
     {
         $this->actingAs($this->owner)->post('/store/team', [
             'name' => 'Sara', 'email' => 'sara@example.com', 'password' => 'secret-pass-1',
-            'permissions' => ['catalog', 'studio', 'team', 'not-a-page'],
-        ])->assertSessionHasErrors('permissions.2');
+            'permissions' => ['catalog', 'studio', 'integration', 'not-a-page'],
+        ])->assertSessionHasErrors(['permissions.2', 'permissions.3']);
 
         $this->actingAs($this->owner)->post('/store/team', [
             'name' => 'Sara', 'email' => 'sara@example.com', 'password' => 'secret-pass-1',
@@ -214,8 +214,8 @@ class StoreTeamTest extends TestCase
         $member = $this->staff(['catalog']);
         $colleague = $this->staff(['catalog', 'settings'], name: 'Colleague');
 
-        // The Zid connection and the team itself are not pages to hand out.
-        foreach (['integration', 'team', 'nonsense'] as $page) {
+        // The Zid connection is not a page to hand out.
+        foreach (['integration', 'connection', 'nonsense'] as $page) {
             $this->actingAs($this->owner)->put("/store/team/{$member->id}/permissions", ['permissions' => ['catalog', $page]])
                 ->assertSessionHasErrors('permissions.1');
         }
@@ -250,9 +250,9 @@ class StoreTeamTest extends TestCase
         // Neither another store's staff nor the owner themselves.
         $this->actingAs($this->owner)->post("/store/team/{$outsider->id}/disable")->assertNotFound();
         $this->actingAs($this->owner)->put("/store/team/{$outsider->id}/permissions", ['permissions' => []])->assertNotFound();
-        $this->actingAs($this->owner)->put("/store/team/{$this->owner->id}/permissions", ['permissions' => []])->assertNotFound();
+        $this->actingAs($this->owner)->put("/store/team/{$this->owner->id}/permissions", ['permissions' => []])->assertForbidden();
         $this->assertSame(['catalog'], $this->pagesOf($outsider, $elsewhere));
-        $this->actingAs($this->owner)->delete("/store/team/{$this->owner->id}")->assertNotFound();
+        $this->actingAs($this->owner)->delete("/store/team/{$this->owner->id}")->assertForbidden();
         $this->assertSame(User::STATUS_ACTIVE, $outsider->fresh()->status);
     }
 
@@ -290,9 +290,9 @@ class StoreTeamTest extends TestCase
                 // The filter by member is the owner's.
                 ->where('members', []));
 
-        // A closed page sends them home with a notice; a closed action is refused.
-        $this->actingAs($member)->get('/store/performance')->assertRedirect(route('store.my-products.index'));
-        $this->actingAs($member)->get('/store/team')->assertRedirect(route('store.my-products.index'));
+        // A closed page sends them home (their first page) with a notice; a closed action is refused.
+        $this->actingAs($member)->get('/store/performance')->assertRedirect(route('store.catalog'));
+        $this->actingAs($member)->get('/store/team')->assertRedirect(route('store.catalog'));
         $this->actingAs($member)->post('/store/team', ['name' => 'x'])->assertForbidden();
         $this->actingAs($member)->post('/store/performance/reclassify')->assertForbidden();
         $this->actingAs($member)->delete('/store/integrations/zid')->assertForbidden();
@@ -367,11 +367,13 @@ class StoreTeamTest extends TestCase
             'store.settings.revenue-audit', 'store.settings.revenue-audit.run',
             'store.integrations.zid.redirect', 'store.integrations.zid.callback', 'store.integrations.zid.disconnect',
             'store.integrations.zid.sync', 'store.integrations.zid.sync.resume', 'store.integrations.zid.check',
+            // The team-wide two-factor rule.
+            'store.team.security',
         ];
 
         foreach (Route::getRoutes() as $route) {
             $name = (string) $route->getName();
-            if (! str_starts_with($name, 'store.') || str_starts_with($name, 'store.team.')) {
+            if (! str_starts_with($name, 'store.')) {
                 continue;
             }
 
@@ -387,7 +389,10 @@ class StoreTeamTest extends TestCase
             $this->assertSame([], array_diff($sections, [...StoreSections::all(), '*']), "{$name} maps to an unknown page");
         }
 
-        $this->assertSame(StoreSections::OWNER_ONLY, StoreSections::forRoute('store.team.index'));
+        $this->assertSame(['team'], StoreSections::forRoute('store.team.index'));
+        $this->assertSame(['team'], StoreSections::forRoute('store.team.permissions'));
+        $this->assertSame(['team_report'], StoreSections::forRoute('store.team.report'));
+        $this->assertSame(['team_report'], StoreSections::forRoute('store.team.products'));
         $this->assertSame(StoreSections::OWNER_ONLY, StoreSections::forRoute('store.something.new'));
     }
 
@@ -535,6 +540,37 @@ class StoreTeamTest extends TestCase
                 ->where('products.data.2.id', $undated->id));
     }
 
+    public function test_products_created_the_same_day_keep_the_stores_order(): void
+    {
+        $sara = $this->staff([], name: 'Sara');
+        // Read from Zid newest first, so the newest row has the lowest id.
+        $evening = $this->product('Evening', ['launched_at' => '2026-09-16', 'listed_at' => '2026-09-16 21:40:00']);
+        $noon = $this->product('Noon', ['launched_at' => '2026-09-16', 'listed_at' => '2026-09-16 12:05:00']);
+        $morning = $this->product('Morning', ['launched_at' => '2026-09-16', 'listed_at' => '2026-09-16 08:30:00']);
+        $dayBefore = $this->product('Day before', ['launched_at' => '2026-09-15', 'listed_at' => '2026-09-15 23:59:00']);
+
+        $this->actingAs($sara)->get('/store/my-products?tab=add')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('products.data.0.id', $evening->id)
+                ->where('products.data.1.id', $noon->id)
+                ->where('products.data.2.id', $morning->id)
+                ->where('products.data.3.id', $dayBefore->id));
+
+        // The catalog's "newest" follows the same order.
+        $this->actingAs($this->owner)->get('/store/catalog?sort=newest')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('products.data.0.id', $evening->id)
+                ->where('products.data.2.id', $morning->id));
+    }
+
+    public function test_the_zid_product_keeps_the_time_it_was_created(): void
+    {
+        $row = app(\App\Services\Zid\ZidMapper::class)->product(['id' => 'p1', 'name' => 'Dress', 'created_at' => '2026-09-16T18:40:12Z']);
+
+        $this->assertSame('2026-09-16', $row['launched_at']);
+        $this->assertSame(\Illuminate\Support\Carbon::parse('2026-09-16T18:40:12Z')->setTimezone(config('app.timezone'))->toDateTimeString(), $row['listed_at']);
+    }
+
     public function test_the_list_pages_by_twenty_and_an_emptied_last_page_shows_the_page_before(): void
     {
         $sara = $this->staff([], name: 'Sara');
@@ -652,10 +688,10 @@ class StoreTeamTest extends TestCase
         $this->sale($dress, 0, 10, price: 300);
         $this->claim($sara, [$dress->id]);
 
-        $this->actingAs($this->owner)->get('/store/team?months=3')
+        $this->actingAs($this->owner)->get('/store/team/report?months=3')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('store/team/index')
+                ->component('store/team/report')
                 ->where('report.members.0.name', 'Sara')
                 ->where('report.members.0.units', 10)
                 ->where('report.members.0.revenue', null)
@@ -683,7 +719,7 @@ class StoreTeamTest extends TestCase
         $this->claim($sara, [$dress->id]);
         $this->store->update(['settings' => ['show_revenue' => true]]);
 
-        $this->actingAs($this->owner)->get('/store/team?months=3')
+        $this->actingAs($this->owner)->get('/store/team/report?months=3')
             ->assertInertia(fn (Assert $page) => $page
                 ->where('report.members.0.revenue', 3000)
                 ->where('report.members.0.revenue_share', 100)
@@ -714,8 +750,8 @@ class StoreTeamTest extends TestCase
 
         $this->assertTrue(ActivityLog::query()->where('action', 'team.report_exported')->where('store_id', $this->store->id)->exists());
 
-        // The team report is the owner's, whatever pages a member holds.
-        $this->actingAs($noor)->get('/store/team/export')->assertRedirect(route('store.my-products.index'));
+        // The team report needs its own page, whatever else a member holds.
+        $this->actingAs($noor)->get('/store/team/export')->assertRedirect(route('store.reports.index'));
     }
 
     public function test_a_member_sees_free_products_and_learns_who_holds_the_rest_only_by_searching(): void

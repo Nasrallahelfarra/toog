@@ -54,8 +54,8 @@ class TeamTwoFactorTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('requireTwoFactor', false)
-                ->has('report.members', 2)
-                ->where('report.members', fn ($members) => collect($members)->firstWhere('id', $on->id)['two_factor'] === true
+                ->has('members', 2)
+                ->where('members', fn ($members) => collect($members)->firstWhere('id', $on->id)['two_factor'] === true
                     && collect($members)->firstWhere('id', $off->id)['two_factor'] === false));
     }
 

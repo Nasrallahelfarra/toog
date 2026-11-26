@@ -37,7 +37,7 @@ export function TwoFactorMark({ on, onLabel, offLabel, className }: { on: boolea
  * How many on the team sign in with two-factor, who has not yet, and the
  * owner's switch that makes it a must for every member.
  */
-export function TeamSecurityCard({ members, required }: { members: TeamMember[]; required: boolean }) {
+export function TeamSecurityCard({ members, required }: { members: Pick<TeamMember, 'name' | 'status' | 'two_factor'>[]; required: boolean }) {
     const { t, tr, number } = useI18n();
     const m = t.team.security;
     const [saving, setSaving] = useState(false);

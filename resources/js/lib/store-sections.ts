@@ -12,7 +12,9 @@ import {
     ScanSearch,
     Settings,
     Swords,
+    Trophy,
     Turtle,
+    UsersRound,
     WandSparkles,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -26,6 +28,9 @@ type NavKey = keyof Dictionary['nav'];
  * both read this list, so they cannot drift. The owner grants staff any of
  * them except "connection": the Zid connection is the owner's alone, so the
  * server never offers it and only the owner sees it in the sidebar.
+ *
+ * Pages switched off for stores are missing from everyone's access list, so
+ * they drop out of the sidebar and the permission form on their own.
  */
 export const STORE_SECTIONS: Record<string, { href: string; icon: LucideIcon; label: NavKey; exact?: boolean; exclude?: string[] }> = {
     dashboard: { href: '/store', icon: LayoutDashboard, label: 'dashboard', exact: true },
@@ -40,6 +45,8 @@ export const STORE_SECTIONS: Record<string, { href: string; icon: LucideIcon; la
     market: { href: '/store/market', icon: Radar, label: 'market' },
     competitors: { href: '/store/competitors', icon: Swords, label: 'competitors' },
     calendar: { href: '/store/calendar', icon: CalendarDays, label: 'calendar' },
+    team: { href: '/store/team', icon: UsersRound, label: 'team', exact: true },
+    team_report: { href: '/store/team/report', icon: Trophy, label: 'teamReport' },
     reports: { href: '/store/reports', icon: FileBarChart2, label: 'reports' },
     activity: { href: '/store/activity', icon: History, label: 'activity' },
     settings: { href: '/store/settings', icon: Settings, label: 'storeSettings', exclude: ['/store/settings/integration'] },
@@ -50,5 +57,5 @@ export const STORE_SECTION_GROUPS: { key: string; label: NavKey; sections: strin
     { key: 'store', label: 'store', sections: ['dashboard', 'performance', 'catalog', 'stagnant', 'connection'] },
     { key: 'decisions', label: 'decisions', sections: ['evaluations', 'studio', 'library', 'balance'] },
     { key: 'intelligence', label: 'intelligence', sections: ['market', 'competitors', 'calendar'] },
-    { key: 'management', label: 'management', sections: ['reports', 'activity', 'settings'] },
+    { key: 'management', label: 'management', sections: ['team', 'team_report', 'reports', 'activity', 'settings'] },
 ];

@@ -38,6 +38,33 @@ class TeamReport
      *
      * @return array{months: list<string>, length: int, members: list<array<string, mixed>>, unassigned: array<string, mixed>, totals: array<string, mixed>}
      */
+    /**
+     * The staff as people, without their sales: for managing the team.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function roster(Store $store): array
+    {
+        $held = DB::table('products')
+            ->where('store_id', $store->id)
+            ->where('excluded', false)
+            ->whereNotNull('assigned_user_id')
+            ->groupBy('assigned_user_id')
+            ->pluck(DB::raw('COUNT(*)'), 'assigned_user_id');
+
+        return $store->staff()->orderBy('users.name')->get()->map(fn (User $member) => [
+            'id' => $member->id,
+            'name' => $member->name,
+            'email' => $member->email,
+            'status' => $member->status,
+            'two_factor' => $member->hasEnabledTwoFactorAuthentication(),
+            'last_login_at' => $member->last_login_at?->toIso8601String(),
+            'joined_at' => ($joined = $member->pivot->created_at) ? Carbon::parse($joined)->toIso8601String() : null,
+            'permissions' => StoreSections::stored($member->pivot->permissions),
+            'products' => (int) ($held[$member->id] ?? 0),
+        ])->values()->all();
+    }
+
     public function comparison(Store $store, int $months, ?string $month = null): array
     {
         $period = $this->catalog->period($store, $months, $month);
@@ -216,9 +243,7 @@ class TeamReport
                 // goes after the dated ones rather than ahead of them.
                 fn (Builder $q) => $tab === 'mine'
                     ? $q->orderByDesc('products.assigned_at')
-                    : $q->orderByRaw('CASE WHEN products.launched_at IS NULL THEN 1 ELSE 0 END')
-                        ->orderByDesc('products.launched_at')
-                        ->orderByDesc('products.created_at'))
+                    : Product::newestFirst($q))
             ->orderByDesc('products.id');
 
         $page = (clone $query)->paginate(self::PER_PAGE)->withQueryString();

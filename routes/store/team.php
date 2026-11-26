@@ -8,12 +8,16 @@ use Illuminate\Support\Facades\Route;
 /*
 | The store team — prefix /store, name store.*
 |
-| team.* is the owner's: staff accounts, the pages each may open, and how
-| their products sell. my-products.* is each staff member's own list.
+| team.* manages the staff (section "team"); team.report, team.export and a
+| member's page show how their products sell ("team_report"). The owner
+| holds both and can give them to a member. my-products.* is each staff
+| member's own list.
 | Who may open what is decided in App\Support\StoreSections.
 */
 
 Route::get('team', [TeamController::class, 'index'])->name('team.index');
+// How each member's products sell, side by side
+Route::get('team/report', [TeamController::class, 'report'])->name('team.report');
 Route::post('team', [TeamController::class, 'store'])->name('team.store');
 // The comparison as a printable page the browser saves to PDF
 Route::get('team/export', [TeamController::class, 'export'])->name('team.export');

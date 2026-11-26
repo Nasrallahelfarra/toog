@@ -204,7 +204,7 @@ class CatalogBrowser
                 : $q->where('products.performance', $class))
             ->when($filters['sort'] ?? 'revenue', fn (Builder $q, string $sort) => match ($sort) {
                 'units' => $month ? $q->orderByRaw('COALESCE(month_sales.month_units, 0) DESC') : $q->orderByDesc('products.units_sold'),
-                'newest' => $q->orderByRaw('products.launched_at IS NULL')->orderByDesc('products.launched_at'),
+                'newest' => Product::newestFirst($q),
                 'price_low' => $q->orderByRaw('products.price IS NULL')->orderBy('products.price'),
                 'price_high' => $q->orderByRaw('products.price IS NULL')->orderByDesc('products.price'),
                 default => $month ? $q->orderByRaw('COALESCE(month_sales.month_revenue, 0) DESC') : $q->orderByDesc('products.revenue'),
