@@ -34,6 +34,15 @@ return [
 
     'store_sections' => env('MOJO_STORE_SECTIONS', 'studio,library,competitors,team,team_report'),
 
+    /*
+    | The design studio's tabs in use, in order: idea (free idea), designer
+    | (the AI designer) and modify (modify a product); "all" for every tab.
+    | For now the studio runs with the free idea alone (store manager,
+    | 2026-11-26); the others come back by changing this, no code needed.
+    */
+
+    'studio_modes' => env('MOJO_STUDIO_MODES', 'idea'),
+
     'queue' => [
         'dev_workers' => max(1, (int) env('QUEUE_DEV_WORKERS', 3)),
     ],

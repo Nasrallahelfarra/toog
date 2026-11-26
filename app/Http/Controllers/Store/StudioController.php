@@ -94,15 +94,26 @@ class StudioController extends Controller
         // naming a mode keep it. Display shots are part of the free-idea tab
         // now, so an old "mockup" link opens that tab.
         $asked = $request->query('mode') === 'mockup' ? 'idea' : $request->query('mode');
+        $modes = self::modes();
         $mode = in_array($asked, ['designer', 'modify', 'idea'], true) ? $asked : match (true) {
             $source !== null => 'modify',
             $request->filled('collection') => 'designer',
             default => 'idea',
         };
+        // A tab switched off opens the first one in use instead.
+        if (! in_array($mode, $modes, true)) {
+            $mode = $modes[0];
+        }
+        // "Design like this" while the AI designer is off: the free idea
+        // starts from a description of the piece instead of an empty form.
+        $inspiration = ! in_array('designer', $modes, true) && $request->filled('inspire') && ! $request->filled('prompt')
+            ? self::inspirationPrompt(DesignerController::inspire($store, $request->string('inspire')->toString()))
+            : null;
         $collectionId = $request->integer('collection');
 
         return Inertia::render('store/studio/index', [
             'mode' => $mode,
+            'modes' => $modes,
             'designer' => fn () => $this->designer($store, $designs),
             // The latest collections; one opened by link stays first.
             'collections' => fn () => DesignCollection::query()->where('store_id', $store->id)
@@ -115,7 +126,7 @@ class StudioController extends Controller
             // Store intelligence for the designer's rail: loaded after the page.
             'insights' => Inertia::defer(fn () => $insights->build($store)),
             // A prompt handed over from another page, e.g. a market trend.
-            'prefillPrompt' => $request->string('prompt')->limit(500)->toString() ?: null,
+            'prefillPrompt' => $request->string('prompt')->limit(500)->toString() ?: $inspiration,
             'source' => $source,
             'brand' => $store->brand_guide ?? [],
             // Closures: a background check (only collections or requests) skips them.
@@ -284,6 +295,53 @@ class StudioController extends Controller
         $since = $request->integer('since') ?: ($edit ? $designRequest->id - 1 : 0);
 
         return to_route('store.studio.index', array_filter(['mode' => self::modeFor($designRequest), 'since' => $since ?: null]));
+    }
+
+    /**
+     * The studio tabs in use, in order (config mojo.studio_modes).
+     *
+     * @return non-empty-list<string>
+     */
+    public static function modes(): array
+    {
+        $all = ['idea', 'designer', 'modify'];
+        $setting = config('mojo.studio_modes');
+        $on = $setting === null || $setting === 'all'
+            ? $all
+            : array_values(array_intersect($all, array_map('trim', explode(',', (string) $setting))));
+
+        return $on === [] ? ['idea'] : $on;
+    }
+
+    /**
+     * A free-idea description of a competitor piece or a market attribute:
+     * what it is, its colours and pattern, made in the store's own way.
+     *
+     * @param  array<string, mixed>|null  $prefill  from DesignerController::inspire()
+     */
+    private static function inspirationPrompt(?array $prefill): ?string
+    {
+        if (! $prefill) {
+            return null;
+        }
+
+        $locale = app()->getLocale() === 'ar' ? 'ar' : 'en';
+        $garment = FashionVocabulary::garments()[$prefill['garment'] ?? '']['ar' === $locale ? 'ar' : 'en'] ?? null;
+        $colors = array_values(array_filter(array_map(fn ($c) => Vocabulary::label('colors', $c, $locale), (array) ($prefill['colors'] ?? []))));
+        $pattern = Vocabulary::label('patterns', $prefill['pattern'] ?? null, $locale);
+        $source = $prefill['inspiration']['label'] ?? null;
+
+        if ($locale === 'ar') {
+            return trim(($garment ? "صمّم {$garment}" : 'صمّم قطعة').($source ? " مستوحاة من «{$source}»" : '')
+                .($colors ? '، بألوان '.implode(' و', $colors) : '')
+                .($pattern ? "، نقشة {$pattern}" : '')
+                .'، بقصّة قريبة منها وبهوية متجري.');
+        }
+
+        return trim(($garment ? "Design a {$garment}" : 'Design a piece').($source ? " inspired by “{$source}”" : '')
+            .($colors ? ', in '.implode(' and ', $colors) : '')
+            .($pattern ? ", {$pattern} pattern" : '')
+            .', with a close cut and my store’s identity.');
     }
 
     /**
