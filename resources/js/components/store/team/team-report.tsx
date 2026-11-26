@@ -232,7 +232,12 @@ export function MemberFocus({
 
     const figures: { label: string; value: number | null; format: (n: number) => string; hint?: string }[] = [
         { label: f.units, value: member.units, format: (n) => number(n) },
-        { label: f.uploads, value: member.uploads, format: (n) => number(n) },
+        {
+            label: f.uploads,
+            value: member.uploads,
+            format: (n) => number(n),
+            hint: member.uploads > 0 ? tr(t.team.compare.uploadsSold, { sold: number(member.uploads_sold), unsold: number(member.uploads - member.uploads_sold) }) : undefined,
+        },
         {
             label: f.successRate,
             value: member.success.rate,

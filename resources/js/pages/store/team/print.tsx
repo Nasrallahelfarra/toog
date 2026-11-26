@@ -192,7 +192,14 @@ export default function TeamPrint({ report, teamSize, month, sort, store, genera
                                     <Cell num>
                                         <span className="font-bold">{number(member.units)}</span>
                                     </Cell>
-                                    <Cell num>{number(member.uploads)}</Cell>
+                                    <Cell num>
+                                        {number(member.uploads)}
+                                        {member.uploads > 0 && (
+                                            <span className="block text-[9px] opacity-70">
+                                                {tr(m.compare.uploadsSold, { sold: number(member.uploads_sold), unsold: number(member.uploads - member.uploads_sold) })}
+                                            </span>
+                                        )}
+                                    </Cell>
                                     <Cell num>
                                         {percent(member.success.rate)}
                                         {member.success.judged > 0 && (

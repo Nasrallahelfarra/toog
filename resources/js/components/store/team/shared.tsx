@@ -47,6 +47,8 @@ export type MemberFigures = {
     orders: number;
     /** Products created in Zid in the period, by whoever holds them now. */
     uploads: number;
+    /** Of those uploads, how many have sold at least one piece since. */
+    uploads_sold: number;
     mix: StatusMix;
     success: SuccessRate;
     /** Null while revenue is hidden from the store. */
