@@ -132,7 +132,8 @@ type Props = {
 type Mode = 'designer' | 'modify' | 'idea';
 type ClassicMode = Exclude<Mode, 'designer'>;
 
-const MODES: Mode[] = ['designer', 'modify', 'idea'];
+// The free idea comes first and opens by default; then the AI designer.
+const MODES: Mode[] = ['idea', 'designer', 'modify'];
 const modeIcons: Record<Mode, LucideIcon> = { designer: Sparkles, modify: RefreshCw, idea: Lightbulb };
 
 const outputIcons: Record<OutputType, LucideIcon> = {
