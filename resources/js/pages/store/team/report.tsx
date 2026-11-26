@@ -159,6 +159,11 @@ export default function TeamReportPage({ months, month, availableMonths, section
         { judged: 0, hit: 0 },
     );
     const perMonth = (n: number) => (report.length > 1 ? tr(m.compare.perMonth, { value: number(n / report.length, 1) }) : undefined);
+    // Of a member's uploads in the period, how many sold since; with one month
+    // picked, the number opens those very products on the member's page.
+    const uploadsHint = (member: Pick<TeamMember, 'uploads' | 'uploads_sold'>) =>
+        member.uploads > 0 ? tr(m.compare.uploadsSold, { sold: number(member.uploads_sold), unsold: number(member.uploads - member.uploads_sold) }) : perMonth(member.uploads);
+    const uploadsHref = (member: Pick<TeamMember, 'id' | 'uploads'>) => (month && member.uploads > 0 ? `/store/team/${member.id}?uploaded=${month}` : undefined);
     const successHint = (row: MemberFigures) =>
         row.success.judged > 0 ? tr(m.compare.successHint, { hit: number(row.success.hit), judged: number(row.success.judged) }) : undefined;
     const post = (url: string, done: () => void) =>
@@ -460,7 +465,7 @@ export default function TeamReportPage({ months, month, availableMonths, section
                                                     hint={tr(t.team.focus.shareLine, { share: percent(member.share, 1) })}
                                                     strong
                                                 />
-                                                <CardFigure label={m.compare.uploads} value={number(member.uploads)} hint={perMonth(member.uploads)} />
+                                                <CardFigure label={m.compare.uploads} value={number(member.uploads)} hint={uploadsHint(member)} href={uploadsHref(member)} />
                                                 <CardFigure label={m.compare.successRate} value={percent(member.success.rate)} hint={successHint(member)} />
                                                 <CardFigure label={m.compare.avgPerMonth} value={number(member.avg_per_month, 1)} />
                                                 {showRevenue && <CardFigure label={m.compare.revenue} value={money(member.revenue)} />}
@@ -587,8 +592,14 @@ export default function TeamReportPage({ months, month, availableMonths, section
                                                     <span className="num text-muted-foreground block text-xs">{percent(member.share, 1)}</span>
                                                 </TableCell>
                                                 <TableCell className="text-end">
-                                                    <span className="num font-semibold">{number(member.uploads)}</span>
-                                                    {report.length > 1 && <span className="num text-muted-foreground block text-xs">{perMonth(member.uploads)}</span>}
+                                                    {uploadsHref(member) ? (
+                                                        <Link href={uploadsHref(member)!} className="num hover:text-primary font-semibold underline decoration-dotted underline-offset-4">
+                                                            {number(member.uploads)}
+                                                        </Link>
+                                                    ) : (
+                                                        <span className="num font-semibold">{number(member.uploads)}</span>
+                                                    )}
+                                                    {member.uploads > 0 && <span className="num text-muted-foreground block text-xs whitespace-nowrap">{uploadsHint(member)}</span>}
                                                 </TableCell>
                                                 <TableCell className="num text-end">{number(member.avg_per_product, 1)}</TableCell>
                                                 <TableCell className="num text-end">{number(member.avg_per_month, 1)}</TableCell>
@@ -742,11 +753,19 @@ export default function TeamReportPage({ months, month, availableMonths, section
 }
 
 /** One figure on a member's phone card: its name above, the number below. */
-function CardFigure({ label, value, hint, strong }: { label: string; value: string; hint?: string; strong?: boolean }) {
+function CardFigure({ label, value, hint, strong, href }: { label: string; value: string; hint?: string; strong?: boolean; href?: string }) {
     return (
         <div className="min-w-0">
             <dt className="text-muted-foreground truncate text-xs">{label}</dt>
-            <dd className={cn('num', strong ? 'text-base font-semibold' : 'font-medium')}>{value}</dd>
+            <dd className={cn('num', strong ? 'text-base font-semibold' : 'font-medium')}>
+                {href ? (
+                    <Link href={href} className="hover:text-primary underline decoration-dotted underline-offset-4">
+                        {value}
+                    </Link>
+                ) : (
+                    value
+                )}
+            </dd>
             {/* On its own line: beside a number it reads as one longer number. */}
             {hint && <dd className="text-muted-foreground text-xs">{hint}</dd>}
         </div>

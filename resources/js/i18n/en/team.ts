@@ -144,6 +144,7 @@ export const team: typeof ar = {
     },
 
     compare: {
+        uploadsSold: '{sold} sold · {unsold} not yet',
         title: 'Detailed comparison',
         hint: 'Click a column heading to rank staff by it, and a row to show that member’s profile above.',
         rank: '#',

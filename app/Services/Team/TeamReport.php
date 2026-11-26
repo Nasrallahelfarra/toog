@@ -140,6 +140,8 @@ class TeamReport
                 ],
                 // Products created in Zid in the period, by whoever holds them now.
                 'uploads' => $made->filter(fn (string $created) => $created >= $period['from'] && $created < $period['to'])->count(),
+                // How many of those have sold at least one piece since they went up.
+                'uploads_sold' => (int) ($tried['period_sold'] ?? 0),
                 // Of the new products of the last 12 months old enough to
                 // judge, how many sold in their first two months.
                 'success' => [
@@ -221,7 +223,7 @@ class TeamReport
      * products old enough to judge (60 days) sold in their first two months.
      *
      * @param  array{from: string, to: string, months: list<string>}  $period
-     * @return array{0: \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, string>>, 1: array<int, array{judged: int, hit: int}>}
+     * @return array{0: \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, string>>, 1: array<int, array{judged: int, hit: int, period_sold?: int}>}
      */
     private function uploads(Store $store, array $period, \Closure $holder): array
     {
@@ -242,8 +244,9 @@ class TeamReport
             ->map(fn (object $row) => (object) ['id' => (int) $row->id, 'user_id' => $row->user_id, 'created' => substr((string) $row->created, 0, 10)]);
 
         $judged = $rows->filter(fn (object $row) => $row->created >= $yearAgo && $row->created < $judgeBefore);
+        $inPeriod = $rows->filter(fn (object $row) => $row->created >= $period['from'] && $row->created < $period['to']);
         $soldMonths = collect();
-        foreach ($judged->pluck('id')->chunk(500) as $ids) {
+        foreach ($judged->pluck('id')->merge($inPeriod->pluck('id'))->unique()->chunk(500) as $ids) {
             $soldMonths = $soldMonths->merge(DB::table('product_sales')
                 ->where('store_id', $store->id)
                 ->whereIn('product_id', $ids->all())
@@ -264,6 +267,13 @@ class TeamReport
             if (in_array($first, $months, true) || in_array($second, $months, true)) {
                 $success[$key]['hit']++;
             }
+        }
+
+        // Of the products brought in the period, those that have sold since.
+        foreach ($inPeriod as $row) {
+            $key = $holder($row);
+            $success[$key] ??= ['judged' => 0, 'hit' => 0];
+            $success[$key]['period_sold'] = ($success[$key]['period_sold'] ?? 0) + ($sold->has($row->id) ? 1 : 0);
         }
 
         return [$rows->groupBy($holder)->map(fn ($set) => $set->pluck('created')->values()), $success];

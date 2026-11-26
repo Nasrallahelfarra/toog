@@ -703,6 +703,8 @@ class StoreTeamTest extends TestCase
         $this->actingAs($this->owner)->get('/store/team/report?months=3')
             ->assertInertia(fn (Assert $page) => $page
                 ->where('report.members.0.uploads', 3)
+                // A and C have sold since they went up; B has not.
+                ->where('report.members.0.uploads_sold', 2)
                 ->where('report.members.0.monthly.1.uploads', 2)
                 ->where('report.members.0.monthly.2.uploads', 1)
                 ->where('report.unassigned.uploads', 1)
@@ -710,7 +712,7 @@ class StoreTeamTest extends TestCase
 
         // One month: that month's uploads.
         $this->actingAs($this->owner)->get('/store/team/report?month='.$lastMonth->format('Y-m'))
-            ->assertInertia(fn (Assert $page) => $page->where('report.members.0.uploads', 2));
+            ->assertInertia(fn (Assert $page) => $page->where('report.members.0.uploads', 2)->where('report.members.0.uploads_sold', 1));
     }
 
     public function test_the_report_shows_how_each_members_products_stand_today_and_how_new_ones_did(): void
