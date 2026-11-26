@@ -25,10 +25,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $source_image_path
  * @property string $status
  * @property string|null $error
+ * @property array{mode: string, face: string, background: string, back_view: bool}|null $presentation
+ * @property array<string, mixed>|null $plan
+ * @property list<array{variant: int, view: string, error: string}>|null $failures
  */
 #[Fillable([
     'store_id', 'user_id', 'evaluation_id', 'type', 'title', 'prompt', 'category', 'output_type',
     'aspect_ratio', 'variants_count', 'source_image_path', 'status', 'error', 'product_recommendation_id', 'parent_design_id',
+    'presentation', 'plan', 'failures',
 ])]
 class DesignRequest extends Model
 {
@@ -36,6 +40,33 @@ class DesignRequest extends Model
 
     /** A request that edits an earlier design (parent_design_id). */
     public const REFINEMENT = 'refinement';
+
+    /**
+     * The free idea as a look: the merchant's sketches and fabric photos
+     * made into a photograph of the garment, worn or shown as she chose.
+     */
+    public const LOOK = 'look';
+
+    protected function casts(): array
+    {
+        return ['presentation' => 'array', 'plan' => 'array', 'failures' => 'array'];
+    }
+
+    /**
+     * The merchant's own pictures, in the order they are sent.
+     *
+     * @return HasMany<DesignRequestImage, $this>
+     */
+    public function images(): HasMany
+    {
+        return $this->hasMany(DesignRequestImage::class)->orderBy('position');
+    }
+
+    /** How many images a look makes: each variant, and its back when asked. */
+    public function slots(): int
+    {
+        return max(1, $this->variants_count) * (($this->presentation['back_view'] ?? false) ? 2 : 1);
+    }
 
     /**
      * @return HasMany<Design, $this>

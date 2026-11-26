@@ -72,10 +72,10 @@ class DesignerPrompt
     private const ARTWORK_SAME = 'Keep each embellishment\'s type, placement, density and colours, and the print\'s style; draw the motifs afresh in the same style rather than tracing them.';
 
     /** Who wears the design: always recognisably a Saudi, Gulf Arab woman. */
-    private const MODEL = 'a Saudi woman in her mid-twenties with distinctly Gulf Arab (Khaleeji) looks';
+    public const MODEL = 'a Saudi woman in her mid-twenties with distinctly Gulf Arab (Khaleeji) looks';
 
     /** Her face, when it is shown. */
-    private const FACE = 'fair, luminous light skin, large dark brown almond-shaped eyes, full dark defined eyebrows, '
+    public const FACE = 'fair, luminous light skin, large dark brown almond-shaped eyes, full dark defined eyebrows, '
         .'soft Khaleeji-style makeup with lined eyes and nude lips';
 
     private const FRAMING = [

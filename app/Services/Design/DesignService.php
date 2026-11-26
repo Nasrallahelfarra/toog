@@ -16,6 +16,7 @@ use App\Services\Evaluation\EvaluationService;
 use App\Services\Evaluation\StoreContext;
 use App\Support\Vocabulary;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -31,10 +32,17 @@ class DesignService
         private readonly Ai $ai,
         private readonly PromptBuilder $prompts,
         private readonly EvaluationService $evaluations,
+        private readonly LookPrompt $looks,
     ) {}
 
     public function generate(DesignRequest $request): void
     {
+        if ($request->type === DesignRequest::LOOK) {
+            $this->generateLook($request);
+
+            return;
+        }
+
         $request->update(['status' => 'processing', 'error' => null]);
 
         $store = $request->store;
@@ -52,7 +60,12 @@ class DesignService
         try {
             foreach ($variants as $i => $variant) {
                 $prompt = $this->prompts->build($request, $store, $variant, $product, (bool) $request->source_image_path);
-                $image = $this->ai->image('design', $store, $prompt, $request->source_image_path, $request->aspect_ratio, $request->user_id);
+                $references = [];
+                if ($request->type === DesignRequest::REFINEMENT && $request->images->isNotEmpty()) {
+                    $references = $this->looks->references($request->images, 'front');
+                    $prompt .= "\nThe images after the first are the merchant's own fabric and detail photos: the garment's fabric must keep matching them exactly — colours, motif and its scale, sheen and sparkle.";
+                }
+                $image = $this->ai->image('design', $store, $prompt, $request->source_image_path, $request->aspect_ratio, $request->user_id, $references);
 
                 $design = Design::query()->create([
                     'store_id' => $store->id,
@@ -88,6 +101,104 @@ class DesignService
 
         $request->update(['status' => 'completed']);
         $this->notify($request, $created);
+    }
+
+    /**
+     * A look: read the pictures once, then make each image the merchant
+     * asked for — every variant from the front, and from behind when she
+     * asked — in different poses of one garment. One image failing does not
+     * stop the others; a retry makes only the images still missing.
+     */
+    private function generateLook(DesignRequest $request): void
+    {
+        $request->update(['status' => 'processing', 'error' => null, 'failures' => null]);
+        $store = $request->store;
+        $images = $request->images()->get();
+
+        try {
+            $plan = $request->plan ?: $this->looks->plan($request, $store, $images);
+            if (! $request->plan) {
+                $request->update(['plan' => $plan]);
+            }
+        } catch (Throwable $e) {
+            report($e);
+            $request->update(['status' => 'failed', 'error' => $e->getMessage()]);
+            $this->notify($request, 0, failed: true);
+
+            return;
+        }
+
+        $views = ($request->presentation['back_view'] ?? false) ? ['front', 'back'] : ['front'];
+        $made = $request->designs()->get(['id', 'variant', 'view', 'image_path'])->keyBy(fn (Design $d) => $d->variant.':'.$d->view);
+        // Named in the requester's language: the planner writes both.
+        $arabic = (User::query()->find($request->user_id)?->locale ?? app()->getLocale()) === 'ar';
+        $named = trim((string) ($arabic ? ($plan['title_ar'] ?? '') : '')) ?: trim((string) ($plan['garment_en'] ?? ''));
+        $title = $request->title ?: Str::limit($named ?: 'Look', 60, '');
+        $failures = [];
+        $created = 0;
+        $ctx = new StoreContext($store);
+        $product = [
+            'name' => $title, 'category' => $request->category, 'price' => null,
+            'colors' => array_values((array) ($plan['colors'] ?? [])), 'pattern' => $plan['pattern'] ?? null,
+            'material' => $plan['material'] ?? null, 'style' => $plan['style'] ?? null, 'season' => null,
+        ];
+
+        for ($variant = 0; $variant < max(1, min(4, $request->variants_count)); $variant++) {
+            foreach ($views as $view) {
+                if ($made->has("{$variant}:{$view}")) {
+                    continue;
+                }
+                try {
+                    $front = $made->get("{$variant}:front")?->image_path;
+                    $prompt = $this->looks->prompt($request, $plan, $images, $view, $variant);
+                    $image = $this->ai->image('design_look', $store, $prompt, null, $request->aspect_ratio, $request->user_id,
+                        $this->looks->references($images, $view, $front));
+
+                    $design = Design::query()->create([
+                        'store_id' => $store->id,
+                        'design_request_id' => $request->id,
+                        'user_id' => $request->user_id,
+                        'variant' => $variant,
+                        'view' => $view,
+                        'title' => $title.' · '.($variant + 1).($view === 'back' ? ' ←' : ''),
+                        'image_path' => $image->path,
+                        'output_type' => $request->output_type,
+                        'aspect_ratio' => $request->aspect_ratio,
+                        'palette' => array_map(fn ($key) => Vocabulary::colors()[$key]['hex'] ?? $key, $product['colors']),
+                        'tags' => array_values(array_filter([$request->category, 'type:look', 'view:'.$view])),
+                        'status' => 'draft',
+                        'provider' => $image->provider,
+                        'model' => $image->model,
+                        'cost' => $image->cost,
+                        'prompt' => $prompt,
+                    ]);
+                    $made->put("{$variant}:{$view}", $design);
+                    $created++;
+
+                    if ($view === 'front') {
+                        $this->autoEvaluate($design, ['key' => 'look', 'colors' => $product['colors'], 'pattern' => $product['pattern'],
+                            'material' => $product['material'], 'style' => $product['style'], 'placement' => 'all over'], $product, $ctx);
+                    }
+                } catch (AiException $e) {
+                    $failures[] = ['variant' => $variant, 'view' => $view, 'error' => $e->getMessage()];
+                    // Over budget: the remaining images would fail the same way.
+                    if ($store->aiBudgetExceeded()) {
+                        break 2;
+                    }
+                } catch (Throwable $e) {
+                    report($e);
+                    $failures[] = ['variant' => $variant, 'view' => $view, 'error' => $e->getMessage()];
+                }
+            }
+        }
+
+        $any = $made->isNotEmpty();
+        $request->update([
+            'status' => $any ? 'completed' : 'failed',
+            'error' => $any ? null : ($failures[0]['error'] ?? null),
+            'failures' => $failures ?: null,
+        ]);
+        $this->notify($request, $created, failed: ! $any);
     }
 
     /**
