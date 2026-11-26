@@ -118,6 +118,8 @@ type Props = {
     /** A design opened for editing from the library. */
     refine: DesignItem | null;
     mode: Mode;
+    /** The tabs in use, in order; a single one shows no tab bar. */
+    modes: Mode[];
     designer: DesignerProps;
     collections: Collection[];
     openCollection: number | null;
@@ -156,6 +158,7 @@ export default function Studio(props: Props) {
     const { aiLive } = usePage<{ aiLive: boolean }>().props;
     const s = t.studio;
     const [mode, setMode] = useState<Mode>(props.mode);
+    const modes = MODES.filter((key) => (props.modes ?? MODES).includes(key));
 
     const changeMode = (next: Mode) => {
         setMode(next);
@@ -181,9 +184,10 @@ export default function Studio(props: Props) {
                 }
             />
 
-            {/* Three modes share the width on a phone; their hints show from sm up. */}
-            <nav className="grid grid-cols-3 gap-1.5 sm:-mx-1 sm:flex sm:overflow-x-auto sm:px-1 sm:pb-1" aria-label={s.title}>
-                {MODES.map((key) => {
+            {/* The modes in use share the width on a phone; their hints show from sm up. One mode needs no tabs. */}
+            {modes.length > 1 && (
+            <nav className={cn('grid gap-1.5 sm:-mx-1 sm:flex sm:overflow-x-auto sm:px-1 sm:pb-1', modes.length === 2 ? 'grid-cols-2' : 'grid-cols-3')} aria-label={s.title}>
+                {modes.map((key) => {
                     const Icon = modeIcons[key];
                     const activeMode = mode === key;
 
@@ -207,6 +211,7 @@ export default function Studio(props: Props) {
                     );
                 })}
             </nav>
+            )}
 
             {mode === 'designer' ? (
                 <DesignerWorkspace

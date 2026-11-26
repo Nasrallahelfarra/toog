@@ -68,6 +68,21 @@ class AiDesignerTest extends TestCase
         }
     }
 
+    public function test_with_only_the_free_idea_in_use_the_studio_shows_no_other_tab(): void
+    {
+        config(['mojo.studio_modes' => 'idea']);
+
+        $this->actingAs($this->store->owner)->get('/store/studio?mode=designer')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('mode', 'idea')->where('modes', ['idea']));
+
+        // "Design like this" still starts somewhere: a description of the piece.
+        $this->get('/store/studio?mode=designer&inspire=attr:color:black')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('mode', 'idea')
+                ->where('prefillPrompt', fn (?string $prompt) => $prompt !== null && str_contains($prompt, \App\Support\Vocabulary::label('colors', 'black', app()->getLocale()))));
+    }
+
     public function test_the_studio_opens_on_the_free_idea_with_the_designer_ready(): void
     {
         $this->actingAs($this->store->owner)->get('/store/studio')
