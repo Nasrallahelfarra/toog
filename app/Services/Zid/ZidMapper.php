@@ -16,12 +16,15 @@ class ZidMapper
     public const RETURNED_STATUSES = ['returned', 'refunded', 'reversed'];
 
     /**
-     * How order lines and months are read. Bump it when that changes: the
-     * next sync then re-reads every order instead of only the changed ones.
+     * How products, order lines and months are read. Bump it when that
+     * changes: the next sync then re-reads everything instead of only the
+     * changed records.
      * 2 — lines keep their parent product; months follow the store's clock.
      * 3 — amounts in another currency are converted to the store's.
+     * 4 — products keep the time they were created, not only the day, so
+     *     "newest first" matches Zid; the full read fills it in.
      */
-    public const VERSION = 3;
+    public const VERSION = 4;
 
     /**
      * One form for a Zid ID. Zid writes the same UUID with dashes on a
@@ -101,6 +104,8 @@ class ZidMapper
             'price' => $this->number($p['sale_price'] ?? null) ?: $this->number($p['price'] ?? null),
             'image_url' => $image !== null && strlen($image) <= 255 ? $image : null,
             'launched_at' => $this->date($p['created_at'] ?? null),
+            // The time too: products created the same day keep Zid's order.
+            'listed_at' => $this->moment($p['created_at'] ?? null),
         ];
     }
 
@@ -250,6 +255,19 @@ class ZidMapper
 
         try {
             return Carbon::parse($value, 'UTC')->setTimezone(config('mojo.zid.timezone', 'Asia/Riyadh'));
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function moment(mixed $value): ?string
+    {
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value)->setTimezone(config('app.timezone'))->toDateTimeString();
         } catch (\Throwable) {
             return null;
         }

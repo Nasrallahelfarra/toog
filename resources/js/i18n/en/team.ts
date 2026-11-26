@@ -1,9 +1,21 @@
 import type { team as ar } from '../ar/team';
 
 export const team: typeof ar = {
-    title: 'Store team',
-    subtitle: 'Add your staff, choose the pages each one opens, and compare how their products sell.',
+    title: 'Staff',
+    subtitle: 'Add your staff and choose the pages each one opens.',
+    reportTitle: 'Staff report',
+    reportSubtitle: 'Who sells most: each member’s products and their sales, month by month and against the team.',
     addMember: 'Add staff member',
+
+    roster: {
+        me: 'You',
+        products: '{count} products',
+        noProducts: 'No products yet',
+        lastLogin: 'Last signed in {when}',
+        neverLoggedIn: 'Has not signed in yet',
+        openReport: 'Staff report',
+        selfHint: 'The store manager edits your account.',
+    },
 
     kpi: {
         members: 'Staff',
@@ -173,6 +185,8 @@ export const team: typeof ar = {
         clearAll: 'Clear all',
         selected: '{count} of {total}',
         sensitive: {
+            team: 'Adds staff, changes their access and disables accounts, except their own',
+            team_report: 'Sees how every member’s products sell and who sells most',
             dashboard: 'Shows product sales and performance',
             performance: 'Shows product sales and performance',
             catalog: 'Shows product sales and performance',
@@ -181,7 +195,7 @@ export const team: typeof ar = {
             activity: 'Sees only their own activity',
             reports: 'Covers the performance, market, evaluation and balance reports',
         },
-        ownerOnly: 'The Zid connection, sync and file import, the revenue audit and team management stay with you alone and cannot be given to staff.',
+        ownerOnly: 'The Zid connection, sync and file import, the revenue audit and requiring two-factor sign-in stay with the store manager alone. Nobody can give a page they do not hold, or change their own account.',
     },
 
     disable: {

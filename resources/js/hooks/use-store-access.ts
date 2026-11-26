@@ -14,7 +14,16 @@ export function useStoreAccess() {
     return {
         owner,
         staff: access !== null && access !== undefined && !owner,
-        /** True when the user holds at least one of the sections. */
-        can: (...wanted: string[]) => owner || wanted.some((section) => sections.includes(section)),
+        /** Where this user lands in the store: the first page they open. */
+        home: access?.home ?? '/store',
+        /**
+         * True when the user opens at least one of the sections. Pages
+         * switched off for stores are in no one's list, the owner's
+         * included; the Zid connection is the owner's alone.
+         */
+        can: (...wanted: string[]) => wanted.some((section) => sections.includes(section) || (owner && OWNER_PAGES.includes(section))),
     };
 }
+
+/** Pages that are not sections: always the owner's, never staff's. */
+const OWNER_PAGES = ['connection'];

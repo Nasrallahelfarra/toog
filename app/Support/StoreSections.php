@@ -6,6 +6,10 @@ namespace App\Support;
  * The store dashboard's pages as permission units. The owner grants a staff
  * member any subset of ALL; every store route maps to the sections that
  * open it. A route that is not mapped is closed to staff.
+ *
+ * Pages can be switched off for every store (config mojo.store_sections):
+ * then nobody opens them, the owner included, and they are not offered
+ * when access is set. See enabled().
  */
 class StoreSections
 {
@@ -18,7 +22,10 @@ class StoreSections
         'store' => ['dashboard', 'performance', 'catalog', 'stagnant'],
         'decisions' => ['evaluations', 'studio', 'library', 'balance'],
         'intelligence' => ['market', 'competitors', 'calendar'],
-        'management' => ['reports', 'activity', 'settings'],
+        // "team" manages the staff (add, access, disable, remove); "team_report"
+        // shows how each member's products sell. Owners hold both; a member
+        // given them manages or follows the team on the owner's behalf.
+        'management' => ['team', 'team_report', 'reports', 'activity', 'settings'],
     ];
 
     /** Open to every member of the store, whatever their sections. */
@@ -50,6 +57,14 @@ class StoreSections
         'designs.download' => ['studio', 'library', 'evaluations'],
         'market' => ['market'],
         'balance' => ['balance'],
+
+        'team.index' => ['team'],
+        'team.report' => ['team_report'],
+        'team.export' => ['team_report'],
+        // A member's products and how they sell; assigning them needs "team" too.
+        'team.products' => ['team_report'],
+        // The team-wide two-factor rule stays with the owner.
+        'team.security' => self::OWNER_ONLY,
     ];
 
     /**
@@ -84,7 +99,8 @@ class StoreSections
         // A member's own inbox and their own products are always theirs.
         'notifications.' => self::ANYONE,
         'my-products.' => self::ANYONE,
-        'team.' => self::OWNER_ONLY,
+        // Adding, editing, disabling and removing members, and assigning products.
+        'team.' => ['team'],
     ];
 
     /**
@@ -93,6 +109,41 @@ class StoreSections
     public static function all(): array
     {
         return array_merge(...array_values(self::GROUPS));
+    }
+
+    /**
+     * The sections switched on for stores, in the canonical order.
+     *
+     * @return list<string>
+     */
+    public static function enabled(): array
+    {
+        $setting = config('mojo.store_sections');
+
+        if ($setting === null || $setting === 'all') {
+            return self::all();
+        }
+
+        $keys = is_array($setting) ? $setting : array_map('trim', explode(',', (string) $setting));
+
+        return self::clean($keys);
+    }
+
+    public static function isEnabled(string $section): bool
+    {
+        return in_array($section, self::enabled(), true);
+    }
+
+    /**
+     * GROUPS with only the sections that are switched on; empty groups go.
+     *
+     * @return array<string, list<string>>
+     */
+    public static function enabledGroups(): array
+    {
+        $on = self::enabled();
+
+        return array_filter(array_map(fn (array $keys) => array_values(array_intersect($keys, $on)), self::GROUPS));
     }
 
     /**

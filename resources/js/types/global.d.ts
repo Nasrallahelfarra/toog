@@ -19,7 +19,7 @@ declare module '@inertiajs/core' {
             stores: { id: number; name: string }[];
             actingAsAdmin: boolean;
             /** What this user may open in the current store; null outside a store. */
-            access: { owner: boolean; sections: string[] } | null;
+            access: { owner: boolean; sections: string[]; home: string } | null;
             unreadNotifications: number;
             aiLive: boolean;
             aiError: string | null;

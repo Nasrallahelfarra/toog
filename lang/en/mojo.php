@@ -46,6 +46,7 @@ return [
     'member_created' => 'Team member added.',
     'member_updated' => ':name’s details were updated.',
     'permissions_saved' => ':name’s access was updated.',
+    'team_not_self' => 'You cannot change your own account or access from the team page.',
     'member_removed' => ':name was removed from the team.',
     'member_not_managed' => 'This account is linked to more than one store; the platform admin manages it.',
     'section_forbidden' => 'This page is not available to your account.',

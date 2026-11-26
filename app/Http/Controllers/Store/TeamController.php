@@ -11,6 +11,7 @@ use App\Services\Team\TeamReport;
 use App\Support\Activity;
 use App\Support\CurrentStore;
 use App\Support\RevenueVisibility;
+use App\Support\StoreAccess;
 use App\Support\StoreSections;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,9 +22,11 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * The store's team, managed by its owner: staff accounts, the dashboard
- * pages each one may open, and how the products they hold are selling.
- * Every route here is owner-only (see StoreSections).
+ * The store's team: staff accounts and the dashboard pages each one may
+ * open ("team"), and how the products they hold are selling ("team_report").
+ * The owner holds both; a member given "team" manages the others on the
+ * owner's behalf, but never their own account, and hands out no page they
+ * do not hold themselves. The team-wide two-factor rule stays the owner's.
  */
 class TeamController extends Controller
 {
@@ -36,17 +39,38 @@ class TeamController extends Controller
 
     public function __construct(private readonly CurrentStore $current) {}
 
-    public function index(Request $request, TeamReport $report, CatalogBrowser $catalog): Response
+    /**
+     * The staff: who they are, what they may open, and their accounts.
+     */
+    public function index(Request $request, TeamReport $report): Response
+    {
+        $store = $this->current->require();
+
+        return Inertia::render('store/team/index', [
+            'members' => $report->roster($store),
+            'sections' => $this->grantableGroups(),
+            'me' => $request->user()->id,
+            'requireTwoFactor' => $store->requiresStaffTwoFactor(),
+            'canSetPolicy' => $this->access()->isOwner(),
+            'canReport' => $this->access()->can('team_report'),
+        ]);
+    }
+
+    /**
+     * How each member's products sell, compared side by side.
+     */
+    public function report(Request $request, TeamReport $report, CatalogBrowser $catalog): Response
     {
         $store = $this->current->require();
         [$months, $month, $available] = self::period($request, $store, $catalog);
 
-        return Inertia::render('store/team/index', [
+        return Inertia::render('store/team/report', [
             'months' => $months,
             'month' => $month,
             'availableMonths' => $available,
-            'sections' => StoreSections::GROUPS,
-            'requireTwoFactor' => $store->requiresStaffTwoFactor(),
+            'sections' => $this->grantableGroups(),
+            'me' => $request->user()->id,
+            'canManage' => $this->access()->can('team'),
             'report' => fn () => RevenueVisibility::apply($store, $report->comparison($store, $months, $month)),
         ]);
     }
@@ -93,8 +117,9 @@ class TeamController extends Controller
             'password' => self::PASSWORD,
             ...$this->permissionRules(),
         ]);
+        $pages = StoreSections::clean($data['permissions'] ?? []);
 
-        $member = DB::transaction(function () use ($data, $store) {
+        $member = DB::transaction(function () use ($data, $store, $pages) {
             $member = User::query()->create([
                 'name' => $data['name'],
                 'email' => $data['email'],
@@ -106,7 +131,7 @@ class TeamController extends Controller
 
             $store->members()->attach($member->id, [
                 'role' => Store::ROLE_STAFF,
-                'permissions' => json_encode(StoreSections::clean($data['permissions'] ?? [])),
+                'permissions' => json_encode($pages),
             ]);
 
             return $member;
@@ -124,7 +149,7 @@ class TeamController extends Controller
      */
     public function update(Request $request, int $member): RedirectResponse
     {
-        $user = $this->managed($this->member($this->current->require(), $member));
+        $user = $this->managed($this->other($this->current->require(), $member));
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
@@ -148,12 +173,16 @@ class TeamController extends Controller
     public function permissions(Request $request, int $member): RedirectResponse
     {
         $store = $this->current->require();
-        $user = $this->member($store, $member);
+        $user = $this->other($store, $member);
 
         $data = $request->validate($this->permissionRules());
 
+        // Only the pages this person may hand out change. The rest stay as
+        // they were: pages switched off for now, and, for a member managing
+        // the team, pages they do not hold themselves.
+        $editable = $this->grantable();
         $before = StoreSections::stored($user->pivot->permissions);
-        $after = StoreSections::clean($data['permissions']);
+        $after = StoreSections::clean([...array_diff($before, $editable), ...$data['permissions']]);
 
         if ($after !== $before) {
             $store->members()->updateExistingPivot($user->id, ['permissions' => json_encode($after)]);
@@ -173,7 +202,7 @@ class TeamController extends Controller
 
     public function password(Request $request, int $member): RedirectResponse
     {
-        $user = $this->managed($this->member($this->current->require(), $member));
+        $user = $this->managed($this->other($this->current->require(), $member));
 
         $data = $request->validate([
             'password' => [...self::PASSWORD, 'confirmed'],
@@ -195,7 +224,7 @@ class TeamController extends Controller
      */
     public function resetTwoFactor(int $member): RedirectResponse
     {
-        $user = $this->managed($this->member($this->current->require(), $member));
+        $user = $this->managed($this->other($this->current->require(), $member));
 
         if (! $user->two_factor_secret) {
             throw ValidationException::withMessages(['member' => __('mojo.two_factor_not_enabled')]);
@@ -230,7 +259,7 @@ class TeamController extends Controller
 
     public function disable(int $member): RedirectResponse
     {
-        $user = $this->managed($this->member($this->current->require(), $member));
+        $user = $this->managed($this->other($this->current->require(), $member));
 
         $user->forceFill(['status' => User::STATUS_DISABLED, 'disabled_at' => now(), 'disabled_reason' => null])->save();
         // Signed out of every device right away; their products stay theirs.
@@ -244,7 +273,7 @@ class TeamController extends Controller
 
     public function enable(int $member): RedirectResponse
     {
-        $user = $this->managed($this->member($this->current->require(), $member));
+        $user = $this->managed($this->other($this->current->require(), $member));
 
         $user->forceFill(['status' => User::STATUS_ACTIVE, 'disabled_at' => null, 'disabled_reason' => null])->save();
 
@@ -261,7 +290,7 @@ class TeamController extends Controller
     public function destroy(Request $request, int $member, ProductAssignments $assignments): RedirectResponse
     {
         $store = $this->current->require();
-        $user = $this->member($store, $member);
+        $user = $this->other($store, $member);
 
         $data = $request->validate([
             'move_to' => ['nullable', 'integer', Rule::notIn([$user->id])],
@@ -285,7 +314,11 @@ class TeamController extends Controller
         Activity::log('team.member_removed', null, ['name' => $name, 'moved_to' => $heir?->name]);
         Inertia::flash('toast', ['type' => 'success', 'message' => __('mojo.member_removed', ['name' => $name])]);
 
-        return to_route('store.team.index');
+        // Removed from the report: stay on it. Anywhere else (the staff
+        // page, or the member's own page, now gone): the staff page.
+        return str_contains(url()->previous(), '/store/team/report')
+            ? back()
+            : to_route('store.team.index');
     }
 
     /**
@@ -311,13 +344,50 @@ class TeamController extends Controller
     }
 
     /**
+     * A member other than the one acting: nobody changes their own access,
+     * password or account from the team page.
+     */
+    private function other(Store $store, int $id): User
+    {
+        abort_if($id === (int) auth()->id(), 403, __('mojo.team_not_self'));
+
+        return self::member($store, $id);
+    }
+
+    private function access(): StoreAccess
+    {
+        return app(StoreAccess::class);
+    }
+
+    /**
+     * The pages this person may hand out: every page in use for the owner,
+     * and for a member managing the team, only the ones they hold.
+     *
+     * @return list<string>
+     */
+    private function grantable(): array
+    {
+        return $this->access()->sections();
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    private function grantableGroups(): array
+    {
+        $mine = $this->grantable();
+
+        return array_filter(array_map(fn (array $keys) => array_values(array_intersect($keys, $mine)), StoreSections::enabledGroups()));
+    }
+
+    /**
      * @return array<string, list<mixed>>
      */
     private function permissionRules(): array
     {
         return [
             'permissions' => ['present', 'array'],
-            'permissions.*' => ['string', Rule::in(StoreSections::all())],
+            'permissions.*' => ['string', Rule::in($this->grantable())],
         ];
     }
 

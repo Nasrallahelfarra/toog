@@ -83,7 +83,9 @@ export type MemberProductsProps = {
     counts: { mine: number; free: number; categories: string[] };
     products: Paginated<ProductRow>;
     /** The manager's view only: the member's dashboard pages, changed from here. */
-    pages?: { granted: string[]; groups: Record<string, string[]> };
+    pages?: { granted: string[]; groups: Record<string, string[]> } | null;
+    /** The manager's view: false when the viewer reads the report but does not manage the team. */
+    canManage?: boolean;
 };
 
 const ALL = '__all__';
@@ -166,7 +168,9 @@ export function MemberProducts(props: MemberProductsProps) {
     }, [props.products.current_page, tab]);
 
     /** A product the viewer can act on in this tab. */
-    const actionable = (product: ProductRow) => tab === 'mine' || asOwner || product.assignee === null;
+    // Someone who reads the staff report without managing the team only looks.
+    const readOnly = asOwner && props.canManage === false;
+    const actionable = (product: ProductRow) => !readOnly && (tab === 'mine' || asOwner || product.assignee === null);
     const rows = props.products.data;
     const pickable = rows.filter(actionable);
     const allPicked = pickable.length > 0 && pickable.every((product) => selected.has(product.id));
@@ -216,8 +220,8 @@ export function MemberProducts(props: MemberProductsProps) {
             return next;
         });
     const columns = 5 + (showRevenue ? 1 : 0) + 2;
-    // The product page is its sales: it opens for those who may see them.
-    const linked = asOwner || can('catalog', 'performance', 'stagnant');
+    // The product page is its sales: it opens where those pages are in use.
+    const linked = can('catalog', 'performance', 'stagnant');
 
     /**
      * Just arrived: launched in the last two weeks on offer, or taken in
@@ -241,6 +245,8 @@ export function MemberProducts(props: MemberProductsProps) {
 
     /** The one thing to do with a product here: add it, remove it, or see who has it. */
     const action = (product: ProductRow, compact: boolean) => {
+        if (readOnly) return null;
+
         const taken = product.assignee !== null && product.assignee.id !== member.id;
         const working = busy.has(product.id);
 
@@ -298,9 +304,9 @@ export function MemberProducts(props: MemberProductsProps) {
                 icon={PackageCheck}
                 eyebrow={
                     asOwner ? (
-                        <Link href="/store/team" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+                        <Link href="/store/team/report" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
                             <ArrowLeft className="size-3 rtl:rotate-180" />
-                            {p.backToTeam}
+                            {t.nav.teamReport}
                         </Link>
                     ) : undefined
                 }

@@ -37,6 +37,7 @@ use Illuminate\Support\Carbon;
  * @property int $stock Retired: no longer imported, read or shown. Pieces are made to order, so it was never real.
  * @property bool $is_novel
  * @property Carbon|null $launched_at
+ * @property Carbon|null $listed_at When it was created in the store, to the second ("newest first" sorts by it)
  * @property int|null $assigned_user_id
  * @property Carbon|null $assigned_at
  */
@@ -46,7 +47,7 @@ use Illuminate\Support\Carbon;
 #[Fillable([
     'store_id', 'external_id', 'sku', 'name', 'category', 'price', 'image_url', 'features',
     'performance', 'performance_score', 'units_sold', 'revenue', 'views', 'add_to_cart_rate',
-    'return_rate', 'turnover_days', 'no_sales_days', 'stock', 'is_novel', 'launched_at',
+    'return_rate', 'turnover_days', 'no_sales_days', 'stock', 'is_novel', 'launched_at', 'listed_at',
 ])]
 class Product extends Model
 {
@@ -85,6 +86,25 @@ class Product extends Model
     }
 
     /**
+     * Newest first, as the store lists them in Zid: by the moment each was
+     * created there, then by launch day for products not yet synced with a
+     * time; undated products last. The id settles exact ties, so a page
+     * never shuffles between visits.
+     *
+     * @template TBuilder of \Illuminate\Database\Eloquent\Builder<self>|\Illuminate\Database\Query\Builder
+     *
+     * @param  TBuilder  $query
+     * @return TBuilder
+     */
+    public static function newestFirst($query)
+    {
+        return $query
+            ->orderByRaw('CASE WHEN COALESCE(products.listed_at, products.launched_at) IS NULL THEN 1 ELSE 0 END')
+            ->orderByRaw('COALESCE(products.listed_at, products.launched_at) DESC')
+            ->orderByDesc('products.id');
+    }
+
+    /**
      * Why the product is stagnant or at risk, in terms of its sales only.
      */
     public function performanceReason(): ?string
@@ -114,6 +134,7 @@ class Product extends Model
             'is_novel' => 'boolean',
             'excluded' => 'boolean',
             'launched_at' => 'date',
+            'listed_at' => 'datetime',
             'assigned_at' => 'datetime',
         ];
     }

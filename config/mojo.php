@@ -17,6 +17,23 @@ return [
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | Store pages in use
+    |--------------------------------------------------------------------------
+    |
+    | The store dashboard pages switched on for every store, as section keys
+    | of App\Support\StoreSections, comma separated; "all" switches every
+    | page on. A page that is off disappears from the sidebar and cannot be
+    | opened by anyone, owner included, and is not offered when the owner
+    | sets a member's access. A member's access to it is kept, so switching
+    | it back on restores it as it was. The Zid connection, notifications
+    | and "My products" are not sections and stay as they are.
+    |
+    */
+
+    'store_sections' => env('MOJO_STORE_SECTIONS', 'studio,library,competitors,team,team_report'),
+
     'queue' => [
         'dev_workers' => max(1, (int) env('QUEUE_DEV_WORKERS', 3)),
     ],

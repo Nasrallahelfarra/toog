@@ -38,7 +38,7 @@ export function MemberFormDialog({
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    member: TeamMember | null;
+    member: Pick<TeamMember, 'id' | 'name' | 'email'> | null;
     sections: SectionGroups;
 }) {
     return (
@@ -52,7 +52,7 @@ export function MemberFormDialog({
 
 const pagesError = (errors: Record<string, string>) => Object.entries(errors).find(([key]) => key.startsWith('permissions'))?.[1];
 
-function MemberForm({ member, sections, onDone }: { member: TeamMember | null; sections: SectionGroups; onDone: () => void }) {
+function MemberForm({ member, sections, onDone }: { member: Pick<TeamMember, 'id' | 'name' | 'email'> | null; sections: SectionGroups; onDone: () => void }) {
     const { t, tr } = useI18n();
     const f = t.team.form;
 
@@ -375,7 +375,7 @@ export function RemoveMemberDialog({
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    member: TeamMember | null;
+    member: Pick<TeamMember, 'id' | 'name' | 'products'> | null;
     others: Pick<TeamMember, 'id' | 'name'>[];
 }) {
     const { t, tr, number } = useI18n();

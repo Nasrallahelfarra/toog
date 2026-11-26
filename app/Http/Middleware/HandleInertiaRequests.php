@@ -81,7 +81,9 @@ class HandleInertiaRequests extends Middleware
             // the pages the owner granted for staff.
             'access' => $store ? [
                 'owner' => app(StoreAccess::class)->isOwner(),
+                // The pages this user opens; pages switched off are in no one's list.
                 'sections' => app(StoreAccess::class)->sections(),
+                'home' => route(app(StoreAccess::class)->home(), absolute: false),
             ] : null,
             // Same scope as the notifications page: this store plus platform-wide.
             'unreadNotifications' => fn () => $user?->unreadNotifications()

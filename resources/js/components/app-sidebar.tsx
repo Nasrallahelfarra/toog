@@ -26,7 +26,7 @@ import { STORE_SECTION_GROUPS, STORE_SECTIONS } from '@/lib/store-sections';
 export function AppSidebar() {
     const { t, isRtl } = useI18n();
     const { url, props } = usePage();
-    const { owner, staff, can } = useStoreAccess();
+    const { staff, can, home: storeHome } = useStoreAccess();
     const unreadNotifications = props.unreadNotifications;
     const connection = props.currentStore?.connection_status;
     const connectionDot = connection === 'connected' ? 'success' : connection === 'error' ? 'danger' : 'muted';
@@ -65,7 +65,6 @@ export function AppSidebar() {
         management: {
             after: {
                 reports: [{ title: t.nav.notifications, href: '/store/notifications', icon: Bell, badge: unreadNotifications }],
-                activity: owner ? [{ title: t.nav.team, href: '/store/team', icon: UsersRound }] : [],
             },
         },
     };
@@ -77,7 +76,7 @@ export function AppSidebar() {
         return { title: t.nav[group.label], items: [...(extra.before ?? []), ...items] };
     }).filter((group) => group.items.length > 0);
 
-    const home = inAdmin ? '/admin' : staff && !can('dashboard') ? '/store/my-products' : '/store';
+    const home = inAdmin ? '/admin' : storeHome;
 
     return (
         <Sidebar collapsible="icon" variant="inset" side={isRtl ? 'right' : 'left'}>
