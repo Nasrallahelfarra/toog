@@ -98,7 +98,7 @@ export default function Welcome() {
                 <header className="relative mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
                     <Link href="/" className="flex items-center gap-2.5">
                         <span className="flex size-10 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
-                            <AppLogoIcon className="size-6 text-[#EADBB4]" />
+                            <AppLogoIcon className="size-9 text-[#EADBB4]" />
                         </span>
                         <span className="text-lg font-semibold">طوق</span>
                     </Link>

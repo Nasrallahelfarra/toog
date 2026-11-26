@@ -36,7 +36,7 @@ export default function Suspended({ reason }: { reason?: string | null }) {
                     </Button>
                     <Button variant="ghost" asChild>
                         <Link href="/">
-                            <AppLogoIcon className="size-5" />
+                            <AppLogoIcon className="size-7" />
                             طوق
                         </Link>
                     </Button>

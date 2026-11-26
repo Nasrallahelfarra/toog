@@ -46,7 +46,7 @@ export default function AuthLayout({
 
                 <Link href="/" className="relative flex items-center gap-3">
                     <span className="flex size-11 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
-                        <AppLogoIcon className="size-7 text-[#EADBB4]" />
+                        <AppLogoIcon className="size-10 text-[#EADBB4]" />
                     </span>
                     <span>
                         <span className="block text-lg font-semibold">طوق</span>
@@ -96,8 +96,8 @@ export default function AuthLayout({
             <div className="relative flex flex-col">
                 <div className="flex items-center justify-between p-5 lg:justify-end">
                     <Link href="/" className="flex items-center gap-2 lg:hidden">
-                        <span className="bg-primary flex size-9 items-center justify-center rounded-xl">
-                            <AppLogoIcon className="size-6 text-[#EADBB4]" />
+                        <span className="flex size-9 items-center justify-center rounded-xl bg-[#14213A] ring-1 ring-white/10">
+                            <AppLogoIcon className="size-8 text-[#EADBB4]" />
                         </span>
                         <span className="font-semibold">طوق</span>
                     </Link>

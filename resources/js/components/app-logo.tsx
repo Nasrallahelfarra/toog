@@ -7,7 +7,7 @@ export default function AppLogo() {
     return (
         <>
             <div className="from-sidebar-accent to-sidebar flex aspect-square size-9 items-center justify-center rounded-xl bg-gradient-to-br ring-1 ring-white/10">
-                <AppLogoIcon className="size-6 text-[#EADBB4]" />
+                <AppLogoIcon className="size-8 text-[#EADBB4]" />
             </div>
             <div className="ms-1 grid flex-1 text-start text-sm leading-tight">
                 <span className="truncate text-[15px] font-semibold tracking-tight">طوق</span>
