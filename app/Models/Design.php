@@ -36,7 +36,7 @@ use Illuminate\Support\Facades\Storage;
 #[Fillable([
     'store_id', 'design_request_id', 'user_id', 'evaluation_id', 'title', 'image_path', 'output_type',
     'aspect_ratio', 'palette', 'tags', 'status', 'is_favorite', 'score', 'provider', 'model', 'cost', 'prompt',
-    'design_collection_id',
+    'design_collection_id', 'variant', 'view',
 ])]
 #[Appends(['image_url'])]
 class Design extends Model

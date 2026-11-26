@@ -7,6 +7,7 @@ use App\Jobs\GenerateDesigns;
 use App\Models\Design;
 use App\Models\DesignCollection;
 use App\Models\DesignRequest;
+use App\Models\DesignRequestImage;
 use App\Models\Evaluation;
 use App\Models\Product;
 use App\Models\ProductRecommendation;
@@ -22,6 +23,7 @@ use App\Support\FashionVocabulary;
 use App\Support\Vocabulary;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -146,18 +148,27 @@ class StudioController extends Controller
                     ->when($since,
                         fn ($q) => $q->orWhere('id', '>', $since),
                         fn ($q) => $q->orWhere('id', DesignRequest::query()->where('store_id', $store->id)->where('user_id', $request->user()->id)->max('id'))))
-                ->with(['designs' => fn ($q) => $q->orderBy('id'), 'parentDesign'])
+                ->with(['designs' => fn ($q) => $q->orderBy('id'), 'parentDesign', 'images'])
                 ->latest()
                 ->orderByDesc('id')
                 ->take(8)
                 ->get()
                 ->map(fn (DesignRequest $r) => [
                     ...$r->only(['id', 'type', 'title', 'prompt', 'category', 'output_type', 'aspect_ratio', 'variants_count', 'status', 'error', 'evaluation_id', 'created_at']),
-                    'designs' => $r->designs->map(fn (Design $d) => $this->design($d)),
+                    'designs' => $r->designs->map(fn (Design $d) => [...$this->design($d), 'variant' => $d->variant, 'view' => $d->view]),
+                    // A look's own pictures, how it is shown, and any image that failed.
+                    'images' => $r->images->map->present()->values(),
+                    'presentation' => $r->presentation,
+                    'failures' => $r->failures,
+                    'slots' => $r->type === DesignRequest::LOOK ? $r->slots() : $r->variants_count,
                     // The design this edit started from, for the before/after view.
                     'parent' => $r->parentDesign ? ['id' => $r->parentDesign->id, 'title' => $r->parentDesign->title, 'image_url' => $r->parentDesign->image_url] : null,
                 ]),
             'outputTypes' => DesignRequest::OUTPUT_TYPES,
+            'look' => [
+                'limits' => ['total' => DesignRequestImage::MAX_TOTAL, 'roles' => DesignRequestImage::ROLES],
+                'budgetExceeded' => $store->aiBudgetExceeded(),
+            ],
             // A design opened for editing from the library.
             'refine' => $refine ? self::design($refine) : null,
             'ideas' => Inertia::optional(fn () => $ideas->suggest($store)),
@@ -166,6 +177,10 @@ class StudioController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        if ($request->input('type') === DesignRequest::LOOK) {
+            return $this->storeLook($request);
+        }
+
         $store = $this->current->require();
 
         $data = $request->validate([
@@ -228,6 +243,100 @@ class StudioController extends Controller
     }
 
     /**
+     * The free idea as a look: the merchant's own sketches and fabric
+     * photos (uploaded beforehand) and her words, made into a photograph of
+     * the garment worn or shown as she chose.
+     */
+    private function storeLook(Request $request): RedirectResponse
+    {
+        $store = $this->current->require();
+        $roles = array_keys(DesignRequestImage::ROLES);
+
+        $data = $request->validate([
+            'prompt' => ['required', 'string', 'max:2000'],
+            'title' => ['nullable', 'string', 'max:160'],
+            'category' => ['nullable', 'string', 'max:80'],
+            'images' => ['present', 'array', 'max:'.DesignRequestImage::MAX_TOTAL],
+            'images.*.id' => ['required', 'integer', 'distinct'],
+            'images.*.role' => ['required', 'string', Rule::in($roles)],
+            'presentation' => ['required', 'array'],
+            'presentation.mode' => ['required', Rule::in(['model', 'mannequin', 'flat'])],
+            'presentation.face' => ['nullable', Rule::in(['cropped', 'shown', 'hijab'])],
+            'presentation.background' => ['nullable', Rule::in(['studio', 'white', 'majlis', 'outdoor'])],
+            'back_view' => ['boolean'],
+            'aspect_ratio' => ['required', Rule::in(['3:4', '4:5', '1:1', '9:16'])],
+            'variants_count' => ['required', 'integer', 'min:1', 'max:4'],
+            'since' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        if ($store->aiBudgetExceeded()) {
+            throw ValidationException::withMessages(['budget' => __('mojo.look_budget')]);
+        }
+
+        foreach (array_count_values(array_column($data['images'], 'role')) as $role => $count) {
+            if ($count > DesignRequestImage::ROLES[$role]) {
+                throw ValidationException::withMessages(['images' => __('mojo.look_limit')]);
+            }
+        }
+
+        // Only this person's own pictures, uploaded here and not yet sent.
+        $ids = array_column($data['images'], 'id');
+        $staged = DesignRequestImage::query()
+            ->where('store_id', $store->id)
+            ->where('user_id', $request->user()->id)
+            ->whereNull('design_request_id')
+            ->whereIn('id', $ids)
+            ->get()
+            ->keyBy('id');
+        if ($staged->count() !== count($ids)) {
+            throw ValidationException::withMessages(['images' => __('mojo.look_images_missing')]);
+        }
+
+        $hasBack = in_array('sketch_back', array_column($data['images'], 'role'), true);
+        $presentation = [
+            'mode' => $data['presentation']['mode'],
+            'face' => $data['presentation']['face'] ?? 'cropped',
+            'background' => $data['presentation']['background'] ?? 'studio',
+            'back_view' => $hasBack && ($data['back_view'] ?? false),
+        ];
+
+        $designRequest = DB::transaction(function () use ($store, $request, $data, $presentation, $staged, $roles) {
+            $designRequest = DesignRequest::query()->create([
+                'store_id' => $store->id,
+                'user_id' => $request->user()->id,
+                'type' => DesignRequest::LOOK,
+                'title' => ($data['title'] ?? null) ?: null,
+                'prompt' => $data['prompt'],
+                'category' => $data['category'] ?? null,
+                'output_type' => match ($presentation['mode']) {
+                    'mannequin' => 'mockup_white',
+                    'flat' => 'product_photo',
+                    default => 'mockup_model',
+                },
+                'aspect_ratio' => $data['aspect_ratio'],
+                'variants_count' => $data['variants_count'],
+                'presentation' => $presentation,
+                'status' => 'pending',
+            ]);
+
+            // Sent in role order (front sketch, back sketch, fabrics, details), then as added.
+            $ordered = collect($data['images'])->sortBy(fn (array $image, int $i) => array_search($image['role'], $roles, true) * 10 + $i)->values();
+            foreach ($ordered as $position => $image) {
+                $staged[$image['id']]->update(['design_request_id' => $designRequest->id, 'role' => $image['role'], 'position' => $position]);
+            }
+
+            return $designRequest;
+        });
+
+        GenerateDesigns::dispatch($designRequest->id);
+
+        Activity::log('design.requested', $designRequest, ['type' => DesignRequest::LOOK, 'variants' => $designRequest->variants_count, 'images' => count($ids)]);
+        Inertia::flash('toast', ['type' => 'info', 'message' => __('mojo.design_queued')]);
+
+        return $this->toWorkspace($request, $designRequest, false);
+    }
+
+    /**
      * Edit an existing design: professional presets, a recolour and the
      * merchant's own words, applied to a copy of the design as reference.
      */
@@ -276,6 +385,21 @@ class StudioController extends Controller
             'source_image_path' => $source,
             'status' => 'pending',
         ]);
+
+        if ($parentRequest?->type === DesignRequest::LOOK) {
+            foreach ($parentRequest->images->whereIn('role', ['fabric', 'detail'])->values() as $position => $image) {
+                DesignRequestImage::query()->create([
+                    'store_id' => $store->id,
+                    'user_id' => $request->user()->id,
+                    'design_request_id' => $designRequest->id,
+                    'role' => $image->role,
+                    'position' => $position,
+                    'path' => $image->path,
+                    'width' => $image->width,
+                    'height' => $image->height,
+                ]);
+            }
+        }
 
         GenerateDesigns::dispatch($designRequest->id);
 

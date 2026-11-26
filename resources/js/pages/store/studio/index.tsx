@@ -34,6 +34,11 @@ import { aspectClass, DesignCard } from '@/components/studio/design-card';
 import { DesignEditor } from '@/components/studio/design-editor';
 import { DesignerWorkspace } from '@/components/studio/designer/designer-workspace';
 import { GarmentIcon } from '@/components/studio/designer/garment-icons';
+import { GeneratingBar } from '@/components/studio/look/generating-bar';
+import { LookComposer } from '@/components/studio/look/look-composer';
+import { isGenerating, LookRequestCard } from '@/components/studio/look/look-request-card';
+import { DEFAULT_LIMITS } from '@/components/studio/look/types';
+import type { LookFailure, LookPresentation, LookProps, LookRequestImage } from '@/components/studio/look/types';
 import type { Collection, DesignerProps, Insights, Prefill } from '@/components/studio/designer/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -46,7 +51,7 @@ import { useVocabulary } from '@/hooks/use-vocabulary';
 import { cn } from '@/lib/utils';
 import { useQuietPoll } from '@/hooks/use-quiet-poll';
 
-type RequestType = 'modification' | 'new_idea' | 'mockup' | 'refinement';
+type RequestType = 'modification' | 'new_idea' | 'mockup' | 'refinement' | 'look';
 type OutputType = 'product_photo' | 'print_file' | 'mockup_white' | 'mockup_model' | 'lifestyle' | 'social';
 
 type Source = {
@@ -80,8 +85,14 @@ type DesignRequestRow = {
     error: string | null;
     evaluation_id: number | null;
     created_at: string;
-    designs: DesignItem[];
+    designs: (DesignItem & { variant?: number | null; view?: 'front' | 'back' | null })[];
     parent: { id: number; title: string; image_url: string } | null;
+    /** A look's own pictures; empty for other requests. */
+    images?: LookRequestImage[];
+    presentation?: LookPresentation | null;
+    failures?: LookFailure[] | null;
+    /** Images expected: variants × (back view ? 2 : 1). */
+    slots?: number;
 };
 
 type Trend = { id: number; type: string; value: string | null; name_ar: string; name_en: string; momentum: number; saturation: number; in_catalog: boolean };
@@ -127,6 +138,8 @@ type Props = {
     designerPrefill: Prefill | null;
     /** Deferred: arrives after the first paint. */
     insights?: Insights;
+    /** The free-idea look composer: image limits and whether this month's budget is used up. */
+    look?: LookProps;
 };
 
 // A free idea covers display and marketing shots too: the output type
@@ -222,6 +235,9 @@ export default function Studio(props: Props) {
                     aiLive={aiLive}
                     initialPrefill={props.designerPrefill}
                 />
+            ) : mode === 'idea' && !props.source ? (
+                // The free idea is the look composer; a product handed over from an evaluation or a recovery keeps the classic form.
+                <LookStudio {...props} />
             ) : (
                 <ClassicStudio key={mode} {...props} mode={mode} />
             )}
@@ -556,11 +572,60 @@ function ClassicStudio({ source, prefillPrompt, brand, trends, categories, reque
                                 <EmptyState icon={WandSparkles} title={since ? s.requests.workspaceEmpty : s.requests.empty} />
                             </div>
                         ) : (
-                            requests.map((request) => <RequestCard key={request.id} request={request} relative={relative} />)
+                            requests.map((request) =>
+                                request.type === 'look' ? <LookRequestCard key={request.id} request={request} /> : <RequestCard key={request.id} request={request} relative={relative} />,
+                            )
                         )}
                     </div>
                 </div>
             </div>
+            {refine && <DesignEditor design={refine} open={refining} onOpenChange={setRefining} />}
+        </>
+    );
+}
+
+/**
+ * The free idea: the look composer at the inline start (sticky on desktop)
+ * and the requests beside it; on a phone, one column.
+ */
+function LookStudio({ look, prefillPrompt, requests, since, refine }: Props) {
+    const { t, relative } = useI18n();
+    const s = t.studio;
+    const [refining, setRefining] = useState(refine !== null);
+    const running = requests.some(isGenerating);
+
+    return (
+        <>
+            {running && <Poll />}
+
+            <div className={cn('grid gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]', running && 'pb-20 md:pb-0')}>
+                <div className="lg:sticky lg:top-20 lg:-m-1 lg:max-h-[calc(100dvh-6rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:p-1">
+                    <LookComposer look={look ?? { limits: DEFAULT_LIMITS, budgetExceeded: false }} prefillPrompt={prefillPrompt} since={since} />
+                </div>
+
+                <div id="look-results" className="min-w-0 scroll-mt-24 space-y-4">
+                    <h2 className="text-[15px] font-semibold">{since ? s.requests.workspaceTitle : s.requests.title}</h2>
+                    {(since || requests.length > 0) && (
+                        <p className="bg-muted/50 text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-4 py-3 text-xs leading-relaxed">
+                            <span>{since ? s.requests.workspaceHint : s.requests.latestHint}</span>
+                            <Link href="/store/library" className="text-primary hover:underline">
+                                {s.openLibrary}
+                            </Link>
+                        </p>
+                    )}
+                    {requests.length === 0 ? (
+                        <div className="bg-card rounded-2xl border">
+                            <EmptyState icon={WandSparkles} title={since ? s.requests.workspaceEmpty : s.requests.empty} />
+                        </div>
+                    ) : (
+                        requests.map((request) =>
+                            request.type === 'look' ? <LookRequestCard key={request.id} request={request} /> : <RequestCard key={request.id} request={request} relative={relative} />,
+                        )
+                    )}
+                </div>
+            </div>
+
+            <GeneratingBar requests={requests} />
             {refine && <DesignEditor design={refine} open={refining} onOpenChange={setRefining} />}
         </>
     );
@@ -574,7 +639,7 @@ function RequestCard({ request, relative }: { request: DesignRequestRow; relativ
     const cols = request.variants_count >= 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : request.variants_count === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2';
 
     return (
-        <motion.section layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card rounded-2xl border border-border/70 p-4 shadow-sm">
+        <motion.section id={`request-${request.id}`} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card scroll-mt-24 rounded-2xl border border-border/70 p-4 shadow-sm">
             <header className="mb-3 flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0 space-y-1">
                     <h3 className="truncate text-sm font-semibold">{request.title ?? s.form.types[request.type]}</h3>

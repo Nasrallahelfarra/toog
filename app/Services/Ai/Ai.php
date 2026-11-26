@@ -95,8 +95,12 @@ class Ai
         }
     }
 
-    /** Reference images per call, and their inline size in total. */
-    public const MAX_REFERENCES = 3;
+    /**
+     * Reference images per call, and their inline size in total: a look
+     * sends up to six (sketches, fabric photos, details, the front view),
+     * well inside the image model's limit and its 20 MB request cap.
+     */
+    public const MAX_REFERENCES = 7;
 
     public const MAX_REFERENCE_BYTES = 15_000_000;
 

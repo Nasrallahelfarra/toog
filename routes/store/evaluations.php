@@ -7,6 +7,7 @@ use App\Http\Controllers\Store\DesignImprovementController;
 use App\Http\Controllers\Store\EvaluationBatchController;
 use App\Http\Controllers\Store\EvaluationController;
 use App\Http\Controllers\Store\StudioController;
+use App\Http\Controllers\Store\StudioUploadController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -33,6 +34,9 @@ Route::get('batches/{batch}', [EvaluationBatchController::class, 'show'])->name(
 Route::get('studio', [StudioController::class, 'index'])->name('studio.index');
 Route::post('studio', [StudioController::class, 'store'])->name('studio.store');
 Route::post('studio/{designRequest}/retry', [StudioController::class, 'retry'])->name('studio.retry');
+// The merchant's sketches and fabric photos for a look, uploaded as they are added
+Route::post('studio/uploads', [StudioUploadController::class, 'store'])->middleware('throttle:40,1')->name('studio.uploads.store');
+Route::delete('studio/uploads/{image}', [StudioUploadController::class, 'destroy'])->whereNumber('image')->name('studio.uploads.destroy');
 
 // The AI fashion designer, one of the studio's modes
 Route::post('studio/collections', [DesignerController::class, 'store'])->middleware('throttle:10,1')->name('designer.store');
