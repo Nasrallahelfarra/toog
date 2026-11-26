@@ -68,20 +68,22 @@ class AiDesignerTest extends TestCase
         }
     }
 
-    public function test_the_studio_opens_on_the_ai_designer_with_its_vocabulary(): void
+    public function test_the_studio_opens_on_the_free_idea_with_the_designer_ready(): void
     {
         $this->actingAs($this->store->owner)->get('/store/studio')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->component('store/studio/index')
-                ->where('mode', 'designer')
+                // The store manager wants the free idea first.
+                ->where('mode', 'idea')
                 ->has('designer.vocabulary.garments.abaya')
                 ->has('designer.vocabulary.fabrics.nada')
                 ->has('designer.vocabulary.silhouettes.abaya.butterfly')
                 ->has('collections', 0)
                 ->missing('insights'));
 
-        // Older links keep their mode.
-        $this->get('/store/studio?prompt=Floral+abaya')->assertInertia(fn (Assert $page) => $page->where('mode', 'idea'));
+        // Links naming a mode keep it; a link into a collection opens the designer.
+        $this->get('/store/studio?mode=designer')->assertInertia(fn (Assert $page) => $page->where('mode', 'designer'));
+        $this->get('/store/studio?collection=1')->assertInertia(fn (Assert $page) => $page->where('mode', 'designer'));
     }
 
     public function test_insights_read_units_and_competitor_signals_without_money(): void

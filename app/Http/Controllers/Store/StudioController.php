@@ -89,14 +89,15 @@ class StudioController extends Controller
         $since = $request->integer('since') ?: (($source || $refine)
             ? (int) DesignRequest::query()->where('store_id', $store->id)->max('id') : 0);
 
-        // The AI designer is the studio's first mode; older links keep their
-        // mode. Display shots are part of the free-idea tab now, so an old
-        // "mockup" link opens that tab.
+        // The free idea is the studio's first mode (the store manager's
+        // choice); links into a collection open the AI designer, and links
+        // naming a mode keep it. Display shots are part of the free-idea tab
+        // now, so an old "mockup" link opens that tab.
         $asked = $request->query('mode') === 'mockup' ? 'idea' : $request->query('mode');
         $mode = in_array($asked, ['designer', 'modify', 'idea'], true) ? $asked : match (true) {
             $source !== null => 'modify',
-            $request->filled('prompt') || $refine !== null || $request->integer('since') > 0 => 'idea',
-            default => 'designer',
+            $request->filled('collection') => 'designer',
+            default => 'idea',
         };
         $collectionId = $request->integer('collection');
 
@@ -286,8 +287,8 @@ class StudioController extends Controller
     }
 
     /**
-     * The studio tab a request belongs to; the AI designer is the default
-     * tab, so a request's own tab is named on every redirect back.
+     * The studio tab a request belongs to, named on every redirect back so
+     * the request reopens on its own tab.
      */
     private static function modeFor(DesignRequest $designRequest): string
     {
