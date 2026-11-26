@@ -4,6 +4,7 @@ import {
     FileDown,
     Package,
     PackageCheck,
+    PackagePlus,
     PackageX,
     Plus,
     Search,
@@ -32,7 +33,8 @@ import { AccessChip, MemberMenu } from '@/components/store/team/member-actions';
 import type { MemberAction } from '@/components/store/team/member-actions';
 import { MemberAccessDialog, MemberFormDialog, MemberPasswordDialog, RemoveMemberDialog } from '@/components/store/team/member-dialogs';
 import { MonthlyMatrix, PeriodPicker } from '@/components/store/team/shared';
-import type { MatrixRow, MemberFigures, Period, Range, TeamMember } from '@/components/store/team/shared';
+import type { MatrixRow, MemberFigures, MonthPoint, Period, Range, RatingGrade, RatingMeta, TeamMember } from '@/components/store/team/shared';
+import { RatingBadge, StatusBar, byRating } from '@/components/store/team/team-health';
 import { MemberFocus, TeamLeaderboard } from '@/components/store/team/team-report';
 import { TwoFactorMark } from '@/components/store/team/team-security';
 import type { BoardMetric } from '@/components/store/team/team-report';
@@ -59,21 +61,26 @@ type Props = {
     report: {
         months: string[];
         length: number;
+        rating: RatingMeta;
         members: TeamMember[];
         unassigned: MemberFigures;
-        totals: { products: number; assigned: number; units: number; orders: number; revenue: number | null };
+        totals: { products: number; assigned: number; units: number; orders: number; revenue: number | null; uploads: number };
     };
 };
 
-type SortKey = 'units' | 'products' | 'avg_per_product' | 'avg_per_month' | 'orders' | 'revenue';
+type SortKey = 'rating' | 'units' | 'uploads' | 'products' | 'avg_per_product' | 'avg_per_month' | 'revenue';
 const sortLabels = {
+    rating: 'rating',
     units: 'units',
+    uploads: 'uploads',
     products: 'products',
     avg_per_product: 'avgPerProduct',
     avg_per_month: 'avgPerMonth',
-    orders: 'orders',
     revenue: 'revenue',
 } as const satisfies Record<SortKey, string>;
+type MatrixMetric = 'units' | 'uploads' | 'revenue';
+type GradeFilter = RatingGrade | 'pending';
+const GRADES: GradeFilter[] = ['excellent', 'very_good', 'average', 'watch', 'pending'];
 type DialogState = { kind: 'create' } | { kind: MemberAction; member: TeamMember } | null;
 
 export default function TeamReportPage({ months, month, availableMonths, sections, me, canManage, report }: Props) {
@@ -81,16 +88,16 @@ export default function TeamReportPage({ months, month, availableMonths, section
     const m = t.team;
     const showRevenue = useRevenueVisible();
     const [dialog, setDialog] = useState<DialogState>(null);
-    const [sort, setSort] = useState<SortKey>('units');
-    const [metric, setMetric] = useState<'units' | 'revenue'>('units');
-    const [boardMetric, setBoardMetric] = useState<BoardMetric>('units');
+    const [sort, setSort] = useState<SortKey>('rating');
+    const [metric, setMetric] = useState<MatrixMetric>('units');
+    const [boardMetric, setBoardMetric] = useState<BoardMetric>('rating');
     // The member the report is about: picked on the ranking or the table,
     // previewed while the pointer rests on a ranking row.
     const [picked, setPicked] = useState<number | null>(null);
     const [preview, setPreview] = useState<number | null>(null);
     // Filters narrow who is compared; the team's own totals stay whole.
     const [search, setSearch] = useState('');
-    const [level, setLevel] = useState<'above' | 'below' | 'none' | null>(null);
+    const [grade, setGrade] = useState<GradeFilter | null>(null);
     const [status, setStatus] = useState<'active' | 'disabled' | null>(null);
     const close = () => setDialog(null);
     const target = dialog && 'member' in dialog ? dialog.member : null;
@@ -110,7 +117,6 @@ export default function TeamReportPage({ months, month, availableMonths, section
         );
 
     const teamUnits = report.members.reduce((sum, member) => sum + member.units, 0);
-    const teamAverage = teamUnits / Math.max(1, report.members.length);
     const visible = useMemo(() => {
         const needle = search.trim().toLowerCase();
 
@@ -118,27 +124,27 @@ export default function TeamReportPage({ months, month, availableMonths, section
             (member) =>
                 (!needle || member.name.toLowerCase().includes(needle) || member.email.toLowerCase().includes(needle)) &&
                 (!status || member.status === status) &&
-                (!level ||
-                    (level === 'none' && member.units === 0) ||
-                    (level === 'above' && member.units > 0 && member.units >= teamAverage) ||
-                    (level === 'below' && member.units > 0 && member.units < teamAverage)),
+                (!grade || (grade === 'pending' ? member.rating.score === null : member.rating.grade === grade)),
         );
-    }, [report.members, search, status, level, teamAverage]);
+    }, [report.members, search, status, grade]);
     const filtering = visible.length !== report.members.length;
     const clearFilters = () => {
         setSearch('');
-        setLevel(null);
+        setGrade(null);
         setStatus(null);
     };
 
     const members = useMemo(
-        () => [...visible].sort((a, b) => Number(b[sort] ?? 0) - Number(a[sort] ?? 0) || b.units - a.units || a.name.localeCompare(b.name)),
+        () =>
+            [...visible].sort(
+                (a, b) => (sort === 'rating' ? byRating(a, b) : Number(b[sort] ?? 0) - Number(a[sort] ?? 0)) || b.units - a.units || a.name.localeCompare(b.name),
+            ),
         [visible, sort],
     );
-    const leader = report.members.find((member) => member.units > 0)?.id ?? null;
+    // The trophy goes to the top seller, whatever the order on screen.
+    const leader = report.members.reduce<TeamMember | null>((top, member) => (member.units > (top?.units ?? 0) ? member : top), null)?.id ?? null;
     const focusId = visible.some((member) => member.id === picked) ? picked : (visible[0]?.id ?? null);
     const focused = visible.find((member) => member.id === (preview ?? focusId)) ?? visible.find((member) => member.id === focusId) ?? null;
-    const disabled = report.members.filter((member) => member.status === 'disabled').length;
     const exportUrl = `/store/team/export?${new URLSearchParams({
         months: String(months),
         ...(month ? { month } : {}),
@@ -147,27 +153,41 @@ export default function TeamReportPage({ months, month, availableMonths, section
     }).toString()}`;
     const teamRevenue = report.members.reduce((sum, member) => sum + (member.revenue ?? 0), 0);
     const coverage = report.totals.products > 0 ? (report.totals.assigned / report.totals.products) * 100 : 0;
-
+    // How the store's new products of the last year did in their first two months.
+    const tried = [...report.members, report.unassigned].reduce(
+        (sum, row) => ({ judged: sum.judged + row.success.judged, hit: sum.hit + row.success.hit }),
+        { judged: 0, hit: 0 },
+    );
+    const perMonth = (n: number) => (report.length > 1 ? tr(m.compare.perMonth, { value: number(n / report.length, 1) }) : undefined);
+    const successHint = (row: MemberFigures) =>
+        row.success.judged > 0 ? tr(m.compare.successHint, { hit: number(row.success.hit), judged: number(row.success.judged) }) : undefined;
     const post = (url: string, done: () => void) =>
         router.post(url, {}, { preserveScroll: true, onSuccess: close, onError: (errors) => toast.error(Object.values(errors)[0]), onFinish: done });
 
+    const matrixMetric: MatrixMetric = showRevenue || metric !== 'revenue' ? metric : 'units';
+    const uploadsView = matrixMetric === 'uploads';
     const matrix: MatrixRow[] = [
         ...members.map((member) => ({ key: String(member.id), label: member.name, monthly: member.monthly })),
-        { key: 'unassigned', label: m.compare.unassignedRow, monthly: report.unassigned.monthly, tone: 'muted' as const },
+        { key: 'unassigned', label: uploadsView ? m.monthly.unassignedUploads : m.compare.unassignedRow, monthly: report.unassigned.monthly, tone: 'muted' as const },
         {
             key: 'total',
-            label: m.compare.totalRow,
+            label: uploadsView ? m.monthly.totalUploads : m.compare.totalRow,
             tone: 'total' as const,
-            monthly: report.unassigned.monthly.map((point, i) => ({
-                period: point.period,
-                units: point.units + report.members.reduce((sum, member) => sum + member.monthly[i].units, 0),
-                revenue: (point.revenue ?? 0) + report.members.reduce((sum, member) => sum + (member.monthly[i].revenue ?? 0), 0),
-            })),
+            monthly: report.unassigned.monthly.map(
+                (point, i): MonthPoint => ({
+                    period: point.period,
+                    units: point.units + report.members.reduce((sum, member) => sum + member.monthly[i].units, 0),
+                    revenue: (point.revenue ?? 0) + report.members.reduce((sum, member) => sum + (member.monthly[i].revenue ?? 0), 0),
+                    uploads: (point.uploads ?? 0) + report.members.reduce((sum, member) => sum + (member.monthly[i].uploads ?? 0), 0),
+                }),
+            ),
         },
     ];
+    const matrixTabs: MatrixMetric[] = ['units', 'uploads', ...(showRevenue ? (['revenue'] as const) : [])];
+    const matrixLabels: Record<MatrixMetric, string> = { units: t.catalog.metrics.units, uploads: m.monthly.uploadsTab, revenue: t.catalog.metrics.revenue };
 
     // The phone's sort menu offers what the table's headings do.
-    const sortKeys: SortKey[] = ['units', 'products', 'avg_per_product', 'avg_per_month', 'orders', ...(showRevenue ? (['revenue'] as const) : [])];
+    const sortKeys: SortKey[] = ['rating', 'units', 'uploads', 'products', 'avg_per_product', 'avg_per_month', ...(showRevenue ? (['revenue'] as const) : [])];
     // A card picks the member and brings their profile into view above.
     const focusMember = (id: number) => {
         setPicked(id);
@@ -175,8 +195,8 @@ export default function TeamReportPage({ months, month, availableMonths, section
         window.requestAnimationFrame(() => document.getElementById('member-focus')?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' }));
     };
 
-    const header = (key: SortKey, label: string) => (
-        <TableHead className="text-end">
+    const header = (key: SortKey, label: string, align: 'start' | 'end' = 'end') => (
+        <TableHead className={align === 'end' ? 'text-end' : 'text-start'}>
             <button
                 type="button"
                 onClick={() => setSort(key)}
@@ -222,12 +242,12 @@ export default function TeamReportPage({ months, month, availableMonths, section
                     <Stagger className={cn('grid grid-cols-2 gap-3 sm:gap-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2', showRevenue ? 'xl:grid-cols-5' : 'xl:grid-cols-4')}>
                         <StaggerItem>
                             <StatCard
-                                label={m.kpi.members}
-                                value={report.members.length}
+                                label={m.kpi.uploads}
+                                value={report.totals.uploads}
                                 format={(n) => number(n)}
-                                icon={UsersRound}
+                                icon={PackagePlus}
                                 tone="navy"
-                                hint={disabled > 0 ? tr(m.kpi.membersHint, { count: number(disabled) }) : undefined}
+                                hint={tried.judged > 0 ? tr(m.kpi.uploadsHint, { pct: percent((tried.hit / tried.judged) * 100) }) : undefined}
                             />
                         </StaggerItem>
                         <StaggerItem>
@@ -276,10 +296,10 @@ export default function TeamReportPage({ months, month, availableMonths, section
                             <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={m.filters.search} className="h-9 ps-9" />
                         </div>
                         <FilterSelect
-                            value={level}
-                            onChange={(v) => setLevel(v as typeof level)}
-                            allLabel={m.filters.level.all}
-                            options={(['above', 'below', 'none'] as const).map((key) => ({ value: key, label: m.filters.level[key] }))}
+                            value={grade}
+                            onChange={(v) => setGrade(v as typeof grade)}
+                            allLabel={m.filters.grade.all}
+                            options={GRADES.map((key) => ({ value: key, label: m.filters.grade[key] }))}
                         />
                         <FilterSelect
                             value={status}
@@ -331,6 +351,8 @@ export default function TeamReportPage({ months, month, availableMonths, section
                                 focus={focusId}
                                 onFocus={setPicked}
                                 onPreview={setPreview}
+                                meta={report.rating}
+                                length={report.length}
                             />
                         </FadeIn>
                         {focused && (
@@ -339,6 +361,8 @@ export default function TeamReportPage({ months, month, availableMonths, section
                                     member={focused}
                                     members={report.members}
                                     months={report.months}
+                                    meta={report.rating}
+                                    length={report.length}
                                     totalPages={totalPages}
                                     accessLine={(granted, total) => (
                                         <AccessChip
@@ -415,31 +439,35 @@ export default function TeamReportPage({ months, month, availableMonths, section
                                                         <TwoFactorMark on={member.two_factor} onLabel={m.security.on} offLabel={m.security.off} />
                                                         {member.status === 'disabled' && <UserStatusBadge status={member.status} />}
                                                     </Link>
-                                                    <AccessChip
-                                                        granted={shown(member).permissions}
-                                                        total={totalPages}
-                                                        onClick={manages(member) ? () => setDialog({ kind: 'access', member }) : undefined}
-                                                    />
+                                                    {/* Under the name, so a long name keeps its width. */}
+                                                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                                        <RatingBadge rating={member.rating} products={member.products} />
+                                                        <AccessChip
+                                                            granted={shown(member).permissions}
+                                                            total={totalPages}
+                                                            onClick={manages(member) ? () => setDialog({ kind: 'access', member }) : undefined}
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <div className="-me-2 -mt-1 shrink-0" onClick={(event) => event.stopPropagation()}>
                                                     {manages(member) && <MemberMenu member={member} onPick={(kind) => setDialog({ kind, member })} className="size-11" />}
                                                 </div>
                                             </div>
                                             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                                                <CardFigure label={m.compare.units} value={number(member.units)} strong />
-                                                <CardFigure label={m.compare.products} value={number(member.products)} hint={tr(m.compare.selling, { count: number(member.selling) })} />
+                                                <CardFigure
+                                                    label={m.compare.units}
+                                                    value={number(member.units)}
+                                                    hint={tr(t.team.focus.shareLine, { share: percent(member.share, 1) })}
+                                                    strong
+                                                />
+                                                <CardFigure label={m.compare.uploads} value={number(member.uploads)} hint={perMonth(member.uploads)} />
+                                                <CardFigure label={m.compare.successRate} value={percent(member.success.rate)} hint={successHint(member)} />
                                                 <CardFigure label={m.compare.avgPerMonth} value={number(member.avg_per_month, 1)} />
-                                                <CardFigure label={m.compare.orders} value={number(member.orders)} />
                                                 {showRevenue && <CardFigure label={m.compare.revenue} value={money(member.revenue)} />}
                                             </dl>
                                             <div>
-                                                <span className="text-muted-foreground mb-1 block text-xs">{m.compare.share}</span>
-                                                <Meter value={member.share} tone={member.id === leader ? 'gold' : 'navy'} height={6} />
-                                                <span className="text-muted-foreground mt-1 flex flex-wrap gap-x-2 text-xs">
-                                                    <span className="num">{percent(member.share, 1)}</span>
-                                                    {member.winners > 0 && <span className="text-success">{tr(m.compare.winners, { count: number(member.winners) })}</span>}
-                                                    {member.stagnant > 0 && <span className="text-danger">{tr(m.compare.stagnant, { count: number(member.stagnant) })}</span>}
-                                                </span>
+                                                <span className="text-muted-foreground mb-1.5 block text-xs">{m.compare.status}</span>
+                                                <StatusBar mix={member.mix} />
                                             </div>
                                             <p className="flex min-w-0 items-baseline gap-1.5 text-xs">
                                                 <span className="text-muted-foreground shrink-0">{m.compare.best}:</span>
@@ -464,15 +492,19 @@ export default function TeamReportPage({ months, month, availableMonths, section
                                             {m.compare.unassignedRow}
                                         </span>
                                         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                                            <CardFigure label={m.compare.units} value={number(report.unassigned.units)} />
+                                            <CardFigure
+                                                label={m.compare.units}
+                                                value={number(report.unassigned.units)}
+                                                hint={tr(t.team.focus.shareLine, { share: percent(report.unassigned.share, 1) })}
+                                            />
                                             <CardFigure label={m.compare.products} value={number(report.unassigned.products)} />
+                                            <CardFigure label={m.compare.uploads} value={number(report.unassigned.uploads)} hint={perMonth(report.unassigned.uploads)} />
                                             <CardFigure label={m.compare.avgPerMonth} value={number(report.unassigned.avg_per_month, 1)} />
-                                            <CardFigure label={m.compare.orders} value={number(report.unassigned.orders)} />
                                             {showRevenue && <CardFigure label={m.compare.revenue} value={money(report.unassigned.revenue)} />}
                                         </dl>
                                         <div>
-                                            <Meter value={report.unassigned.share} tone="neutral" height={6} />
-                                            <span className="num mt-1 block text-xs">{percent(report.unassigned.share, 1)}</span>
+                                            <span className="mb-1.5 block text-xs">{m.compare.status}</span>
+                                            <StatusBar mix={report.unassigned.mix} />
                                         </div>
                                     </li>
                                 </ul>
@@ -485,13 +517,14 @@ export default function TeamReportPage({ months, month, availableMonths, section
                                         <TableRow>
                                             <TableHead className="w-10 text-center">{m.compare.rank}</TableHead>
                                             <TableHead>{m.compare.member}</TableHead>
+                                            {header('rating', m.compare.rating, 'start')}
                                             {header('products', m.compare.products)}
                                             {header('units', m.compare.units)}
+                                            {header('uploads', m.compare.uploads)}
                                             {header('avg_per_product', m.compare.avgPerProduct)}
                                             {header('avg_per_month', m.compare.avgPerMonth)}
-                                            {header('orders', m.compare.orders)}
                                             {showRevenue && header('revenue', m.compare.revenue)}
-                                            <TableHead className="min-w-40">{m.compare.share}</TableHead>
+                                            <TableHead className="min-w-36">{m.compare.status}</TableHead>
                                             <TableHead className="min-w-44">{m.compare.best}</TableHead>
                                             <TableHead className="w-12" />
                                         </TableRow>
@@ -542,22 +575,26 @@ export default function TeamReportPage({ months, month, availableMonths, section
                                                         </div>
                                                     </div>
                                                 </TableCell>
+                                                <TableCell>
+                                                    <RatingBadge rating={member.rating} products={member.products} />
+                                                </TableCell>
                                                 <TableCell className="text-end">
                                                     <span className="num font-semibold">{number(member.products)}</span>
                                                     <span className="text-muted-foreground block text-xs">{tr(m.compare.selling, { count: number(member.selling) })}</span>
                                                 </TableCell>
-                                                <TableCell className="num text-end text-base font-semibold">{number(member.units)}</TableCell>
+                                                <TableCell className="text-end">
+                                                    <span className="num text-base font-semibold">{number(member.units)}</span>
+                                                    <span className="num text-muted-foreground block text-xs">{percent(member.share, 1)}</span>
+                                                </TableCell>
+                                                <TableCell className="text-end">
+                                                    <span className="num font-semibold">{number(member.uploads)}</span>
+                                                    {report.length > 1 && <span className="num text-muted-foreground block text-xs">{perMonth(member.uploads)}</span>}
+                                                </TableCell>
                                                 <TableCell className="num text-end">{number(member.avg_per_product, 1)}</TableCell>
                                                 <TableCell className="num text-end">{number(member.avg_per_month, 1)}</TableCell>
-                                                <TableCell className="num text-end">{number(member.orders)}</TableCell>
                                                 {showRevenue && <TableCell className="num text-end">{money(member.revenue)}</TableCell>}
                                                 <TableCell>
-                                                    <Meter value={member.share} tone={member.id === leader ? 'gold' : 'navy'} height={6} />
-                                                    <span className="text-muted-foreground mt-1 flex flex-wrap gap-x-2 text-xs">
-                                                        <span className="num">{percent(member.share, 1)}</span>
-                                                        {member.winners > 0 && <span className="text-success">{tr(m.compare.winners, { count: number(member.winners) })}</span>}
-                                                        {member.stagnant > 0 && <span className="text-danger">{tr(m.compare.stagnant, { count: number(member.stagnant) })}</span>}
-                                                    </span>
+                                                    <StatusBar mix={member.mix} size="sm" />
                                                 </TableCell>
                                                 <TableCell>
                                                     {member.best ? (
@@ -586,15 +623,18 @@ export default function TeamReportPage({ months, month, availableMonths, section
                                                     {m.compare.unassignedRow}
                                                 </span>
                                             </TableCell>
+                                            <TableCell />
                                             <TableCell className="num text-end">{number(report.unassigned.products)}</TableCell>
-                                            <TableCell className="num text-end">{number(report.unassigned.units)}</TableCell>
+                                            <TableCell className="text-end">
+                                                <span className="num">{number(report.unassigned.units)}</span>
+                                                <span className="num block text-xs">{percent(report.unassigned.share, 1)}</span>
+                                            </TableCell>
+                                            <TableCell className="num text-end">{number(report.unassigned.uploads)}</TableCell>
                                             <TableCell className="num text-end">{number(report.unassigned.avg_per_product, 1)}</TableCell>
                                             <TableCell className="num text-end">{number(report.unassigned.avg_per_month, 1)}</TableCell>
-                                            <TableCell className="num text-end">{number(report.unassigned.orders)}</TableCell>
                                             {showRevenue && <TableCell className="num text-end">{money(report.unassigned.revenue)}</TableCell>}
                                             <TableCell>
-                                                <Meter value={report.unassigned.share} tone="neutral" height={6} />
-                                                <span className="num mt-1 block text-xs">{percent(report.unassigned.share, 1)}</span>
+                                                <StatusBar mix={report.unassigned.mix} size="sm" />
                                             </TableCell>
                                             <TableCell />
                                             <TableCell />
@@ -604,32 +644,39 @@ export default function TeamReportPage({ months, month, availableMonths, section
                             </div>
                             <div className="text-muted-foreground space-y-1 border-t px-5 py-3 text-xs leading-relaxed">
                                 <p>{m.compare.attribution}</p>
-                                <p>{m.compare.ordersNote}</p>
                             </div>
                         </SectionCard>
                     </FadeIn>
 
                     <FadeIn delay={0.1}>
                         <SectionCard
-                            title={m.monthly.title}
-                            description={metric === 'revenue' ? m.monthly.hintRevenue : m.monthly.hint}
-                            icon={ShoppingBag}
-                            action={
-                                showRevenue ? (
-                                    <Tabs value={metric} onValueChange={(v) => setMetric(v as 'units' | 'revenue')}>
-                                        <TabsList>
-                                            <TabsTrigger value="units" className="px-3">
-                                                {t.catalog.metrics.units}
-                                            </TabsTrigger>
-                                            <TabsTrigger value="revenue" className="px-3">
-                                                {t.catalog.metrics.revenue}
-                                            </TabsTrigger>
-                                        </TabsList>
-                                    </Tabs>
-                                ) : undefined
-                            }
+                            title={uploadsView ? m.monthly.titleUploads : m.monthly.title}
+                            description={uploadsView ? m.monthly.hintUploads : matrixMetric === 'revenue' ? m.monthly.hintRevenue : m.monthly.hint}
+                            icon={uploadsView ? PackagePlus : ShoppingBag}
+                            bodyClassName="space-y-3"
                         >
-                            <MonthlyMatrix rows={matrix} metric={showRevenue ? metric : 'units'} firstColumn={m.compare.member} selected={month} />
+                            {/* Under the heading rather than beside it, so the tabs fit a phone. */}
+                            <Tabs value={matrixMetric} onValueChange={(v) => setMetric(v as MatrixMetric)}>
+                                <TabsList className="max-w-full overflow-x-auto">
+                                    {matrixTabs.map((key) => (
+                                        <TabsTrigger key={key} value={key} className="px-3">
+                                            {matrixLabels[key]}
+                                        </TabsTrigger>
+                                    ))}
+                                </TabsList>
+                            </Tabs>
+                            <MonthlyMatrix
+                                rows={matrix}
+                                metric={matrixMetric}
+                                firstColumn={m.compare.member}
+                                selected={month}
+                                // A member's uploads in a month open those products, with what each sold.
+                                cellHref={
+                                    matrixMetric === 'uploads'
+                                        ? (key, period) => (/^\d+$/.test(key) ? `/store/team/${key}?uploaded=${period.slice(0, 7)}` : undefined)
+                                        : undefined
+                                }
+                            />
                         </SectionCard>
                     </FadeIn>
                     </>

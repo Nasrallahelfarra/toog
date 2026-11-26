@@ -681,6 +681,122 @@ class StoreTeamTest extends TestCase
         $this->assertSame(6, $moved['Sara']['units']);
     }
 
+    public function test_the_report_counts_each_members_uploads_by_the_month_they_were_created_in_zid(): void
+    {
+        $sara = $this->staff([], name: 'Sara');
+        $thisMonth = now()->startOfMonth();
+        $lastMonth = now()->startOfMonth()->subMonth();
+
+        $a = $this->product('A', ['launched_at' => $lastMonth->copy()->addDays(3)->toDateString(), 'listed_at' => $lastMonth->copy()->addDays(3)->setTime(10, 0)]);
+        // Synced before the time was kept: the day alone still counts.
+        $b = $this->product('B', ['launched_at' => $lastMonth->copy()->addDays(9)->toDateString()]);
+        $c = $this->product('C', ['launched_at' => $thisMonth->toDateString(), 'listed_at' => $thisMonth->copy()->setTime(9, 0)]);
+        $old = $this->product('Old', ['launched_at' => now()->subYears(2)->toDateString()]);
+        $nobodys = $this->product('Nobody', ['launched_at' => $thisMonth->toDateString()]);
+        $accessory = $this->product('Ring', ['launched_at' => $thisMonth->toDateString()]);
+        $accessory->forceFill(['excluded' => true])->save();
+        $this->claim($sara, [$a->id, $b->id, $c->id, $old->id]);
+        // Months with sales: the report runs up to the latest one, and only they can be picked.
+        $this->sale($a, 1, 1);
+        $this->sale($c, 0, 1);
+
+        $this->actingAs($this->owner)->get('/store/team/report?months=3')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('report.members.0.uploads', 3)
+                ->where('report.members.0.monthly.1.uploads', 2)
+                ->where('report.members.0.monthly.2.uploads', 1)
+                ->where('report.unassigned.uploads', 1)
+                ->where('report.totals.uploads', 4));
+
+        // One month: that month's uploads.
+        $this->actingAs($this->owner)->get('/store/team/report?month='.$lastMonth->format('Y-m'))
+            ->assertInertia(fn (Assert $page) => $page->where('report.members.0.uploads', 2));
+    }
+
+    public function test_the_report_shows_how_each_members_products_stand_today_and_how_new_ones_did(): void
+    {
+        $sara = $this->staff([], name: 'Sara');
+        $ids = [];
+        foreach (['winner', 'average', 'at_risk', 'stagnant', null] as $i => $class) {
+            $ids[] = $this->product("P{$i}", ['performance' => $class])->id;
+        }
+
+        // New products of the last year, judged on their first two months.
+        $hit = $this->product('Hit', ['launched_at' => now()->startOfMonth()->subMonths(4)->toDateString()]);
+        $this->sale($hit, 3, 5);
+        $miss = $this->product('Miss', ['launched_at' => now()->startOfMonth()->subMonths(5)->toDateString()]);
+        $this->sale($miss, 1, 5);
+        $tooNew = $this->product('Too new', ['launched_at' => now()->subDays(20)->toDateString()]);
+        $this->claim($sara, [...$ids, $hit->id, $miss->id, $tooNew->id]);
+
+        $this->actingAs($this->owner)->get('/store/team/report?months=12')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('report.members.0.mix', ['moving' => 2, 'slowing' => 1, 'stagnant' => 1, 'unrated' => 4])
+                ->where('report.members.0.success', ['judged' => 2, 'hit' => 1, 'rate' => 50]));
+    }
+
+    public function test_members_are_rated_against_each_other_on_units_never_on_money(): void
+    {
+        $cheap = $this->staff([], name: 'Cheap');
+        $dear = $this->staff([], name: 'Dear');
+        $newcomer = $this->staff([], name: 'Newcomer');
+        // Both rated members joined long ago; the newcomer holds too few products.
+        $this->store->members()->updateExistingPivot($cheap->id, ['created_at' => now()->subYear()]);
+        $this->store->members()->updateExistingPivot($dear->id, ['created_at' => now()->subYear()]);
+
+        foreach ([[$cheap, 10], [$dear, 900]] as [$member, $price]) {
+            $ids = [];
+            foreach (range(1, 5) as $i) {
+                $product = $this->product("{$member->name} {$i}", ['performance' => 'winner']);
+                $this->sale($product, 1, 4, price: $price);
+                $ids[] = $product->id;
+            }
+            $this->claim($member, $ids);
+        }
+        $this->claim($newcomer, [$this->product('Lone')->id]);
+
+        $this->actingAs($this->owner)->get('/store/team/report?months=3')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('report.rating.months', 3)
+                ->where('report.members', function ($members) {
+                    $byName = collect($members)->keyBy('name');
+
+                    return $byName['Cheap']['rating']['score'] === $byName['Dear']['rating']['score']
+                        && $byName['Cheap']['rating']['score'] === 50
+                        && $byName['Newcomer']['rating']['score'] === null
+                        && $byName['Newcomer']['rating']['reason'] === 'few_products'
+                        // The best rated come first, the unrated last.
+                        && collect($members)->last()['name'] === 'Newcomer';
+                }));
+    }
+
+    public function test_the_manager_picks_a_month_and_sees_what_a_member_brought_then_and_how_it_sold(): void
+    {
+        $sara = $this->staff([], name: 'Sara');
+        $month = now()->startOfMonth()->subMonths(2);
+        $sold = $this->product('Sold', ['launched_at' => $month->copy()->addDays(2)->toDateString(), 'performance' => 'winner']);
+        $this->sale($sold, 2, 3);
+        $this->sale($sold, 0, 4);
+        $still = $this->product('Still', ['launched_at' => $month->copy()->addDays(5)->toDateString(), 'listed_at' => $month->copy()->addDays(5)->setTime(20, 0), 'performance' => 'stagnant']);
+        $other = $this->product('Other month', ['launched_at' => now()->startOfMonth()->toDateString()]);
+        $this->claim($sara, [$sold->id, $still->id, $other->id]);
+
+        $this->actingAs($this->owner)->get("/store/team/{$sara->id}?uploaded=".$month->format('Y-m').'&months=3')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('filters.uploaded', $month->format('Y-m'))
+                ->has('products.data', 2)
+                ->where('uploadSummary', [
+                    'month' => $month->format('Y-m'), 'products' => 2, 'sold' => 1, 'unsold' => 1, 'units' => 7,
+                    'moving' => 1, 'slowing' => 0, 'stagnant' => 1, 'unrated' => 0,
+                ])
+                ->where('products.data', fn ($rows) => collect($rows)->firstWhere('name', 'Sold')['units_total'] === 7)
+                ->has('uploadMonths', 12));
+
+        // A staff member's own page has no such view.
+        $this->actingAs($sara)->get('/store/my-products?uploaded='.$month->format('Y-m'))
+            ->assertInertia(fn (Assert $page) => $page->missing('filters.uploaded')->where('uploadSummary', null)->where('uploadMonths', []));
+    }
+
     public function test_the_team_page_hides_revenue_until_the_admin_shows_it(): void
     {
         $sara = $this->staff([], name: 'Sara');

@@ -28,6 +28,10 @@ trait ShowsMemberProducts
         $sort = $asOwner && $request->input('sort') === 'units' ? 'units' : 'newest';
         $tab = $request->input('tab') === 'add' ? 'add' : 'mine';
         $filters = $request->only(['search', 'category']);
+        // The manager's view: only the products created in one month.
+        if ($asOwner && preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', (string) $request->input('uploaded'))) {
+            $filters['uploaded'] = (string) $request->input('uploaded');
+        }
         // The owner can move a product from another member, so they always
         // see taken products. A member sees them only when searching, to
         // learn who holds the product they were looking for.
@@ -44,6 +48,9 @@ trait ShowsMemberProducts
             'sort' => $sort,
             'stats' => fn () => $asOwner ? RevenueVisibility::apply($store, $report->member($store, $member, $months, $month)) : null,
             'counts' => fn () => $report->counts($store, $member),
+            'uploadSummary' => fn () => isset($filters['uploaded']) ? $report->uploadSummary($store, $member, $filters['uploaded']) : null,
+            // Months to pick from for "brought in": the last year.
+            'uploadMonths' => $asOwner ? array_map(fn (int $i) => now()->startOfMonth()->subMonths($i)->format('Y-m'), range(0, 11)) : [],
             'products' => fn () => RevenueVisibility::apply($store, $report->products($store, $member, $tab, $filters, $months, $month, $withTaken, withSales: $asOwner, sort: $sort)),
         ];
     }

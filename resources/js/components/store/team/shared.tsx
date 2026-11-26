@@ -1,3 +1,4 @@
+import { Link } from '@inertiajs/react';
 import { CalendarDays } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ScrollX } from '@/components/mojo/scroll-x';
@@ -8,7 +9,32 @@ import { cn } from '@/lib/utils';
 
 export type Range = 3 | 6 | 12;
 export type Period = { months: Range; month: string | null };
-export type MonthPoint = { period: string; units: number; revenue: number | null };
+/** One month of sales; on the team report it also counts the products created in Zid that month. */
+export type MonthPoint = { period: string; units: number; revenue: number | null; uploads?: number };
+
+/** Where the products held today stand: moving (winning or average), slowing, stagnant, not classified yet. */
+export type StatusMix = { moving: number; slowing: number; stagnant: number; unrated: number };
+
+/** Of the new products of the last 12 months old enough to judge, how many sold in their first two months. */
+export type SuccessRate = { judged: number; hit: number; rate: number | null };
+
+export type RatingPartKey = 'sales' | 'success' | 'uploads' | 'status';
+export type RatingGrade = 'excellent' | 'very_good' | 'average' | 'watch';
+export type RatingReason = 'few_products' | 'new_member' | 'disabled' | 'small_team';
+
+/**
+ * A member's rating out of 100 against the team's typical member (50).
+ * A part with no data yet is left out and the others share its weight.
+ */
+export type MemberRating = {
+    score: number | null;
+    grade: RatingGrade | null;
+    reason: RatingReason | null;
+    parts: { key: RatingPartKey; weight: number; score: number; value: number; team: number }[];
+};
+
+/** The months the rating looked at and how much each part weighs. */
+export type RatingMeta = { months: number; until: string; weights: Record<RatingPartKey, number> };
 
 /** What the team report says about one staff member in the chosen period. */
 export type MemberFigures = {
@@ -19,6 +45,10 @@ export type MemberFigures = {
     stagnant: number;
     units: number;
     orders: number;
+    /** Products created in Zid in the period, by whoever holds them now. */
+    uploads: number;
+    mix: StatusMix;
+    success: SuccessRate;
     /** Null while revenue is hidden from the store. */
     revenue: number | null;
     avg_per_product: number;
@@ -39,6 +69,7 @@ export type TeamMember = MemberFigures & {
     joined_at: string | null;
     permissions: string[];
     best: { id: number; name: string; image_url: string | null; units: number } | null;
+    rating: MemberRating;
 };
 
 const ALL = '__all__';
@@ -88,11 +119,26 @@ export type MatrixRow = { key: string; label: ReactNode; monthly: MonthPoint[]; 
  * sales, tinted by how it compares with the best cell in the table, so the
  * strong months and the strong rows stand out without reading every number.
  */
-export function MonthlyMatrix({ rows, metric = 'units', firstColumn, selected }: { rows: MatrixRow[]; metric?: 'units' | 'revenue'; firstColumn: string; selected?: string | null }) {
+export function MonthlyMatrix({
+    rows,
+    metric = 'units',
+    firstColumn,
+    selected,
+    cellHref,
+}: {
+    rows: MatrixRow[];
+    metric?: 'units' | 'revenue' | 'uploads';
+    firstColumn: string;
+    selected?: string | null;
+    /** Where a non-empty cell leads, e.g. that member's products of that month. */
+    cellHref?: (rowKey: string, period: string) => string | undefined;
+}) {
     const { t, number, money, date } = useI18n();
     const months = rows[0]?.monthly.map((m) => m.period) ?? [];
     const value = (point: MonthPoint | undefined) => Number(point?.[metric] ?? 0);
     const format = (n: number) => (metric === 'revenue' ? money(n) : number(n));
+    // New products take the gold tone so they never read as sales.
+    const ink = metric === 'uploads' ? 'var(--chart-2)' : 'var(--primary)';
     // Totals rows would drown the scale, so only the compared rows set it.
     const peak = Math.max(1, ...rows.filter((row) => row.tone !== 'total').flatMap((row) => row.monthly.map(value)));
     const currentMonth = new Date().toISOString().slice(0, 7);
@@ -143,9 +189,17 @@ export function MonthlyMatrix({ rows, metric = 'units', firstColumn, selected }:
                                             <td
                                                 key={point.period}
                                                 className={cn('num px-2 py-2 text-center whitespace-nowrap', n <= 0 && 'text-muted-foreground/50')}
-                                                style={tint ? { backgroundColor: `color-mix(in oklch, var(--primary) ${tint}%, transparent)` } : undefined}
+                                                style={tint ? { backgroundColor: `color-mix(in oklch, ${ink} ${tint}%, transparent)` } : undefined}
                                             >
-                                                {n > 0 ? format(n) : '—'}
+                                                {n > 0 && cellHref?.(row.key, point.period) ? (
+                                                    <Link href={cellHref(row.key, point.period)!} className="hover:text-primary underline decoration-dotted underline-offset-4">
+                                                        {format(n)}
+                                                    </Link>
+                                                ) : n > 0 ? (
+                                                    format(n)
+                                                ) : (
+                                                    '—'
+                                                )}
                                             </td>
                                         );
                                     })}

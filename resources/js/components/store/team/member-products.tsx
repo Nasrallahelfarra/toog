@@ -58,12 +58,16 @@ type ProductRow = {
     // staff member who holds it.
     performance?: string | null;
     units?: number;
+    /** Every unit it has sold since it went up, whatever the period. */
+    units_total?: number;
     orders?: number;
     revenue?: number | null;
     history?: MonthPoint[];
 };
 
 type Sort = 'newest' | 'units';
+
+type UploadSummary = { month: string; products: number; sold: number; unsold: number; units: number; moving: number; slowing: number; stagnant: number; unrated: number };
 
 type Tab = 'mine' | 'add';
 
@@ -75,12 +79,16 @@ export type MemberProductsProps = {
     month: string | null;
     availableMonths: string[];
     tab: Tab;
-    filters: { search?: string; category?: string };
+    filters: { search?: string; category?: string; uploaded?: string };
     /** Newest first by default; the manager can rank by units sold. */
     sort: Sort;
     /** Null for the staff member: their sales are the manager's to see. */
     stats: MemberFigures | null;
     counts: { mine: number; free: number; categories: string[] };
+    /** The manager's view with a month picked: what came of that month's products. */
+    uploadSummary?: UploadSummary | null;
+    /** Months (Y-m) to pick "brought in" from, newest first. */
+    uploadMonths?: string[];
     products: Paginated<ProductRow>;
     /** The manager's view only: the member's dashboard pages, changed from here. */
     pages?: { granted: string[]; groups: Record<string, string[]> } | null;
@@ -121,7 +129,7 @@ export function MemberProducts(props: MemberProductsProps) {
     const cardsOnly = asOwner ? 'lg:hidden' : 'md:hidden';
     const tableOnly = asOwner ? 'hidden lg:block' : 'hidden md:block';
 
-    const visit = (next: { tab?: Tab; search?: string; category?: string; months?: Range; month?: string | null; sort?: Sort }, only?: string[]) => {
+    const visit = (next: { tab?: Tab; search?: string; category?: string; uploaded?: string; months?: Range; month?: string | null; sort?: Sort }, only?: string[]) => {
         const query = {
             tab: next.tab ?? tab,
             // The period and the ranking by sales belong to the manager's view.
@@ -130,6 +138,7 @@ export function MemberProducts(props: MemberProductsProps) {
             sort: next.sort ?? props.sort,
             search: next.search === undefined ? props.filters.search : next.search,
             category: next.category === undefined ? props.filters.category : next.category,
+            uploaded: asOwner ? (next.uploaded === undefined ? props.filters.uploaded : next.uploaded) : null,
         };
         const isDefault = (key: string, v: unknown) => (key === 'tab' && v === 'mine') || (key === 'sort' && v === 'newest');
 
@@ -470,8 +479,32 @@ export function MemberProducts(props: MemberProductsProps) {
                                 </SelectContent>
                             </Select>
                         )}
+                        {asOwner && (props.uploadMonths?.length ?? 0) > 0 && (
+                            <Select
+                                value={props.filters.uploaded ?? ALL}
+                                onValueChange={(v) => visit({ uploaded: v === ALL ? '' : v, tab: 'mine' }, ['products', 'uploadSummary'])}
+                            >
+                                <SelectTrigger
+                                    className={cn('h-10 flex-1 sm:h-9 sm:w-48 sm:flex-none', props.filters.uploaded && 'border-primary text-primary')}
+                                    aria-label={p.uploaded.label}
+                                >
+                                    <CalendarRange className="size-4" />
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value={ALL}>{p.uploaded.any}</SelectItem>
+                                    {props.uploadMonths?.map((key) => (
+                                        <SelectItem key={key} value={key}>
+                                            {tr(p.uploaded.in, { month: date(`${key}-01`, { month: 'long', year: 'numeric' }) })}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
                     </div>
                 </div>
+
+                {asOwner && props.uploadSummary && <UploadSummaryCard summary={props.uploadSummary} onClear={() => visit({ uploaded: '' }, ['products', 'uploadSummary'])} />}
 
                 {tab === 'add' && !asOwner && props.filters.search && <p className="text-muted-foreground text-xs">{p.heldHint}</p>}
 
@@ -561,6 +594,9 @@ export function MemberProducts(props: MemberProductsProps) {
                                                             <div className="flex items-center gap-2 pt-1 text-xs">
                                                                 <PerformanceBadge value={product.performance} />
                                                                 <span className="num font-semibold">{tr(p.unitsCell, { units: number(product.units) })}</span>
+                                                                {product.units_total !== undefined && (
+                                                                    <span className="num text-muted-foreground">{tr(p.sinceUpload, { units: number(product.units_total) })}</span>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
@@ -635,7 +671,14 @@ export function MemberProducts(props: MemberProductsProps) {
                                                                 <TableCell>
                                                                     <PerformanceBadge value={product.performance} />
                                                                 </TableCell>
-                                                                <TableCell className="num text-end font-semibold">{number(product.units)}</TableCell>
+                                                                <TableCell className="num text-end">
+                                                                    <span className="font-semibold">{number(product.units)}</span>
+                                                                    {product.units_total !== undefined && (
+                                                                        <span className="text-muted-foreground block text-xs whitespace-nowrap">
+                                                                            {tr(p.sinceUpload, { units: number(product.units_total) })}
+                                                                        </span>
+                                                                    )}
+                                                                </TableCell>
                                                                 <TableCell className="num text-end">{number(product.orders)}</TableCell>
                                                                 {showRevenue && <TableCell className="num text-end">{money(product.revenue)}</TableCell>}
                                                                 <TableCell>
@@ -724,6 +767,61 @@ export function MemberProducts(props: MemberProductsProps) {
 }
 
 const DAY = 86_400_000;
+
+/**
+ * What came of the products a member brought in the picked month: how many,
+ * how many have sold since and how many units, and how they stand today.
+ */
+function UploadSummaryCard({ summary, onClear }: { summary: UploadSummary; onClear: () => void }) {
+    const { t, tr, number, date } = useI18n();
+    const u = t.team.products.uploaded;
+    const month = date(`${summary.month}-01`, { month: 'long', year: 'numeric' });
+    const figures = [
+        { label: u.products, value: summary.products, tone: '' },
+        { label: u.sold, value: summary.sold, tone: 'text-success' },
+        { label: u.unsold, value: summary.unsold, tone: summary.unsold > 0 ? 'text-danger' : '' },
+        { label: u.units, value: summary.units, tone: '' },
+    ];
+    const known = summary.moving + summary.slowing + summary.stagnant;
+
+    return (
+        <div className="bg-card space-y-3 rounded-2xl border border-border/70 p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                    <h3 className="font-semibold">{tr(u.title, { month })}</h3>
+                    <p className="text-muted-foreground text-xs">{u.hint}</p>
+                </div>
+                <Button variant="ghost" size="sm" className="h-9 sm:h-8" onClick={onClear}>
+                    <X className="size-4" />
+                    {u.clear}
+                </Button>
+            </div>
+            {summary.products === 0 ? (
+                <p className="text-muted-foreground text-sm">{tr(u.none, { month })}</p>
+            ) : (
+                <>
+                    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        {figures.map((figure) => (
+                            <div key={figure.label} className="bg-muted/40 rounded-xl px-3 py-2.5">
+                                <dt className="text-muted-foreground text-xs">{figure.label}</dt>
+                                <dd className={cn('num text-xl font-semibold', figure.tone)}>{number(figure.value)}</dd>
+                            </div>
+                        ))}
+                    </dl>
+                    {known + summary.unrated > 0 && (
+                        <p className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                            <span>{u.today}</span>
+                            <span className="text-success">{tr(u.moving, { count: number(summary.moving) })}</span>
+                            {summary.slowing > 0 && <span className="text-warning">{tr(u.slowing, { count: number(summary.slowing) })}</span>}
+                            <span className="text-danger">{tr(u.stagnant, { count: number(summary.stagnant) })}</span>
+                            {summary.unrated > 0 && <span>{tr(u.unrated, { count: number(summary.unrated) })}</span>}
+                        </p>
+                    )}
+                </>
+            )}
+        </div>
+    );
+}
 
 function ProductName({ product, linked, className }: { product: ProductRow; linked: boolean; className?: string }) {
     return linked ? (
